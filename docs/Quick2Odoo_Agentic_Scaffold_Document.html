@@ -257,6 +257,25 @@
             text-decoration: underline;
         }
         
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-left: 0.5rem;
+        }
+        
+        .badge-new {
+            background: #28a745;
+            color: white;
+        }
+        
+        .badge-feature {
+            background: #17a2b8;
+            color: white;
+        }
+        
         @media print {
             nav {
                 display: none;
@@ -274,6 +293,7 @@
             <h1>Quick2Odoo Agentic Scaffold</h1>
             <p>Complete Documentation & User Guide</p>
             <p style="font-size: 0.9em; margin-top: 0.5rem;">Multi-Agent Development System for QuickBooks to Odoo Integration</p>
+            <p style="font-size: 0.8em; margin-top: 0.5rem; opacity: 0.8;">Version 1.0 | Last Updated: November 2024</p>
         </header>
         
         <nav>
@@ -282,6 +302,9 @@
                 <li><a href="#objectives">Objectives</a></li>
                 <li><a href="#features">Features</a></li>
                 <li><a href="#architecture">Architecture</a></li>
+                <li><a href="#agents">Agents</a></li>
+                <li><a href="#utilities">Utilities</a></li>
+                <li><a href="#dashboard">Dashboard</a></li>
                 <li><a href="#installation">Installation</a></li>
                 <li><a href="#usage">Usage</a></li>
                 <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -302,10 +325,16 @@
                 <div class="feature-box">
                     <h3>What Makes This System Unique</h3>
                     <ul>
-                        <li><strong>Specialized Agents</strong>: Each agent type is optimized for specific domains (infrastructure, integration, frontend, workflow, security)</li>
+                        <li><strong>10 Specialized Agents</strong>: Orchestrator, Coder, Testing, QA, Infrastructure, Integration, Frontend, Workflow, Security, and Node.js agents - each optimized for specific domains</li>
+                        <li><strong>High Availability</strong>: Multiple agent instances per type with automatic failover and load balancing</li>
                         <li><strong>Template-Based Generation</strong>: Uses Jinja2 templates for maintainable, customizable code generation</li>
                         <li><strong>Configurable Project Layouts</strong>: Flexible directory structures adaptable to different project needs</li>
+                        <li><strong>Real-Time Dashboard</strong>: WebSocket-based dashboard with live progress tracking, metrics, and static analysis</li>
                         <li><strong>Comprehensive Quality Assurance</strong>: Automated testing, security scanning, and code quality validation</li>
+                        <li><strong>Agent Communication</strong>: Pub/sub messaging system for inter-agent coordination</li>
+                        <li><strong>Retry Mechanisms</strong>: Configurable retry policies with exponential backoff</li>
+                        <li><strong>VCS Integration</strong>: Automatic Git commits and GitHub PR creation</li>
+                        <li><strong>Multi-Language Support</strong>: Supports Python, Node.js, TypeScript, Go, Java, and more</li>
                         <li><strong>Production-Ready Output</strong>: Generates deployable code with proper error handling, logging, and documentation</li>
                     </ul>
                 </div>
@@ -379,62 +408,189 @@
                     <li>Provide configurable and extensible architecture</li>
                     <li>Support CI/CD pipeline integration</li>
                     <li>Generate comprehensive documentation</li>
+                    <li>Ensure high availability and fault tolerance</li>
+                    <li>Support multiple programming languages and frameworks</li>
                 </ul>
             </section>
             
             <section id="features">
                 <h2>Key Features</h2>
                 
-                <h3>1. Multi-Agent Architecture</h3>
-                <div class="agent-card">
-                    <h4>Specialized Agent Types</h4>
-                    <p>The system includes 9 specialized agent types, each optimized for specific tasks:</p>
+                <h3>1. Multi-Agent Architecture <span class="badge badge-feature">10 Agents</span></h3>
+                <p>The system includes 10 specialized agent types, each optimized for specific tasks:</p>
+                <ul>
+                    <li><strong>Orchestrator Agent</strong>: Manages task breakdown and distribution</li>
+                    <li><strong>Coder Agent</strong>: Generates FastAPI endpoints and SQLAlchemy models</li>
+                    <li><strong>Testing Agent</strong>: Creates and executes pytest test suites</li>
+                    <li><strong>QA Agent</strong>: Performs code quality reviews with mypy, ruff, and black</li>
+                    <li><strong>Infrastructure Agent</strong>: Generates Terraform and Helm configurations</li>
+                    <li><strong>Integration Agent</strong>: Creates OAuth and API client code</li>
+                    <li><strong>Frontend Agent</strong>: Generates Next.js/React components</li>
+                    <li><strong>Workflow Agent</strong>: Creates Temporal workflow definitions</li>
+                    <li><strong>Security Agent</strong>: Performs security audits with Bandit and Semgrep</li>
+                    <li><strong>Node.js Agent</strong>: Handles Node.js/JavaScript/TypeScript development</li>
+                </ul>
+                
+                <h3>2. High Availability & Load Balancing <span class="badge badge-new">NEW</span></h3>
+                <div class="feature-box">
+                    <h4>Advanced Load Balancing</h4>
                     <ul>
-                        <li><strong>Orchestrator Agent</strong>: Manages task breakdown and distribution</li>
-                        <li><strong>Coder Agent</strong>: Generates FastAPI endpoints and SQLAlchemy models</li>
-                        <li><strong>Testing Agent</strong>: Creates and executes pytest test suites</li>
-                        <li><strong>QA Agent</strong>: Performs code quality reviews</li>
-                        <li><strong>Infrastructure Agent</strong>: Generates Terraform and Helm configurations</li>
-                        <li><strong>Integration Agent</strong>: Creates OAuth and API client code</li>
-                        <li><strong>Frontend Agent</strong>: Generates Next.js/React components</li>
-                        <li><strong>Workflow Agent</strong>: Creates Temporal workflow definitions</li>
-                        <li><strong>Security Agent</strong>: Performs security audits</li>
+                        <li><strong>Agent Redundancy</strong>: Multiple instances per agent type (primary + backup)</li>
+                        <li><strong>Automatic Failover</strong>: Tasks automatically routed to healthy agents</li>
+                        <li><strong>Circuit Breaker Pattern</strong>: Prevents cascading failures</li>
+                        <li><strong>Health Checks</strong>: Continuous monitoring with 30-second intervals</li>
+                        <li><strong>Routing Algorithms</strong>: 
+                            <ul>
+                                <li><code>least_busy</code> - Route to least utilized agent</li>
+                                <li><code>round_robin</code> - Even distribution across agents</li>
+                                <li><code>health_based</code> - Prefer healthy over degraded agents</li>
+                                <li><code>priority_based</code> - Route based on task priority</li>
+                            </ul>
+                        </li>
+                        <li><strong>Task Priority Queues</strong>: Critical > High > Normal > Low</li>
+                        <li><strong>Capacity Management</strong>: Configurable concurrent task limits per agent</li>
+                        <li><strong>Metrics Tracking</strong>: Success rate, utilization, uptime monitoring</li>
                     </ul>
                 </div>
                 
-                <h3>2. Intelligent Task Management</h3>
+                <h3>3. Real-Time Progress Dashboard <span class="badge badge-new">NEW</span></h3>
+                <div class="feature-box">
+                    <h4>Dashboard Features</h4>
+                    <ul>
+                        <li><strong>WebSocket-Based</strong>: Real-time updates via WebSocket connections</li>
+                        <li><strong>Task Tracking</strong>: Live status of all tasks (pending, in-progress, completed, failed)</li>
+                        <li><strong>Agent Monitoring</strong>: Real-time agent activity and status</li>
+                        <li><strong>System Metrics</strong>: Completion percentage, task counts, average task time</li>
+                        <li><strong>Static Analysis Integration</strong>: Security and quality metrics from Bandit, Semgrep, MyPy, Ruff</li>
+                        <li><strong>Event History</strong>: Last 1000 events stored for review</li>
+                        <li><strong>REST API</strong>: Endpoints for dashboard state, metrics, tasks, agents</li>
+                        <li><strong>File Analysis</strong>: Trigger static analysis for specific files</li>
+                    </ul>
+                </div>
+                
+                <h3>4. Intelligent Task Management</h3>
                 <ul>
                     <li><strong>Automatic Task Breakdown</strong>: Orchestrator analyzes objectives and creates manageable tasks</li>
                     <li><strong>Dependency Resolution</strong>: Automatic dependency detection and ordering</li>
                     <li><strong>Progress Tracking</strong>: Real-time status updates and completion percentages</li>
                     <li><strong>Error Handling</strong>: Graceful failure handling with detailed error reports</li>
+                    <li><strong>Task Metadata</strong>: Tech stack detection, file paths, configuration needs</li>
                 </ul>
                 
-                <h3>3. Template-Based Code Generation</h3>
+                <h3>5. Retry Mechanisms <span class="badge badge-new">NEW</span></h3>
+                <div class="feature-box">
+                    <h4>Configurable Retry Policies</h4>
+                    <ul>
+                        <li><strong>Retry Strategies</strong>:
+                            <ul>
+                                <li><code>exponential</code> - Exponential backoff (default)</li>
+                                <li><code>linear</code> - Linear backoff</li>
+                                <li><code>fixed</code> - Fixed delay between retries</li>
+                                <li><code>custom</code> - Custom backoff function</li>
+                            </ul>
+                        </li>
+                        <li><strong>Agent-Specific Policies</strong>: Different retry policies per agent type</li>
+                        <li><strong>Exception Handling</strong>: Configurable retryable/non-retryable exceptions</li>
+                        <li><strong>Integration with Load Balancer</strong>: Retries can route to alternative agent instances</li>
+                        <li><strong>Default Policies</strong>:
+                            <ul>
+                                <li>Coder: 3 retries, 1s initial delay, exponential</li>
+                                <li>Integration: 5 retries, 2s initial delay (for API calls)</li>
+                                <li>Infrastructure: 2 retries, 3s initial delay</li>
+                                <li>Others: 3 retries, 1s initial delay</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <h3>6. Agent Communication Protocols <span class="badge badge-new">NEW</span></h3>
+                <div class="feature-box">
+                    <h4>Messaging System</h4>
+                    <ul>
+                        <li><strong>Message Broker</strong>: Abstraction supporting in-memory (development) and Redis (production)</li>
+                        <li><strong>Pub/Sub Pattern</strong>: Agents subscribe to channels for specific message types</li>
+                        <li><strong>Message Types</strong>:
+                            <ul>
+                                <li><code>AGENT_PRESENCE</code> - Agent online/offline announcements</li>
+                                <li><code>TASK_REQUEST</code> - Request tasks from other agents</li>
+                                <li><code>TASK_UPDATE</code> - Task status updates</li>
+                                <li><code>HELP_REQUEST</code> - Request assistance from other agents</li>
+                                <li><code>RESULT_SHARE</code> - Share task results</li>
+                                <li><code>AGENT_ACTIVITY</code> - Agent activity notifications</li>
+                            </ul>
+                        </li>
+                        <li><strong>Channel Routing</strong>: Agents subscribe to type-specific and agent-specific channels</li>
+                        <li><strong>Message History</strong>: Last 1000 messages stored for debugging</li>
+                    </ul>
+                </div>
+                
+                <h3>7. Template-Based Code Generation</h3>
                 <ul>
                     <li><strong>Jinja2 Templates</strong>: Maintainable, reusable template system</li>
+                    <li><strong>Template Categories</strong>:
+                        <ul>
+                            <li>API templates (FastAPI endpoints, SQLAlchemy models)</li>
+                            <li>Infrastructure templates (Terraform, Helm charts)</li>
+                            <li>Integration templates (OAuth, API clients)</li>
+                            <li>Frontend templates (Next.js pages, React components)</li>
+                            <li>Node.js templates (Express.js, package.json)</li>
+                            <li>Test templates (pytest test files)</li>
+                        </ul>
+                    </li>
                     <li><strong>Fallback Support</strong>: Inline templates as fallback if external templates unavailable</li>
                     <li><strong>Customizable</strong>: Easy to modify templates for project-specific needs</li>
                     <li><strong>Type-Safe</strong>: Generates properly typed code with Pydantic models</li>
                 </ul>
                 
-                <h3>4. Quality Assurance</h3>
+                <h3>8. Quality Assurance</h3>
                 <ul>
                     <li><strong>Automated Testing</strong>: pytest-based test generation and execution</li>
-                    <li><strong>Static Analysis</strong>: Integration with ruff, mypy, bandit, and safety</li>
-                    <li><strong>Code Quality Metrics</strong>: Complexity analysis, style checking, and best practice validation</li>
+                    <li><strong>Static Analysis Tools</strong>:
+                        <ul>
+                            <li><strong>Security</strong>: Bandit, Semgrep</li>
+                            <li><strong>Quality</strong>: MyPy (type checking), Ruff (linting), Black (formatting), Safety (dependency scanning)</li>
+                        </ul>
+                    </li>
+                    <li><strong>Code Quality Metrics</strong>: Complexity analysis, style checking, best practice validation</li>
                     <li><strong>Infrastructure Validation</strong>: Terraform and Helm configuration validation</li>
+                    <li><strong>Secrets Detection</strong>: Scans for hardcoded credentials and secrets</li>
                 </ul>
                 
-                <h3>5. Configurable Project Layouts</h3>
+                <h3>9. Configurable Project Layouts</h3>
                 <ul>
                     <li><strong>Flexible Structure</strong>: Configurable directory layouts via ProjectLayout class</li>
                     <li><strong>Default Presets</strong>: Sensible defaults for standard projects</li>
                     <li><strong>JSON Configuration</strong>: Load custom layouts from configuration files</li>
                     <li><strong>Multi-Project Support</strong>: Different layouts for different project types</li>
+                    <li><strong>Paths Managed</strong>: API, web, infrastructure, Kubernetes, shared, tests, config directories</li>
                 </ul>
                 
-                <h3>6. CI/CD Integration</h3>
+                <h3>10. VCS Integration <span class="badge badge-new">NEW</span></h3>
+                <div class="feature-box">
+                    <h4>Version Control Features</h4>
+                    <ul>
+                        <li><strong>Auto-Commit</strong>: Automatic Git commits after task completion</li>
+                        <li><strong>Feature Branches</strong>: Automatic branch creation for projects</li>
+                        <li><strong>Pull Request Creation</strong>: Automatic PR creation via GitHub API</li>
+                        <li><strong>Commit Messages</strong>: Auto-generated commit messages with task details</li>
+                        <li><strong>File Tracking</strong>: Tracks files created by each agent type</li>
+                        <li><strong>Configuration</strong>: Enabled via environment variables</li>
+                    </ul>
+                </div>
+                
+                <h3>11. Multi-Language Support <span class="badge badge-new">NEW</span></h3>
+                <div class="feature-box">
+                    <h4>Language Detection & Support</h4>
+                    <ul>
+                        <li><strong>Auto-Detection</strong>: Automatically detects languages in project</li>
+                        <li><strong>Supported Languages</strong>: Python, JavaScript, TypeScript, Node.js, Go, Java, C#, Ruby, PHP, Rust</li>
+                        <li><strong>Package Manager Detection</strong>: npm, yarn, pnpm, pip, poetry, go mod, Maven, Gradle, Cargo, Composer, Bundler</li>
+                        <li><strong>Framework Detection</strong>: FastAPI, Django, Flask, Express.js, NestJS, Next.js, React, Vue.js, Gin, Echo, Spring Boot, .NET</li>
+                        <li><strong>Node.js 20.x LTS</strong>: Full support for Node.js 20.11.0 LTS with ESM modules</li>
+                    </ul>
+                </div>
+                
+                <h3>12. CI/CD Integration</h3>
                 <ul>
                     <li><strong>GitHub Actions</strong>: Pre-configured CI/CD pipeline</li>
                     <li><strong>Multi-Version Testing</strong>: Tests across Python 3.10, 3.11, 3.12</li>
@@ -448,13 +604,45 @@
                 
                 <h3>Agent System Overview</h3>
                 <p>
-                    The system follows a coordinator-worker pattern where the Orchestrator Agent breaks down high-level objectives into tasks and distributes them to specialized agents.
+                    The system follows a coordinator-worker pattern where the Orchestrator Agent breaks down high-level objectives into tasks and distributes them to specialized agents. The system includes multiple instances of each agent type for high availability, with a load balancer managing task routing and failover.
                 </p>
                 
+                <div class="info">
+                    <strong>High Availability:</strong> Each agent type has primary + backup instances. The load balancer automatically routes tasks to healthy agents and fails over when needed.
+                </div>
+                
+                <h3>System Components</h3>
+                <ol>
+                    <li><strong>AgentSystem</strong>: Main coordinator that initializes all agents and manages the project lifecycle</li>
+                    <li><strong>OrchestratorAgent</strong>: Breaks down projects into tasks and manages task distribution</li>
+                    <li><strong>Specialized Agents</strong>: 10 agent types handling specific domains</li>
+                    <li><strong>LoadBalancer</strong>: Routes tasks to agents with health checks and failover</li>
+                    <li><strong>Message Broker</strong>: Enables inter-agent communication</li>
+                    <li><strong>Dashboard</strong>: Real-time monitoring and metrics</li>
+                    <li><strong>Utilities</strong>: Template rendering, language detection, security scanning, etc.</li>
+                </ol>
+                
+                <h3>Data Flow</h3>
+                <ol>
+                    <li><strong>Project Input</strong>: User provides project description and objectives</li>
+                    <li><strong>Task Breakdown</strong>: Orchestrator analyzes and creates tasks with dependencies</li>
+                    <li><strong>Task Distribution</strong>: Load balancer routes tasks to appropriate agents</li>
+                    <li><strong>Code Generation</strong>: Agents generate code using templates</li>
+                    <li><strong>Quality Checks</strong>: Testing and QA agents validate generated code</li>
+                    <li><strong>VCS Integration</strong>: Auto-commit and PR creation (if enabled)</li>
+                    <li><strong>Dashboard Updates</strong>: Real-time progress broadcast to dashboard</li>
+                    <li><strong>Output</strong>: Generated files written to workspace directory</li>
+                </ol>
+            </section>
+            
+            <section id="agents">
+                <h2>Agent Details</h2>
+                
                 <div class="agent-card">
-                    <h4>Orchestrator Agent</h4>
-                    <p><strong>Role</strong>: Project coordinator and task manager</p>
-                    <p><strong>Responsibilities</strong>:</p>
+                    <h4>1. Orchestrator Agent</h4>
+                    <p><strong>Type:</strong> <code>AgentType.ORCHESTRATOR</code></p>
+                    <p><strong>Role:</strong> Project coordinator and task manager</p>
+                    <p><strong>Responsibilities:</strong></p>
                     <ul>
                         <li>Analyzes project objectives and context</li>
                         <li>Detects objective types (infrastructure, integration, frontend, workflow, API)</li>
@@ -462,118 +650,435 @@
                         <li>Creates tasks with appropriate agent assignments</li>
                         <li>Manages task dependencies</li>
                         <li>Tracks project progress and completion status</li>
+                        <li>Uses load balancer for intelligent task routing</li>
+                        <li>Handles task retries and failure recovery</li>
+                    </ul>
+                    <p><strong>Key Methods:</strong></p>
+                    <ul>
+                        <li><code>break_down_project()</code> - Analyzes objectives and creates tasks</li>
+                        <li><code>distribute_tasks()</code> - Distributes tasks to agents via load balancer</li>
+                        <li><code>update_task_status()</code> - Updates task status with retry logic</li>
+                        <li><code>get_project_status()</code> - Returns project completion metrics</li>
                     </ul>
                 </div>
                 
                 <div class="agent-card">
-                    <h4>Coder Agent</h4>
-                    <p><strong>Role</strong>: Backend code generation</p>
-                    <p><strong>Responsibilities</strong>:</p>
+                    <h4>2. Coder Agent</h4>
+                    <p><strong>Type:</strong> <code>AgentType.CODER</code></p>
+                    <p><strong>Role:</strong> Backend code generation</p>
+                    <p><strong>Responsibilities:</strong></p>
                     <ul>
                         <li>Generates FastAPI endpoints with Pydantic models</li>
                         <li>Creates SQLAlchemy data models with multi-tenant support</li>
                         <li>Implements service layer business logic</li>
                         <li>Generates API documentation</li>
                         <li>Uses Jinja2 templates for code generation</li>
+                        <li>Handles error handling and logging</li>
                     </ul>
+                    <p><strong>Templates:</strong> <code>templates/api/fastapi_endpoint.j2</code>, <code>templates/api/sqlalchemy_model.j2</code></p>
                 </div>
                 
                 <div class="agent-card">
-                    <h4>Infrastructure Agent</h4>
-                    <p><strong>Role</strong>: Infrastructure as Code generation</p>
-                    <p><strong>Responsibilities</strong>:</p>
+                    <h4>3. Infrastructure Agent</h4>
+                    <p><strong>Type:</strong> <code>AgentType.INFRASTRUCTURE</code></p>
+                    <p><strong>Role:</strong> Infrastructure as Code generation</p>
+                    <p><strong>Responsibilities:</strong></p>
                     <ul>
                         <li>Generates Terraform configurations for Azure</li>
                         <li>Creates Helm charts for Kubernetes deployments</li>
                         <li>Configures WAF policies and security rules</li>
                         <li>Sets up Application Insights and monitoring</li>
-                        <li>Validates generated configurations</li>
+                        <li>Validates generated configurations using Terraform and Helm</li>
+                        <li>Manages infrastructure variables and outputs</li>
                     </ul>
+                    <p><strong>Templates:</strong> 
+                        <code>templates/infrastructure/terraform_main.j2</code>,
+                        <code>templates/infrastructure/terraform_variables.j2</code>,
+                        <code>templates/infrastructure/terraform_waf.j2</code>,
+                        <code>templates/infrastructure/helm_chart.j2</code>,
+                        <code>templates/infrastructure/helm_values.j2</code>
+                    </p>
                 </div>
                 
                 <div class="agent-card">
-                    <h4>Integration Agent</h4>
-                    <p><strong>Role</strong>: External API integration code</p>
-                    <p><strong>Responsibilities</strong>:</p>
+                    <h4>4. Integration Agent</h4>
+                    <p><strong>Type:</strong> <code>AgentType.INTEGRATION</code></p>
+                    <p><strong>Role:</strong> External API integration code</p>
+                    <p><strong>Responsibilities:</strong></p>
                     <ul>
                         <li>Generates QuickBooks OAuth 2.0 flows</li>
                         <li>Creates Odoo XML-RPC client code</li>
                         <li>Implements Stripe billing integration</li>
                         <li>Generates webhook handlers</li>
                         <li>Creates API client wrappers</li>
+                        <li>Handles connection management and retries</li>
                     </ul>
+                    <p><strong>Templates:</strong> 
+                        <code>templates/integration/qbo_oauth.j2</code>,
+                        <code>templates/integration/qbo_client.j2</code>,
+                        <code>templates/integration/odoo_client.j2</code>,
+                        <code>templates/integration/stripe_billing.j2</code>,
+                        <code>templates/integration/qbd_webconnector.j2</code>
+                    </p>
                 </div>
                 
                 <div class="agent-card">
-                    <h4>Frontend Agent</h4>
-                    <p><strong>Role</strong>: Frontend UI generation</p>
-                    <p><strong>Responsibilities</strong>:</p>
+                    <h4>5. Frontend Agent</h4>
+                    <p><strong>Type:</strong> <code>AgentType.FRONTEND</code></p>
+                    <p><strong>Role:</strong> Frontend UI generation</p>
+                    <p><strong>Responsibilities:</strong></p>
                     <ul>
                         <li>Generates Next.js pages and routes</li>
                         <li>Creates React components with TypeScript</li>
                         <li>Implements authentication flows</li>
                         <li>Generates theme toggle components</li>
                         <li>Creates onboarding wizards</li>
+                        <li>Handles Server-Sent Events (SSE) for real-time updates</li>
                     </ul>
                 </div>
                 
                 <div class="agent-card">
-                    <h4>Workflow Agent</h4>
-                    <p><strong>Role</strong>: Temporal workflow generation</p>
-                    <p><strong>Responsibilities</strong>:</p>
+                    <h4>6. Workflow Agent</h4>
+                    <p><strong>Type:</strong> <code>AgentType.WORKFLOW</code></p>
+                    <p><strong>Role:</strong> Temporal workflow generation</p>
+                    <p><strong>Responsibilities:</strong></p>
                     <ul>
                         <li>Creates Temporal workflow definitions</li>
                         <li>Generates activity implementations</li>
                         <li>Creates worker configurations</li>
                         <li>Implements backfill and sync workflows</li>
+                        <li>Handles workflow error handling and retries</li>
                     </ul>
                 </div>
                 
                 <div class="agent-card">
-                    <h4>Testing Agent</h4>
-                    <p><strong>Role</strong>: Test generation and execution</p>
-                    <p><strong>Responsibilities</strong>:</p>
+                    <h4>7. Testing Agent</h4>
+                    <p><strong>Type:</strong> <code>AgentType.TESTING</code></p>
+                    <p><strong>Role:</strong> Test generation and execution</p>
+                    <p><strong>Responsibilities:</strong></p>
                     <ul>
                         <li>Generates pytest test files</li>
                         <li>Executes tests using pytest</li>
                         <li>Collects test results and coverage</li>
                         <li>Generates test reports</li>
+                        <li>Handles async test scenarios</li>
                     </ul>
+                    <p><strong>Templates:</strong> <code>templates/test/pytest_test.j2</code></p>
                 </div>
                 
                 <div class="agent-card">
-                    <h4>QA Agent</h4>
-                    <p><strong>Role</strong>: Code quality assurance</p>
-                    <p><strong>Responsibilities</strong>:</p>
+                    <h4>8. QA Agent</h4>
+                    <p><strong>Type:</strong> <code>AgentType.QA</code></p>
+                    <p><strong>Role:</strong> Code quality assurance</p>
+                    <p><strong>Responsibilities:</strong></p>
                     <ul>
                         <li>Reviews code for quality issues</li>
+                        <li>Runs MyPy for type checking</li>
+                        <li>Runs Ruff for linting</li>
+                        <li>Runs Black for code formatting</li>
                         <li>Checks code style and formatting</li>
                         <li>Validates error handling</li>
                         <li>Provides improvement recommendations</li>
                     </ul>
+                    <p><strong>Tools Used:</strong> MyPy, Ruff, Black, Safety</p>
                 </div>
                 
                 <div class="agent-card">
-                    <h4>Security Agent</h4>
-                    <p><strong>Role</strong>: Security auditing</p>
-                    <p><strong>Responsibilities</strong>:</p>
+                    <h4>9. Security Agent</h4>
+                    <p><strong>Type:</strong> <code>AgentType.SECURITY</code></p>
+                    <p><strong>Role:</strong> Security auditing</p>
+                    <p><strong>Responsibilities:</strong></p>
                     <ul>
                         <li>Scans code for security vulnerabilities</li>
+                        <li>Runs Bandit for Python security scanning</li>
+                        <li>Runs Semgrep for pattern-based security checks</li>
                         <li>Checks for hardcoded secrets</li>
                         <li>Validates authentication implementations</li>
                         <li>Reviews OAuth flows for security issues</li>
+                        <li>Provides security recommendations</li>
+                    </ul>
+                    <p><strong>Tools Used:</strong> Bandit, Semgrep, Secrets Scanner</p>
+                </div>
+                
+                <div class="agent-card">
+                    <h4>10. Node.js Agent <span class="badge badge-new">NEW</span></h4>
+                    <p><strong>Type:</strong> <code>AgentType.NODEJS</code></p>
+                    <p><strong>Role:</strong> Node.js/JavaScript/TypeScript development</p>
+                    <p><strong>Responsibilities:</strong></p>
+                    <ul>
+                        <li>Generates Node.js applications with Node.js 20.x LTS</li>
+                        <li>Creates Express.js servers</li>
+                        <li>Generates NestJS modules and controllers</li>
+                        <li>Creates package.json files with framework-specific dependencies</li>
+                        <li>Supports ESM modules</li>
+                        <li>Handles route and middleware generation</li>
+                        <li>Supports multiple frameworks: Express, NestJS, Koa, Fastify</li>
+                    </ul>
+                    <p><strong>Templates:</strong> 
+                        <code>templates/nodejs/express_app.j2</code>,
+                        <code>templates/nodejs/package_json.j2</code>
+                    </p>
+                    <p><strong>Node.js Version:</strong> 20.11.0 LTS</p>
+                </div>
+            </section>
+            
+            <section id="utilities">
+                <h2>Utility Modules</h2>
+                
+                <h3>1. Load Balancer (<code>utils/load_balancer.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>Agent Registration</strong>: Register agents with capacity limits</li>
+                        <li><strong>Task Routing</strong>: Intelligent routing using multiple algorithms</li>
+                        <li><strong>Health Monitoring</strong>: Continuous health checks (30s interval)</li>
+                        <li><strong>Circuit Breaker</strong>: Prevents cascading failures</li>
+                        <li><strong>Metrics</strong>: Success rate, utilization, uptime tracking</li>
+                        <li><strong>Failover</strong>: Automatic failover to backup instances</li>
                     </ul>
                 </div>
                 
-                <h3>Data Flow</h3>
-                <ol>
-                    <li><strong>Project Input</strong>: User provides project description and objectives</li>
-                    <li><strong>Task Breakdown</strong>: Orchestrator analyzes and creates tasks</li>
-                    <li><strong>Task Distribution</strong>: Tasks assigned to appropriate agents</li>
-                    <li><strong>Code Generation</strong>: Agents generate code using templates</li>
-                    <li><strong>Validation</strong>: Testing and QA agents validate generated code</li>
-                    <li><strong>Output</strong>: Generated files written to workspace directory</li>
-                </ol>
+                <h3>2. Retry Policy Manager (<code>utils/retry_policy.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>Policy Configuration</strong>: Per-agent-type and per-task policies</li>
+                        <li><strong>Retry Strategies</strong>: Exponential, linear, fixed, custom backoff</li>
+                        <li><strong>Exception Handling</strong>: Configurable retryable/non-retryable exceptions</li>
+                        <li><strong>Default Policies</strong>: Sensible defaults for each agent type</li>
+                    </ul>
+                </div>
+                
+                <h3>3. Message Broker (<code>utils/message_broker.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>In-Memory Broker</strong>: For development and testing</li>
+                        <li><strong>Redis Broker</strong>: For production (requires redis package)</li>
+                        <li><strong>Pub/Sub</strong>: Channel-based message routing</li>
+                        <li><strong>Message History</strong>: Last 1000 messages stored</li>
+                    </ul>
+                </div>
+                
+                <h3>4. Message Protocol (<code>utils/message_protocol.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>Standardized Messages</strong>: Pydantic-based message models</li>
+                        <li><strong>Message Types</strong>: Presence, task requests, updates, help requests, results</li>
+                        <li><strong>Type Safety</strong>: Validated message structure</li>
+                    </ul>
+                </div>
+                
+                <h3>5. Template Renderer (<code>utils/template_renderer.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>Jinja2 Integration</strong>: Full Jinja2 template support</li>
+                        <li><strong>Custom Filters</strong>: Project-specific template filters</li>
+                        <li><strong>Fallback Templates</strong>: Inline templates if external files missing</li>
+                        <li><strong>Template Discovery</strong>: Automatic template directory detection</li>
+                    </ul>
+                </div>
+                
+                <h3>6. Project Layout (<code>utils/project_layout.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>Configurable Paths</strong>: All directory paths configurable</li>
+                        <li><strong>JSON Loading</strong>: Load layouts from JSON files</li>
+                        <li><strong>Default Layout</strong>: Sensible defaults for standard projects</li>
+                        <li><strong>Path Management</strong>: API, web, infrastructure, K8s, shared, tests, config</li>
+                    </ul>
+                </div>
+                
+                <h3>7. Language Detector (<code>utils/language_detector.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>File Extension Detection</strong>: Detects languages from file extensions</li>
+                        <li><strong>Package Manager Detection</strong>: Identifies package managers from config files</li>
+                        <li><strong>Framework Detection</strong>: Detects frameworks from dependencies and code</li>
+                        <li><strong>Multi-Language Support</strong>: Handles projects with multiple languages</li>
+                    </ul>
+                </div>
+                
+                <h3>8. Security Scanner (<code>utils/security_scanner.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>Bandit Integration</strong>: Python security scanning</li>
+                        <li><strong>Semgrep Integration</strong>: Pattern-based security checks</li>
+                        <li><strong>Secrets Detection</strong>: Scans for hardcoded credentials</li>
+                        <li><strong>Security Scoring</strong>: Calculates security scores per file</li>
+                    </ul>
+                </div>
+                
+                <h3>9. Code Quality Scanner (<code>utils/code_quality_scanner.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>MyPy Integration</strong>: Type checking</li>
+                        <li><strong>Ruff Integration</strong>: Linting and code style</li>
+                        <li><strong>Black Integration</strong>: Code formatting checks</li>
+                        <li><strong>Safety Integration</strong>: Dependency vulnerability scanning</li>
+                        <li><strong>Quality Scoring</strong>: Calculates quality scores per file</li>
+                    </ul>
+                </div>
+                
+                <h3>10. Infrastructure Validator (<code>utils/infrastructure_validator.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>Terraform Validation</strong>: Validates Terraform configurations</li>
+                        <li><strong>Helm Validation</strong>: Validates Helm charts</li>
+                        <li><strong>Syntax Checking</strong>: Ensures valid syntax</li>
+                        <li><strong>Best Practices</strong>: Checks for infrastructure best practices</li>
+                    </ul>
+                </div>
+                
+                <h3>11. Git Manager (<code>utils/git_manager.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>Auto-Commit</strong>: Automatic commits after task completion</li>
+                        <li><strong>Branch Creation</strong>: Creates feature branches</li>
+                        <li><strong>GitHub Integration</strong>: PR creation via GitHub API</li>
+                        <li><strong>File Tracking</strong>: Tracks files created by agents</li>
+                        <li><strong>Commit Messages</strong>: Auto-generated commit messages</li>
+                    </ul>
+                </div>
+                
+                <h3>12. VCS Integration (<code>utils/vcs_integration.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>Git Integration</strong>: Wrapper around GitManager</li>
+                        <li><strong>Auto-Commit Configuration</strong>: Environment variable-based configuration</li>
+                        <li><strong>Project Lifecycle Hooks</strong>: Integration with project start/complete events</li>
+                    </ul>
+                </div>
+                
+                <h3>13. Exceptions (<code>utils/exceptions.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>Custom Exceptions</strong>: Project-specific exception classes</li>
+                        <li><strong>Error Handling</strong>: Structured error handling</li>
+                    </ul>
+                </div>
+                
+                <h3>14. Secrets Validator (<code>utils/secrets_validator.py</code>)</h3>
+                <div class="feature-box">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>Secret Detection</strong>: Scans for hardcoded secrets</li>
+                        <li><strong>Pattern Matching</strong>: Common secret patterns</li>
+                        <li><strong>Validation</strong>: Ensures secrets are not in code</li>
+                    </ul>
+                </div>
+            </section>
+            
+            <section id="dashboard">
+                <h2>Real-Time Progress Dashboard</h2>
+                
+                <h3>Overview</h3>
+                <p>
+                    The dashboard provides real-time monitoring of the multi-agent system through a WebSocket-based interface. It tracks tasks, agents, metrics, and static analysis results.
+                </p>
+                
+                <h3>Starting the Dashboard</h3>
+                <pre><code># Start dashboard server
+python -m api.dashboard.main
+
+# Or with uvicorn directly
+uvicorn api.dashboard.main:app --host 0.0.0.0 --port 8001</code></pre>
+                
+                <h3>Dashboard Endpoints</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Endpoint</th>
+                            <th>Method</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>/ws/dashboard</code></td>
+                            <td>WebSocket</td>
+                            <td>WebSocket connection for real-time updates</td>
+                        </tr>
+                        <tr>
+                            <td><code>/api/dashboard/state</code></td>
+                            <td>GET</td>
+                            <td>Get current dashboard state (tasks, agents, metrics)</td>
+                        </tr>
+                        <tr>
+                            <td><code>/api/dashboard/metrics</code></td>
+                            <td>GET</td>
+                            <td>Get system metrics (completion %, task counts, etc.)</td>
+                        </tr>
+                        <tr>
+                            <td><code>/api/dashboard/static-analysis</code></td>
+                            <td>GET</td>
+                            <td>Get aggregated static analysis metrics</td>
+                        </tr>
+                        <tr>
+                            <td><code>/api/dashboard/analyze-file</code></td>
+                            <td>POST</td>
+                            <td>Trigger static analysis for specific file</td>
+                        </tr>
+                        <tr>
+                            <td><code>/api/dashboard/tasks</code></td>
+                            <td>GET</td>
+                            <td>Get all tasks with status</td>
+                        </tr>
+                        <tr>
+                            <td><code>/api/dashboard/agents</code></td>
+                            <td>GET</td>
+                            <td>Get all agents with status</td>
+                        </tr>
+                        <tr>
+                            <td><code>/api/dashboard/events</code></td>
+                            <td>GET</td>
+                            <td>Get recent events (last 50)</td>
+                        </tr>
+                        <tr>
+                            <td><code>/health</code></td>
+                            <td>GET</td>
+                            <td>Health check endpoint</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>WebSocket Events</h3>
+                <div class="feature-box">
+                    <h4>Event Types</h4>
+                    <ul>
+                        <li><strong>task_update</strong>: Task status changes (pending, in_progress, completed, failed)</li>
+                        <li><strong>agent_activity</strong>: Agent activity updates (task_started, task_completed, task_failed, idle)</li>
+                        <li><strong>metric_update</strong>: System metrics updates</li>
+                        <li><strong>project_start</strong>: Project initialization</li>
+                        <li><strong>project_complete</strong>: Project completion</li>
+                        <li><strong>static_analysis_update</strong>: Static analysis results</li>
+                    </ul>
+                </div>
+                
+                <h3>Dashboard Features</h3>
+                <ul>
+                    <li><strong>Real-Time Updates</strong>: WebSocket-based live updates</li>
+                    <li><strong>Task Monitoring</strong>: Track all tasks with status, progress, duration</li>
+                    <li><strong>Agent Monitoring</strong>: Monitor agent activity and health</li>
+                    <li><strong>System Metrics</strong>: Completion percentage, task counts, average task time</li>
+                    <li><strong>Static Analysis</strong>: Security and quality metrics from static analysis tools</li>
+                    <li><strong>Event History</strong>: Last 1000 events stored for review</li>
+                </ul>
+                
+                <h3>Frontend Integration</h3>
+                <p>
+                    The dashboard frontend is located at <code>web/dashboard/pages/index.tsx</code>. It connects to the WebSocket endpoint and displays real-time updates. You can customize the frontend to match your needs.
+                </p>
             </section>
             
             <section id="installation">
@@ -583,15 +1088,16 @@
                 <ul>
                     <li><strong>Python</strong>: 3.10, 3.11, or 3.12</li>
                     <li><strong>pip</strong>: Latest version</li>
-                    <li><strong>Git</strong>: For version control (optional but recommended)</li>
+                    <li><strong>Git</strong>: For version control (optional but recommended for VCS features)</li>
                     <li><strong>Terraform</strong>: 1.6.0+ (optional, for infrastructure validation)</li>
                     <li><strong>Helm</strong>: 3.13.0+ (optional, for Helm validation)</li>
+                    <li><strong>Node.js</strong>: 20.x LTS (optional, for Node.js agent features)</li>
                 </ul>
                 
                 <h3>Installation Steps</h3>
                 
                 <h4>1. Clone or Download the Project</h4>
-                <pre><code>git clone &lt;repository-url&gt;
+                <pre><code>git clone https://github.com/cryptolavar-hub/Q2O.git
 cd QuickOdoo</code></pre>
                 
                 <h4>2. Create Virtual Environment</h4>
@@ -635,7 +1141,7 @@ pip install -r requirements.txt</code></pre>
                 <p>The system uses default configurations but can be customized:</p>
                 
                 <h4>Project Layout Configuration</h4>
-                <p>Create a custom layout JSON file:</p>
+                <p>Create a custom layout JSON file (<code>project_layout.json</code>):</p>
                 <pre><code>{
   "project_layout": {
     "api_dir": "backend/api",
@@ -644,6 +1150,27 @@ pip install -r requirements.txt</code></pre>
     "terraform_dir": "infrastructure/terraform"
   }
 }</code></pre>
+                
+                <h4>VCS Integration Configuration</h4>
+                <p>Enable VCS features via environment variables:</p>
+                <pre><code># Windows PowerShell
+$env:VCS_ENABLED="true"
+$env:GITHUB_TOKEN="ghp_your_token_here"
+$env:GITHUB_REPO="owner/repository-name"
+
+# Linux/Mac
+export VCS_ENABLED=true
+export GITHUB_TOKEN="ghp_your_token_here"
+export GITHUB_REPO="owner/repository-name"</code></pre>
+                
+                <h4>Message Broker Configuration</h4>
+                <p>Use Redis for production (optional):</p>
+                <pre><code># Install redis package
+pip install redis
+
+# Use Redis broker
+from utils.message_broker import get_message_broker
+broker = get_message_broker(broker_type="redis", redis_url="redis://localhost:6379/0")</code></pre>
             </section>
             
             <section id="usage">
@@ -710,7 +1237,7 @@ python main.py --project "QuickBooks to Odoo Integration" \
                         </tr>
                         <tr>
                             <td><code>--output</code></td>
-                            <td>Path to save results JSON</td>
+                            <td>Path to save the full results JSON</td>
                             <td><code>--output results.json</code></td>
                         </tr>
                     </tbody>
@@ -758,6 +1285,12 @@ print(f"Tasks failed: {results['final_status']['failed']}")</code></pre>
   --objective "Terraform Azure configuration" \
   --objective "Helm charts for Kubernetes"</code></pre>
                 
+                <h4>4. Node.js Project</h4>
+                <pre><code>python main.py \
+  --project "Node.js API Server" \
+  --objective "Create Express.js server" \
+  --objective "Add health endpoint"</code></pre>
+                
                 <h3>Understanding Output</h3>
                 <p>The system generates files in the workspace directory following this structure:</p>
                 <pre><code>workspace/
@@ -783,6 +1316,10 @@ print(f"Tasks failed: {results['final_status']['failed']}")</code></pre>
 │       └── q2o/
 │           ├── Chart.yaml    # Helm chart
 │           └── values.yaml   # Helm values
+├── shared/
+│   └── temporal_defs/
+│       └── workflows/
+│           └── backfill.py  # Temporal workflow
 └── tests/
     └── test_*.py            # Generated tests</code></pre>
             </section>
@@ -874,6 +1411,45 @@ print(f"Tasks failed: {results['final_status']['failed']}")</code></pre>
                         <li>Verify agent is registered with orchestrator</li>
                         <li>Check that task type matches agent capabilities</li>
                         <li>Increase max iterations if needed (default: 100)</li>
+                        <li>Check load balancer status - agent may be unhealthy</li>
+                    </ul>
+                </div>
+                
+                <div class="info">
+                    <h4>Issue: Dashboard Not Connecting</h4>
+                    <p><strong>Symptoms:</strong> Dashboard WebSocket connection fails</p>
+                    <p><strong>Solutions:</strong></p>
+                    <ul>
+                        <li>Verify dashboard server is running: <code>python -m api.dashboard.main</code></li>
+                        <li>Check firewall settings for port 8001</li>
+                        <li>Verify WebSocket URL: <code>ws://localhost:8001/ws/dashboard</code></li>
+                        <li>Check browser console for errors</li>
+                    </ul>
+                </div>
+                
+                <div class="warning">
+                    <h4>Issue: VCS Integration Not Working</h4>
+                    <p><strong>Symptoms:</strong> No auto-commits or PR creation</p>
+                    <p><strong>Solutions:</strong></p>
+                    <ul>
+                        <li>Verify <code>VCS_ENABLED=true</code> environment variable is set</li>
+                        <li>Check Git is available: <code>git --version</code></li>
+                        <li>Verify workspace is a Git repository or will be initialized</li>
+                        <li>For PR creation, verify <code>GITHUB_TOKEN</code> and <code>GITHUB_REPO</code> are set</li>
+                        <li>Check GitHub token has appropriate permissions</li>
+                    </ul>
+                </div>
+                
+                <div class="info">
+                    <h4>Issue: Load Balancer Not Routing Tasks</h4>
+                    <p><strong>Symptoms:</strong> Tasks not being assigned to agents</p>
+                    <p><strong>Solutions:</strong></p>
+                    <ul>
+                        <li>Check agent health status via load balancer</li>
+                        <li>Verify agents are registered with load balancer</li>
+                        <li>Check agent capacity limits - may be at capacity</li>
+                        <li>Review load balancer logs for routing decisions</li>
+                        <li>Verify circuit breakers are not open for all agents</li>
                     </ul>
                 </div>
                 
@@ -892,6 +1468,12 @@ print(f"Tasks failed: {results['final_status']['failed']}")</code></pre>
                     <li><strong>Test Project Layout</strong>:
                         <pre><code>python -c "from utils import ProjectLayout; pl = ProjectLayout(); print(pl.api_dir)"</code></pre>
                     </li>
+                    <li><strong>Test Load Balancer</strong>:
+                        <pre><code>python -c "from utils.load_balancer import get_load_balancer; lb = get_load_balancer(); print('OK')"</code></pre>
+                    </li>
+                    <li><strong>Test Message Broker</strong>:
+                        <pre><code>python -c "from utils.message_broker import get_default_broker; broker = get_default_broker(); print('OK')"</code></pre>
+                    </li>
                     <li><strong>Run Quick Test</strong>:
                         <pre><code>python quick_test.py</code></pre>
                     </li>
@@ -904,6 +1486,7 @@ print(f"Tasks failed: {results['final_status']['failed']}")</code></pre>
                     <li>Verify all dependencies are installed correctly</li>
                     <li>Run tests individually to isolate issues</li>
                     <li>Consult the codebase review document for known issues</li>
+                    <li>Check GitHub repository issues and discussions</li>
                 </ul>
             </section>
             
@@ -924,68 +1507,100 @@ print(f"Tasks failed: {results['final_status']['failed']}")</code></pre>
                             <td>A specialized software component that performs specific tasks in the multi-agent system. Each agent has a specific role (e.g., code generation, testing, infrastructure).</td>
                         </tr>
                         <tr>
+                            <td><span class="glossary-term">Agent Redundancy</span></td>
+                            <td>Multiple instances of the same agent type for high availability and failover capabilities.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Bandit</span></td>
+                            <td>A Python security linter that scans code for security vulnerabilities and common issues.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Circuit Breaker</span></td>
+                            <td>A design pattern that prevents cascading failures by stopping requests to a failing service after a threshold is reached.</td>
+                        </tr>
+                        <tr>
                             <td><span class="glossary-term">FastAPI</span></td>
                             <td>A modern Python web framework for building APIs. Used in this system for generating REST API endpoints.</td>
-                        </tr>
-                        <tr>
-                            <td><span class="glossary-term">Jinja2</span></td>
-                            <td>A templating engine for Python. Used to generate code from templates, making code generation maintainable and customizable.</td>
-                        </tr>
-                        <tr>
-                            <td><span class="glossary-term">Orchestrator</span></td>
-                            <td>The central coordinator agent that breaks down projects into tasks and distributes them to specialized agents.</td>
-                        </tr>
-                        <tr>
-                            <td><span class="glossary-term">Terraform</span></td>
-                            <td>An Infrastructure as Code (IaC) tool used to define and provision cloud infrastructure using declarative configuration files.</td>
                         </tr>
                         <tr>
                             <td><span class="glossary-term">Helm</span></td>
                             <td>A package manager for Kubernetes that simplifies deployment of applications using charts (pre-configured Kubernetes resources).</td>
                         </tr>
                         <tr>
-                            <td><span class="glossary-term">OAuth 2.0</span></td>
-                            <td>An authorization framework that enables applications to obtain limited access to user accounts on HTTP services. Used for QuickBooks integration.</td>
+                            <td><span class="glossary-term">Jinja2</span></td>
+                            <td>A templating engine for Python. Used to generate code from templates, making code generation maintainable and customizable.</td>
                         </tr>
                         <tr>
-                            <td><span class="glossary-term">Pydantic</span></td>
-                            <td>A Python library for data validation using Python type annotations. Used in FastAPI for request/response validation.</td>
+                            <td><span class="glossary-term">Load Balancer</span></td>
+                            <td>A component that distributes tasks across multiple agent instances, ensuring optimal resource utilization and high availability.</td>
                         </tr>
                         <tr>
-                            <td><span class="glossary-term">SQLAlchemy</span></td>
-                            <td>A Python SQL toolkit and Object-Relational Mapping (ORM) library. Used for database interactions and model definitions.</td>
+                            <td><span class="glossary-term">Message Broker</span></td>
+                            <td>A middleware component that enables communication between agents using pub/sub messaging patterns.</td>
                         </tr>
                         <tr>
-                            <td><span class="glossary-term">Temporal</span></td>
-                            <td>A workflow orchestration platform that ensures reliable execution of distributed applications. Used for data synchronization workflows.</td>
-                        </tr>
-                        <tr>
-                            <td><span class="glossary-term">Next.js</span></td>
-                            <td>A React framework for building web applications. Used for generating the frontend user interface.</td>
-                        </tr>
-                        <tr>
-                            <td><span class="glossary-term">pytest</span></td>
-                            <td>A Python testing framework that makes it easy to write simple and scalable test cases.</td>
-                        </tr>
-                        <tr>
-                            <td><span class="glossary-term">SSE (Server-Sent Events)</span></td>
-                            <td>A web standard that enables servers to push data to web browsers. Used for real-time job status updates.</td>
-                        </tr>
-                        <tr>
-                            <td><span class="glossary-term">WAF (Web Application Firewall)</span></td>
-                            <td>A security solution that monitors and filters HTTP traffic to and from web applications. Configured via Terraform in this system.</td>
+                            <td><span class="glossary-term">MyPy</span></td>
+                            <td>A static type checker for Python that helps catch type-related errors before runtime.</td>
                         </tr>
                         <tr>
                             <td><span class="glossary-term">Multi-Tenant</span></td>
                             <td>An architecture where a single instance of software serves multiple customers (tenants), with data isolation between tenants.</td>
                         </tr>
                         <tr>
-                            <td><span class="glossary-term">XML-RPC</span></td>
-                            <td>A remote procedure call (RPC) protocol using XML. Used by Odoo for API communication.</td>
+                            <td><span class="glossary-term">Node.js</span></td>
+                            <td>A JavaScript runtime built on Chrome's V8 engine. The system supports Node.js 20.x LTS for server-side JavaScript development.</td>
                         </tr>
                         <tr>
-                            <td><span class="glossary-term">Workspace</span></td>
-                            <td>The directory where generated code and project files are created.</td>
+                            <td><span class="glossary-term">OAuth 2.0</span></td>
+                            <td>An authorization framework that enables applications to obtain limited access to user accounts on HTTP services. Used for QuickBooks integration.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Orchestrator</span></td>
+                            <td>The central coordinator agent that breaks down projects into tasks and distributes them to specialized agents.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Pydantic</span></td>
+                            <td>A Python library for data validation using Python type annotations. Used in FastAPI for request/response validation.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Pub/Sub</span></td>
+                            <td>Publish/Subscribe messaging pattern where senders (publishers) send messages without knowing specific recipients (subscribers).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">pytest</span></td>
+                            <td>A Python testing framework that makes it easy to write simple and scalable test cases.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Retry Policy</span></td>
+                            <td>A configuration that defines how tasks should be retried on failure, including retry count, delays, and exception handling.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Ruff</span></td>
+                            <td>A fast Python linter and code formatter that checks code style and identifies potential issues.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Semgrep</span></td>
+                            <td>A static analysis tool that uses pattern matching to find security vulnerabilities and code issues.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">SQLAlchemy</span></td>
+                            <td>A Python SQL toolkit and Object-Relational Mapping (ORM) library. Used for database interactions and model definitions.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">SSE (Server-Sent Events)</span></td>
+                            <td>A web standard that enables servers to push data to web browsers. Used for real-time job status updates.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Temporal</span></td>
+                            <td>A workflow orchestration platform that ensures reliable execution of distributed applications. Used for data synchronization workflows.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Terraform</span></td>
+                            <td>An Infrastructure as Code (IaC) tool used to define and provision cloud infrastructure using declarative configuration files.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Next.js</span></td>
+                            <td>A React framework for building web applications. Used for generating the frontend user interface.</td>
                         </tr>
                         <tr>
                             <td><span class="glossary-term">Task</span></td>
@@ -1000,6 +1615,30 @@ print(f"Tasks failed: {results['final_status']['failed']}")</code></pre>
                             <td>A configuration that defines the directory structure for generated files (e.g., where API code, frontend files, infrastructure configs are placed).</td>
                         </tr>
                         <tr>
+                            <td><span class="glossary-term">VCS (Version Control System)</span></td>
+                            <td>Version control system (typically Git) for tracking changes and managing code versions. The system supports automatic commits and PR creation.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">WAF (Web Application Firewall)</span></td>
+                            <td>A security solution that monitors and filters HTTP traffic to and from web applications. Configured via Terraform in this system.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Webhook</span></td>
+                            <td>An HTTP callback that allows external systems to notify your application of events (e.g., Stripe payment events).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">WebSocket</span></td>
+                            <td>A communication protocol that provides full-duplex communication over a single TCP connection. Used for real-time dashboard updates.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Workspace</span></td>
+                            <td>The directory where generated code and project files are created.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">XML-RPC</span></td>
+                            <td>A remote procedure call (RPC) protocol using XML. Used by Odoo for API communication.</td>
+                        </tr>
+                        <tr>
                             <td><span class="glossary-term">CI/CD</span></td>
                             <td>Continuous Integration/Continuous Deployment - automated processes for testing and deploying code changes.</td>
                         </tr>
@@ -1012,8 +1651,12 @@ print(f"Tasks failed: {results['final_status']['failed']}")</code></pre>
                             <td>The practice of managing and provisioning infrastructure through machine-readable definition files, rather than manual configuration.</td>
                         </tr>
                         <tr>
-                            <td><span class="glossary-term">Webhook</span></td>
-                            <td>An HTTP callback that allows external systems to notify your application of events (e.g., Stripe payment events).</td>
+                            <td><span class="glossary-term">ESM (ECMAScript Modules)</span></td>
+                            <td>The standard module system for JavaScript. Node.js 20.x fully supports ESM modules.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">LTS (Long Term Support)</span></td>
+                            <td>A software release that receives maintenance and security updates for an extended period. Node.js 20.x is an LTS release.</td>
                         </tr>
                     </tbody>
                 </table>
@@ -1022,9 +1665,9 @@ print(f"Tasks failed: {results['final_status']['failed']}")</code></pre>
         
         <footer>
             <p>&copy; 2024 Quick2Odoo Agentic Scaffold Project</p>
-            <p>For support and updates, visit the project repository</p>
+            <p>For support and updates, visit the project repository: <a href="https://github.com/cryptolavar-hub/Q2O" style="color: #17a2b8;" target="_blank">https://github.com/cryptolavar-hub/Q2O</a></p>
             <p style="margin-top: 1rem; font-size: 0.9em; opacity: 0.8;">
-                Last Updated: December 2024 | Version 1.0
+                Last Updated: November 2024 | Version 1.0 | Complete Documentation
             </p>
         </footer>
     </div>
