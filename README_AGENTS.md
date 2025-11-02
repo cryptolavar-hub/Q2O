@@ -1,34 +1,89 @@
 # Multi-Agent Development System
 
-A sophisticated multi-agent system for managing software development projects. The system consists of specialized agents that work together to break down, implement, test, and quality-assure development tasks.
+A sophisticated multi-agent system for managing software development projects. The system consists of 10 specialized agents that work together to break down, implement, test, and quality-assure development tasks.
 
 ## Architecture
 
-### Agents
+### 10 Specialized Agents
 
 1. **Orchestrator Agent** (`OrchestratorAgent`)
    - Breaks down projects into manageable tasks
-   - Distributes tasks to appropriate agents
+   - Distributes tasks to appropriate agents using load balancing
    - Manages dependencies between tasks
    - Tracks project progress and status
+   - Integrates with load balancer for high availability
+   - Manages retry policies for failed tasks
 
 2. **Coder Agent** (`CoderAgent`)
    - Implements code based on task requirements
-   - Generates code structure (APIs, models, services, components)
-   - Creates files following best practices
+   - Generates FastAPI endpoints and SQLAlchemy models
+   - Creates backend services and business logic
+   - Uses Jinja2 templates for consistent code generation
+   - Integrates with ProjectLayout for configurable file structure
    - Tracks implemented files
 
 3. **Testing Agent** (`TestingAgent`)
-   - Writes comprehensive test suites
+   - Writes comprehensive pytest test suites
    - Executes tests and collects results
-   - Generates test reports
-   - Ensures code testability
+   - Generates test coverage reports using pytest-cov
+   - Ensures code testability and quality
+   - Validates generated code functionality
 
 4. **QA Agent** (`QAAgent`)
-   - Performs quality assurance reviews
-   - Checks code quality metrics
-   - Identifies security issues
-   - Provides improvement recommendations
+   - Performs comprehensive code quality reviews
+   - Integrates real static analysis tools:
+     - **mypy**: Type checking for Python
+     - **ruff**: Fast Python linter
+     - **black**: Code formatting verification
+   - Checks code quality metrics (complexity, maintainability)
+   - Provides detailed improvement recommendations
+   - Fixed duplicate status key bug for reliable reporting
+
+5. **Infrastructure Agent** (`InfrastructureAgent`)
+   - Generates Terraform configurations for cloud infrastructure
+   - Creates Helm charts for Kubernetes deployments
+   - Validates infrastructure code syntax
+   - Supports Azure, AWS, and GCP
+   - Manages WAF, Key Vault, and other cloud resources
+
+6. **Integration Agent** (`IntegrationAgent`)
+   - Generates OAuth 2.0 authentication flows
+   - Creates API clients (QuickBooks, Odoo, Stripe)
+   - Builds integration connectors (QuickBooks Desktop Web Connector)
+   - Uses templates for consistent integration patterns
+   - Handles third-party API integrations
+
+7. **Frontend Agent** (`FrontendAgent`)
+   - Creates Next.js/React components
+   - Generates TypeScript frontend code
+   - Builds responsive UI components
+   - Creates dashboard interfaces
+   - Implements modern UX patterns
+
+8. **Workflow Agent** (`WorkflowAgent`)
+   - Generates Temporal workflow definitions
+   - Creates data backfill workflows
+   - Manages long-running processes
+   - Handles distributed task orchestration
+   - Uses ProjectLayout for workflow organization
+
+9. **Security Agent** (`SecurityAgent`)
+   - Performs comprehensive security audits
+   - Integrates real security scanning tools:
+     - **bandit**: Python security linter
+     - **semgrep**: Pattern-based security scanning
+     - **safety**: Dependency vulnerability scanning
+   - Detects hardcoded secrets using SecretsValidator
+   - Generates .env.example files for environment variables
+   - Provides security recommendations and fixes
+
+10. **Node.js Agent** (`NodeAgent`)
+    - Generates Node.js/Express.js applications
+    - Creates TypeScript-based Node.js projects
+    - Supports Node.js 20.x LTS (latest stable)
+    - Generates package.json with proper dependencies
+    - Uses templates for Express apps and API endpoints
+    - Detects and validates Node.js project structure
 
 ## Usage
 
@@ -127,15 +182,62 @@ workspace/
 └── components/       # UI components (if applicable)
 ```
 
-## Features
+## Advanced Features
 
-- **Automatic Project Breakdown**: Intelligent task creation from objectives
-- **Dependency Management**: Automatic dependency resolution
-- **Code Generation**: Multiple code patterns (APIs, models, services, components)
-- **Test Generation**: Comprehensive test suites with unittest
-- **Quality Assurance**: Multi-metric code quality reviews
-- **Progress Tracking**: Real-time project status
-- **Extensible**: Easy to add new agent types or capabilities
+### High Availability & Load Balancing
+- **Load Balancer** (`LoadBalancer`): Advanced task routing with multiple strategies
+  - Round-robin distribution
+  - Least-busy agent selection
+  - Priority-based routing
+  - Health-based routing (avoids unhealthy agents)
+- **Agent Redundancy**: Multiple instances per agent type
+- **Failover Mechanism**: Automatic task rerouting to healthy agents
+- **Circuit Breaker**: Prevents cascading failures
+- **Health Monitoring**: Continuous agent health checks
+
+### Agent Communication
+- **Message Broker** (`MessageBroker`): Pub/sub pattern for agent communication
+  - In-memory broker for development
+  - Redis broker for production
+- **Standardized Protocol** (`AgentMessage`): Type-safe inter-agent messaging
+- **MessagingMixin**: Easy integration for all agents
+
+### Retry Mechanisms
+- **Retry Policies** (`RetryPolicy`): Configurable retry strategies
+  - Exponential backoff
+  - Fixed delay
+  - No retry option
+- **RetryPolicyManager**: Per-agent retry configuration
+- **Automatic Retry**: Failed tasks automatically retried based on policy
+
+### VCS Integration
+- **Git Manager** (`GitManager`): Automated Git operations
+  - Auto-commit generated code
+  - Branch creation and management
+  - Push to remote repositories
+- **GitHub Integration** (`VCSIntegration`): Pull request automation
+  - Automatic PR creation
+  - Customizable PR templates
+  - Branch-based workflows
+
+### Real-time Dashboard
+- **WebSocket API**: Live task and agent monitoring
+- **Event Manager**: Real-time event broadcasting
+- **Metrics API**: Static analysis and performance metrics
+- **React Dashboard**: Beautiful web UI for monitoring
+
+### Multi-Language Support
+- **Language Detection** (`LanguageDetector`): Auto-detect project languages
+- **Framework Detection**: Identify frameworks (Express, FastAPI, etc.)
+- **Package Manager Detection**: Detect npm, pnpm, pip, poetry
+- **Template System**: Language-specific code generation
+
+### Code Quality & Security
+- **Static Analysis Integration**: Real tools, not just regex
+  - Python: mypy, ruff, black
+  - Security: bandit, semgrep, safety
+- **Secrets Management** (`SecretsValidator`): Detect and prevent secret leaks
+- **Environment Generation**: Auto-generate .env.example files
 
 ## Configuration
 
@@ -181,22 +283,42 @@ Extend `QAAgent` with additional check methods:
 - `_check_accessibility()`
 - `_check_compliance()`
 
-## Limitations
+## System Components
 
-- Currently uses simplified code generation templates
-- Test execution requires the generated code to be importable
-- QA checks are heuristic-based (not full static analysis)
-- Single workspace per system instance
+### Base Agent (`BaseAgent`)
+All agents inherit from `BaseAgent`, which provides:
+- Event emission for dashboard integration
+- Retry logic with `process_task_with_retry`
+- VCS integration hooks (`_auto_commit_task`)
+- Messaging capabilities via `MessagingMixin`
+- Standardized task processing workflow
 
-## Future Enhancements
+### Utility Modules (14 Total)
+1. **project_layout.py**: Configurable project directory structure
+2. **template_renderer.py**: Jinja2 template rendering
+3. **exceptions.py**: Standardized exception hierarchy
+4. **retry.py**: Exponential backoff decorator
+5. **retry_policy.py**: Configurable retry strategies
+6. **security_scanner.py**: Bandit, semgrep, safety integration
+7. **code_quality_scanner.py**: mypy, ruff, black integration
+8. **secrets_validator.py**: Secret detection and .env generation
+9. **language_detector.py**: Language and framework detection
+10. **load_balancer.py**: High availability load balancing
+11. **message_broker.py**: Pub/sub message broker abstraction
+12. **message_protocol.py**: Standardized agent messaging protocol
+13. **git_manager.py**: Git operations automation
+14. **vcs_integration.py**: GitHub API integration
 
-- Integration with real static analysis tools
-- Support for multiple programming languages
-- Agent communication protocols
-- Task retry mechanisms
-- Advanced load balancing for agents
-- Integration with version control systems
-- Real-time progress dashboard
+## Production Readiness
+
+✅ **All Priority Features Implemented**:
+- ✅ Real-time progress dashboard
+- ✅ Integration with real static analysis tools
+- ✅ Support for multiple programming languages (Python, Node.js, TypeScript)
+- ✅ Agent communication protocols
+- ✅ Task retry mechanisms
+- ✅ Advanced load balancing for agents
+- ✅ Integration with version control systems
 
 ## License
 
