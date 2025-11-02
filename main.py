@@ -321,10 +321,7 @@ class AgentSystem:
         except Exception:
             pass  # Dashboard optional
         
-        # VCS Integration: Create feature branch and PR if enabled
-        self._handle_vcs_integration(project_description, objectives, results)
-        
-        # Collect results
+        # Collect results first
         results = {
             "project_description": project_description,
             "objectives": objectives,
@@ -350,6 +347,9 @@ class AgentSystem:
                 "security": [agent.get_status() for agent in self.security_agents]
             }
         }
+        
+        # VCS Integration: Create feature branch and PR if enabled (after collecting results)
+        self._handle_vcs_integration(project_description, objectives, results)
         
         return results
 
