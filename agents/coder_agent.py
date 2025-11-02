@@ -1,0 +1,667 @@
+"""
+Coder Agent - Implements coding tasks and generates code based on requirements.
+"""
+
+from typing import Dict, Any, List
+from agents.base_agent import BaseAgent, AgentType, Task, TaskStatus
+from utils.template_renderer import TemplateRenderer, get_renderer
+import os
+import logging
+
+
+class CoderAgent(BaseAgent):
+    """Agent responsible for implementing code based on task requirements."""
+
+    def __init__(self, agent_id: str = "coder_main", workspace_path: str = "."):
+        super().__init__(agent_id, AgentType.CODER)
+        self.workspace_path = workspace_path
+        self.implemented_files: List[str] = []
+        self.template_renderer = get_renderer()
+
+    def process_task(self, task: Task) -> Task:
+        """
+        Process a coding task by generating and implementing code.
+        
+        Args:
+            task: The coding task to process
+            
+        Returns:
+            The updated task
+        """
+        try:
+            self.logger.info(f"Processing coding task: {task.title}")
+            
+            # Extract task information
+            description = task.description
+            metadata = task.metadata
+            complexity = metadata.get("complexity", "medium")
+            objective = metadata.get("objective", task.title)
+            tech_stack = task.tech_stack or []
+
+            # Generate code structure (with tech stack awareness)
+            code_structure = self._plan_code_structure(description, objective, complexity, tech_stack)
+            
+            # Implement the code
+            implemented_files = self._implement_code(code_structure, task)
+            
+            # Update task metadata
+            task.metadata["implemented_files"] = implemented_files
+            task.metadata["code_structure"] = code_structure
+            task.result = {
+                "files_created": implemented_files,
+                "complexity": complexity,
+                "status": "completed"
+            }
+
+            self.complete_task(task.id, task.result)
+            self.logger.info(f"Completed coding task {task.id}")
+            
+        except Exception as e:
+            error_msg = f"Error processing coding task: {str(e)}"
+            self.logger.error(error_msg, exc_info=True)
+            self.fail_task(task.id, error_msg)
+            
+        return task
+
+    def _plan_code_structure(self, description: str, objective: str, complexity: str, tech_stack: List[str] = None) -> Dict[str, Any]:
+        """
+        Plan the code structure based on task requirements and tech stack.
+        
+        Args:
+            description: Task description
+            objective: Objective to achieve
+            complexity: Complexity level
+            tech_stack: Technology stack (from task)
+            
+        Returns:
+            Dictionary describing the code structure
+        """
+        tech_stack = tech_stack or []
+        description_lower = description.lower()
+        
+        # Analyze requirements and determine structure
+        structure = {
+            "objective": objective,
+            "complexity": complexity,
+            "tech_stack": tech_stack,
+            "files": [],
+            "dependencies": [],
+            "main_components": []
+        }
+
+        # Technology-aware file planning
+        # For Python/FastAPI projects
+        if "python" in tech_stack or not tech_stack:
+            if "api" in description_lower or "endpoint" in description_lower:
+                structure["files"].append({
+                    "type": "fastapi",
+                    "path": "api/app/endpoints.py",
+                    "description": "FastAPI endpoints implementation"
+                })
+            
+            if "model" in description_lower or "database" in description_lower:
+                structure["files"].append({
+                    "type": "model",
+                    "path": "api/app/models.py",
+                    "description": "SQLAlchemy data models"
+                })
+
+            if "service" in description_lower or "business logic" in description_lower:
+                structure["files"].append({
+                    "type": "service",
+                    "path": "api/app/services.py",
+                    "description": "Business logic service"
+                })
+            
+            if "search" in description_lower:
+                structure["files"].append({
+                    "type": "api",
+                    "path": "api/app/search.py",
+                    "description": "Search endpoints"
+                })
+            
+            if "mapping" in description_lower:
+                structure["files"].append({
+                    "type": "api",
+                    "path": "api/app/mappings.py",
+                    "description": "Mappings endpoints"
+                })
+            
+            if "sse" in description_lower or "stream" in description_lower:
+                structure["files"].append({
+                    "type": "api",
+                    "path": "api/app/sse_sign.py",
+                    "description": "SSE signing"
+                })
+                structure["files"].append({
+                    "type": "api",
+                    "path": "api/app/ops_stream.py",
+                    "description": "SSE stream endpoint"
+                })
+            
+            if "ops" in description_lower or "admin" in description_lower:
+                structure["files"].append({
+                    "type": "api",
+                    "path": "api/app/ops_admin.py",
+                    "description": "Admin operations endpoints"
+                })
+            
+            if "audit" in description_lower:
+                structure["files"].append({
+                    "type": "api",
+                    "path": "api/app/audit.py",
+                    "description": "Audit logging"
+                })
+            
+            if "entities" in description_lower or "backfill" in description_lower:
+                structure["files"].append({
+                    "type": "api",
+                    "path": "api/app/entities.py",
+                    "description": "Entity sync endpoints"
+                })
+
+        # For Next.js/React projects
+        if "nextjs" in tech_stack:
+            if "page" in description_lower:
+                page_name = objective.lower().replace(' ', '_')
+                structure["files"].append({
+                    "type": "page",
+                    "path": f"web/pages/{page_name}.tsx",
+                    "description": f"Next.js page for {objective}"
+                })
+            
+            if "component" in description_lower:
+                component_name = ''.join(word.capitalize() for word in objective.split())
+                structure["files"].append({
+                    "type": "component",
+                    "path": f"web/components/{component_name}.tsx",
+                    "description": f"React component for {objective}"
+                })
+
+        # If no specific files identified, create a generic implementation
+        if not structure["files"]:
+            if "python" in tech_stack:
+                structure["files"].append({
+                    "type": "generic",
+                    "path": f"api/app/{objective.lower().replace(' ', '_')}.py",
+                    "description": f"Implementation for {objective}"
+                })
+            else:
+                structure["files"].append({
+                    "type": "generic",
+                    "path": f"src/{objective.lower().replace(' ', '_')}.py",
+                    "description": f"Implementation for {objective}"
+                })
+
+        return structure
+
+    def _implement_code(self, code_structure: Dict[str, Any], task: Task) -> List[str]:
+        """
+        Implement code based on the planned structure.
+        
+        Args:
+            code_structure: Planned code structure
+            task: The task being implemented
+            
+        Returns:
+            List of file paths created
+        """
+        implemented_files = []
+        objective = code_structure["objective"]
+        files_to_create = code_structure["files"]
+
+        for file_info in files_to_create:
+            file_path = file_info["path"]
+            file_type = file_info["type"]
+            full_path = os.path.join(self.workspace_path, file_path)
+            
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            
+            # Generate code based on type
+            code_content = self._generate_code_content(file_type, file_info, objective, task)
+            
+            # Write file
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(code_content)
+            
+            implemented_files.append(file_path)
+            self.logger.info(f"Created file: {file_path}")
+
+        return implemented_files
+
+    def _generate_code_content(self, file_type: str, file_info: Dict[str, Any], 
+                              objective: str, task: Task) -> str:
+        """
+        Generate code content based on file type.
+        
+        Args:
+            file_type: Type of file to generate
+            file_info: File information
+            objective: Objective being implemented
+            task: The task
+            
+        Returns:
+            Generated code content as string
+        """
+        if file_type == "api":
+            return self._generate_api_code(objective, task)
+        elif file_type == "model":
+            return self._generate_model_code(objective, task)
+        elif file_type == "service":
+            return self._generate_service_code(objective, task)
+        elif file_type == "component":
+            return self._generate_component_code(objective, task)
+        else:
+            return self._generate_generic_code(objective, task)
+
+    def _generate_api_code(self, objective: str, task: Task) -> str:
+        """Generate FastAPI endpoint code using template."""
+        module_name = objective.lower().replace(' ', '_')
+        endpoint_path = f"/api/{module_name}"
+        class_name = ''.join(word.capitalize() for word in objective.split())
+        
+        # Use template if available, otherwise fallback to inline generation
+        if self.template_renderer.template_exists("api/fastapi_endpoint.j2"):
+            context = {
+                "objective": objective,
+                "module_name": module_name,
+                "endpoint_path": endpoint_path,
+                "class_name": class_name
+            }
+            return self.template_renderer.render("api/fastapi_endpoint.j2", context)
+        
+        # Fallback to inline generation (for backward compatibility)
+        return self._generate_api_code_inline(objective, module_name, endpoint_path, class_name)
+    
+    def _generate_api_code_inline(self, objective: str, module_name: str, endpoint_path: str, class_name: str) -> str:
+        """Generate FastAPI endpoint code inline (fallback)."""
+        
+        return f'''"""
+FastAPI endpoints for {objective}
+Generated by CoderAgent
+"""
+
+from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi.security import HTTPBearer
+from typing import Dict, Any, Optional, List
+from pydantic import BaseModel, Field
+import logging
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="{endpoint_path}", tags=["{module_name}"])
+security = HTTPBearer()
+
+
+class {class_name}Request(BaseModel):
+    """Request model for {objective}"""
+    pass
+
+
+class {class_name}Response(BaseModel):
+    """Response model for {objective}"""
+    status: str = Field(..., description="Operation status")
+    message: Optional[str] = Field(None, description="Status message")
+    data: Optional[Dict[str, Any]] = Field(None, description="Response data")
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+@router.get("/", response_model={class_name}Response, status_code=status.HTTP_200_OK)
+async def get_{module_name}(
+    skip: int = 0,
+    limit: int = 100,
+    token: str = Depends(security)
+) -> {class_name}Response:
+    """
+    GET endpoint for {objective}
+    
+    Args:
+        skip: Number of records to skip
+        limit: Maximum number of records to return
+        token: Bearer token for authentication
+        
+    Returns:
+        Response with {objective} data
+    """
+    try:
+        logger.info(f"GET request for {objective} - skip={{skip}}, limit={{limit}}")
+        return {class_name}Response(
+            status="success",
+            message="GET request for {objective}",
+            data={{"skip": skip, "limit": limit}}
+        )
+    except Exception as e:
+        logger.error(f"Error in get_{module_name}: {{str(e)}}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {{str(e)}}"
+        )
+
+
+@router.post("/", response_model={class_name}Response, status_code=status.HTTP_201_CREATED)
+async def create_{module_name}(
+    request: {class_name}Request,
+    token: str = Depends(security)
+) -> {class_name}Response:
+    """
+    POST endpoint for {objective}
+    
+    Args:
+        request: Request body with {objective} data
+        token: Bearer token for authentication
+        
+    Returns:
+        Response with created {objective} data
+    """
+    try:
+        logger.info(f"POST request received for {objective}: {{request}}")
+        return {class_name}Response(
+            status="success",
+            message="POST request for {objective} processed",
+            data={{"request": request.dict()}}
+        )
+    except Exception as e:
+        logger.error(f"Error in create_{module_name}: {{str(e)}}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {{str(e)}}"
+        )
+
+
+@router.put("/{{item_id}}", response_model={class_name}Response, status_code=status.HTTP_200_OK)
+async def update_{module_name}(
+    item_id: int,
+    request: {class_name}Request,
+    token: str = Depends(security)
+) -> {class_name}Response:
+    """
+    PUT endpoint for updating {objective}
+    
+    Args:
+        item_id: ID of the item to update
+        request: Request body with updated data
+        token: Bearer token for authentication
+        
+    Returns:
+        Response with updated {objective} data
+    """
+    try:
+        logger.info(f"PUT request received for {objective} {{item_id}}: {{request}}")
+        return {class_name}Response(
+            status="success",
+            message=f"{objective} {{item_id}} updated",
+            data={{"id": item_id, "request": request.dict()}}
+        )
+    except Exception as e:
+        logger.error(f"Error in update_{module_name}: {{str(e)}}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {{str(e)}}"
+        )
+
+
+@router.delete("/{{item_id}}", response_model={class_name}Response, status_code=status.HTTP_200_OK)
+async def delete_{module_name}(
+    item_id: int,
+    token: str = Depends(security)
+) -> {class_name}Response:
+    """
+    DELETE endpoint for {objective}
+    
+    Args:
+        item_id: ID of the item to delete
+        token: Bearer token for authentication
+        
+    Returns:
+        Response confirming deletion
+    """
+    try:
+        logger.info(f"DELETE request received for {objective} {{item_id}}")
+        return {class_name}Response(
+            status="success",
+            message=f"{objective} {{item_id}} deleted",
+            data={{"id": item_id}}
+        )
+    except Exception as e:
+        logger.error(f"Error in delete_{module_name}: {{str(e)}}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {{str(e)}}"
+        )
+'''
+
+    def _generate_model_code(self, objective: str, task: Task) -> str:
+        """Generate SQLAlchemy data model code using template."""
+        class_name = ''.join(word.capitalize() for word in objective.split())
+        table_name = objective.lower().replace(" ", "_")
+        
+        # Use template if available
+        if self.template_renderer.template_exists("api/sqlalchemy_model.j2"):
+            context = {
+                "objective": objective,
+                "class_name": class_name,
+                "table_name": table_name
+            }
+            return self.template_renderer.render("api/sqlalchemy_model.j2", context)
+        
+        # Fallback to inline generation
+        return self._generate_model_code_inline(objective, class_name, table_name)
+    
+    def _generate_model_code_inline(self, objective: str, class_name: str, table_name: str) -> str:
+        """Generate SQLAlchemy data model code inline (fallback)."""
+        return f'''"""
+SQLAlchemy data models for {objective}
+Generated by CoderAgent
+"""
+
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from datetime import datetime
+from typing import Dict, Any
+
+Base = declarative_base()
+
+
+class {class_name}(Base):
+    """
+    SQLAlchemy model representing {objective}
+    """
+    __tablename__ = '{table_name}'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String(255), nullable=False, index=True)  # Multi-tenant support
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f'<{class_name}(id={{self.id}}, name={{self.name}})>'
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert model to dictionary."""
+        return {{
+            'id': self.id,
+            'tenant_id': self.tenant_id,
+            'name': self.name,
+            'description': self.description,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]):
+        """Create model instance from dictionary."""
+        return cls(
+            tenant_id=data.get('tenant_id'),
+            name=data.get('name'),
+            description=data.get('description')
+        )
+'''
+
+    def _generate_service_code(self, objective: str, task: Task) -> str:
+        """Generate service/business logic code."""
+        class_name = ''.join(word.capitalize() for word in objective.split()) + "Service"
+        method_name = objective.lower().replace(' ', '_')
+        return f'''"""
+Service layer for {objective}
+Generated by CoderAgent
+"""
+
+from typing import Dict, Any, List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class {class_name}:
+    """
+    Service class for handling {objective} business logic
+    """
+
+    def __init__(self):
+        """Initialize the service."""
+        self.logger = logger
+
+    def {method_name}(self, *args, **kwargs) -> Dict[str, Any]:
+        """
+        Main method for {objective}
+        
+        Args:
+            *args: Positional arguments
+            **kwargs: Keyword arguments
+            
+        Returns:
+            Dictionary with result
+        """
+        try:
+            self.logger.info(f"Processing {objective}")
+            # Implement business logic here
+            result = {{"status": "success", "message": f"{objective} processed"}}
+            return result
+        except Exception as e:
+            self.logger.error(f"Error in {method_name}: {{str(e)}}")
+            raise
+
+    def validate(self, data: Dict[str, Any]) -> bool:
+        """
+        Validate input data.
+        
+        Args:
+            data: Data to validate
+            
+        Returns:
+            True if valid
+        """
+        # Implement validation logic
+        return True
+'''
+
+    def _generate_component_code(self, objective: str, task: Task) -> str:
+        """Generate UI component code."""
+        class_name = ''.join(word.capitalize() for word in objective.split()) + "Component"
+        return f'''"""
+UI Component for {objective}
+Generated by CoderAgent
+"""
+
+from typing import Dict, Any, Optional
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class {class_name}:
+    """
+    Component class for {objective}
+    """
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the component.
+        
+        Args:
+            config: Optional configuration dictionary
+        """
+        self.config = config or {{}}
+        self.logger = logger
+
+    def render(self) -> str:
+        """
+        Render the component.
+        
+        Returns:
+            Rendered HTML/UI string
+        """
+        # Implement rendering logic
+        return f"<div class='{class_name.lower()}'>{objective}</div>"
+
+    def update(self, data: Dict[str, Any]) -> None:
+        """
+        Update component state.
+        
+        Args:
+            data: Data to update component with
+        """
+        self.logger.info(f"Updating {class_name} with data: {{data}}")
+        # Implement update logic
+'''
+
+    def _generate_generic_code(self, objective: str, task: Task) -> str:
+        """Generate generic implementation code."""
+        module_name = objective.lower().replace(' ', '_')
+        class_name = ''.join(word.capitalize() for word in objective.split())
+        return f'''"""
+Implementation for {objective}
+Generated by CoderAgent
+"""
+
+from typing import Dict, Any, Optional
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class {class_name}:
+    """
+    Implementation class for {objective}
+    """
+
+    def __init__(self):
+        """Initialize the implementation."""
+        self.logger = logger
+
+    def execute(self, *args, **kwargs) -> Dict[str, Any]:
+        """
+        Execute the main functionality.
+        
+        Args:
+            *args: Positional arguments
+            **kwargs: Keyword arguments
+            
+        Returns:
+            Dictionary with result
+        """
+        try:
+            self.logger.info(f"Executing {objective}")
+            # Implement functionality here
+            return {{"status": "success", "message": f"{objective} executed successfully"}}
+        except Exception as e:
+            self.logger.error(f"Error executing {objective}: {{str(e)}}")
+            raise
+
+
+def main():
+    """Main function for testing."""
+    implementation = {class_name}()
+    result = implementation.execute()
+    print(result)
+
+
+if __name__ == "__main__":
+    main()
+'''
+

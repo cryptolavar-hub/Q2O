@@ -1,0 +1,10 @@
+{
+  "project_description": "Example web application with user management",
+  "objectives": [
+    "User authentication system",
+    "User profile management",
+    "Data persistence layer",
+    "REST API endpoints"
+  ]
+}
+

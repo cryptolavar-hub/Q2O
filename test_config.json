@@ -1,0 +1,10 @@
+{
+  "project_description": "QuickBooks to Odoo Online Integration - Test Project",
+  "objectives": [
+    "QuickBooks OAuth authentication",
+    "Odoo v18 JSON-RPC client",
+    "Onboarding wizard UI",
+    "Temporal backfill workflow",
+    "Azure WAF configuration"
+  ]
+}

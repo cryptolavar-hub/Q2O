@@ -1,0 +1,361 @@
+"""
+Main entry point for the Multi-Agent Development System.
+Coordinates the orchestrator and all agent types to complete projects.
+"""
+
+import argparse
+import logging
+import sys
+import json
+from pathlib import Path
+from typing import List, Dict, Any
+
+from agents import (
+    OrchestratorAgent,
+    CoderAgent,
+    TestingAgent,
+    QAAgent,
+    InfrastructureAgent,
+    IntegrationAgent,
+    FrontendAgent,
+    WorkflowAgent,
+    SecurityAgent,
+    AgentType,
+    TaskStatus
+)
+
+
+def setup_logging(log_level: str = "INFO"):
+    """Setup logging configuration."""
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+
+class AgentSystem:
+    """Main system that coordinates all agents."""
+
+    def __init__(self, workspace_path: str = "."):
+        """
+        Initialize the agent system.
+        
+        Args:
+            workspace_path: Path to the workspace directory
+        """
+        self.workspace_path = Path(workspace_path)
+        self.workspace_path.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize orchestrator
+        self.orchestrator = OrchestratorAgent()
+        
+        # Initialize specialized agents
+        self.coder_agents = [CoderAgent(workspace_path=str(self.workspace_path))]
+        self.testing_agents = [TestingAgent(workspace_path=str(self.workspace_path))]
+        self.qa_agents = [QAAgent(workspace_path=str(self.workspace_path))]
+        self.infrastructure_agents = [InfrastructureAgent(workspace_path=str(self.workspace_path))]
+        self.integration_agents = [IntegrationAgent(workspace_path=str(self.workspace_path))]
+        self.frontend_agents = [FrontendAgent(workspace_path=str(self.workspace_path))]
+        self.workflow_agents = [WorkflowAgent(workspace_path=str(self.workspace_path))]
+        self.security_agents = [SecurityAgent(workspace_path=str(self.workspace_path))]
+        
+        # Register agents with orchestrator
+        for agent in self.coder_agents:
+            self.orchestrator.register_agent(agent)
+        for agent in self.testing_agents:
+            self.orchestrator.register_agent(agent)
+        for agent in self.qa_agents:
+            self.orchestrator.register_agent(agent)
+        for agent in self.infrastructure_agents:
+            self.orchestrator.register_agent(agent)
+        for agent in self.integration_agents:
+            self.orchestrator.register_agent(agent)
+        for agent in self.frontend_agents:
+            self.orchestrator.register_agent(agent)
+        for agent in self.workflow_agents:
+            self.orchestrator.register_agent(agent)
+        for agent in self.security_agents:
+            self.orchestrator.register_agent(agent)
+        
+        self.logger = logging.getLogger(__name__)
+
+    def run_project(self, project_description: str, objectives: List[str]) -> Dict[str, Any]:
+        """
+        Run a complete project with all agents.
+        
+        Args:
+            project_description: High-level project description
+            objectives: List of objectives/features to implement
+            
+        Returns:
+            Dictionary with project results
+        """
+        self.logger.info("=" * 80)
+        self.logger.info("Starting Multi-Agent Development Project")
+        self.logger.info(f"Project: {project_description}")
+        self.logger.info(f"Objectives: {len(objectives)}")
+        self.logger.info("=" * 80)
+        
+        # Break down project into tasks
+        tasks = self.orchestrator.break_down_project(project_description, objectives)
+        
+        self.logger.info(f"Created {len(tasks)} tasks")
+        
+        # Process tasks iteratively
+        max_iterations = 100  # Safety limit
+        iteration = 0
+        
+        while iteration < max_iterations:
+            iteration += 1
+            self.logger.info(f"\n--- Iteration {iteration} ---")
+            
+            # Distribute ready tasks
+            self.orchestrator.distribute_tasks()
+            
+            # Process active tasks for each agent
+            all_agents = (
+                self.coder_agents + self.testing_agents + self.qa_agents +
+                self.infrastructure_agents + self.integration_agents +
+                self.frontend_agents + self.workflow_agents + self.security_agents
+            )
+            
+            for agent in all_agents:
+                for task_id, task in list(agent.active_tasks.items()):
+                    self.logger.info(f"Agent {agent.agent_id} processing task {task_id}")
+                    updated_task = agent.process_task(task)
+                    
+                    # Update orchestrator
+                    if updated_task.status == TaskStatus.COMPLETED:
+                        agent.complete_task(task_id, updated_task.result)
+                        self.orchestrator.update_task_status(
+                            task_id, TaskStatus.COMPLETED, updated_task.result
+                        )
+                    elif updated_task.status == TaskStatus.FAILED:
+                        agent.fail_task(task_id, updated_task.error or "Unknown error")
+                        self.orchestrator.update_task_status(
+                            task_id, TaskStatus.FAILED, None, updated_task.error
+                        )
+            
+            # Check if all tasks are completed
+            status = self.orchestrator.get_project_status()
+            self.logger.info(f"Project status: {status}")
+            
+            if status["completion_percentage"] == 100:
+                self.logger.info("All tasks completed!")
+                break
+            
+            # Check if we're stuck (no progress possible)
+            if status["pending"] == 0 and status["in_progress"] == 0:
+                if status["blocked"] > 0:
+                    self.logger.warning("Some tasks are blocked - checking dependencies")
+                elif status["failed"] > 0:
+                    self.logger.error("Some tasks failed - stopping")
+                    break
+                else:
+                    break
+        
+        # Get final project status
+        final_status = self.orchestrator.get_project_status()
+        
+        # Collect results
+        results = {
+            "project_description": project_description,
+            "objectives": objectives,
+            "final_status": final_status,
+            "tasks": {
+                task.id: {
+                    "title": task.title,
+                    "status": task.status.value,
+                    "result": task.result,
+                    "error": task.error
+                }
+                for task in self.orchestrator.project_tasks.values()
+            },
+            "agent_statuses": {
+                "orchestrator": self.orchestrator.get_status(),
+                "coders": [agent.get_status() for agent in self.coder_agents],
+                "testers": [agent.get_status() for agent in self.testing_agents],
+                "qa": [agent.get_status() for agent in self.qa_agents],
+                "infrastructure": [agent.get_status() for agent in self.infrastructure_agents],
+                "integration": [agent.get_status() for agent in self.integration_agents],
+                "frontend": [agent.get_status() for agent in self.frontend_agents],
+                "workflow": [agent.get_status() for agent in self.workflow_agents],
+                "security": [agent.get_status() for agent in self.security_agents]
+            }
+        }
+        
+        return results
+
+    def print_results(self, results: Dict[str, Any]):
+        """Print project results in a formatted way."""
+        print("\n" + "=" * 80)
+        print("PROJECT RESULTS")
+        print("=" * 80)
+        
+        status = results["final_status"]
+        print(f"\nTotal Tasks: {status['total_tasks']}")
+        print(f"Completed: {status['completed']}")
+        print(f"In Progress: {status['in_progress']}")
+        print(f"Failed: {status['failed']}")
+        print(f"Blocked: {status['blocked']}")
+        print(f"Pending: {status['pending']}")
+        print(f"Completion: {status['completion_percentage']:.1f}%")
+        
+        print("\n" + "-" * 80)
+        print("TASK DETAILS")
+        print("-" * 80)
+        
+        for task_id, task_info in results["tasks"].items():
+            status_symbol = {
+                "completed": "✓",
+                "failed": "✗",
+                "in_progress": "→",
+                "blocked": "⊘",
+                "pending": "○"
+            }.get(task_info["status"], "?")
+            
+            print(f"{status_symbol} {task_id}: {task_info['title']}")
+            if task_info["status"] == "failed" and task_info.get("error"):
+                print(f"  Error: {task_info['error']}")
+        
+        print("\n" + "-" * 80)
+        print("AGENT STATUSES")
+        print("-" * 80)
+        
+        for agent_type, statuses in results["agent_statuses"].items():
+            if isinstance(statuses, list):
+                for status in statuses:
+                    print(f"{agent_type}: {status['agent_id']}")
+                    print(f"  Active: {status['active_tasks']}, "
+                          f"Completed: {status['completed_tasks']}, "
+                          f"Failed: {status['failed_tasks']}")
+            else:
+                print(f"{agent_type}: {statuses['agent_id']}")
+                print(f"  Active: {statuses['active_tasks']}, "
+                      f"Completed: {statuses['completed_tasks']}, "
+                      f"Failed: {statuses['failed_tasks']}")
+
+
+def main():
+    """Main entry point."""
+    parser = argparse.ArgumentParser(
+        description="Multi-Agent Development System",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run a project with objectives from command line
+  python main.py --project "Web API" --objective "User authentication" --objective "Data CRUD"
+  
+  # Run from JSON config
+  python main.py --config config.json
+  
+  # Set workspace directory
+  python main.py --workspace ./my_project --project "My Project" --objective "Feature 1"
+        """
+    )
+    
+    parser.add_argument(
+        "--project",
+        type=str,
+        help="Project description"
+    )
+    
+    parser.add_argument(
+        "--objective",
+        action="append",
+        dest="objectives",
+        help="Project objective (can be specified multiple times)"
+    )
+    
+    parser.add_argument(
+        "--config",
+        type=str,
+        help="Path to JSON config file with project description and objectives"
+    )
+    
+    parser.add_argument(
+        "--workspace",
+        type=str,
+        default=".",
+        help="Workspace directory path (default: current directory)"
+    )
+    
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level (default: INFO)"
+    )
+    
+    parser.add_argument(
+        "--output",
+        type=str,
+        help="Path to save results JSON file"
+    )
+    
+    args = parser.parse_args()
+    
+    # Setup logging
+    setup_logging(args.log_level)
+    
+    # Load project configuration
+    if args.config:
+        with open(args.config, 'r') as f:
+            config = json.load(f)
+        project_description = config.get("project_description", "")
+        objectives = config.get("objectives", [])
+    elif args.project and args.objectives:
+        project_description = args.project
+        objectives = args.objectives
+    else:
+        # Interactive mode or example
+        print("Multi-Agent Development System")
+        print("=" * 80)
+        
+        if not args.project:
+            project_description = input("Enter project description: ").strip()
+        else:
+            project_description = args.project
+        
+        if not args.objectives:
+            print("Enter objectives (one per line, empty line to finish):")
+            objectives = []
+            while True:
+                obj = input("> ").strip()
+                if not obj:
+                    break
+                objectives.append(obj)
+        else:
+            objectives = args.objectives
+    
+    if not project_description or not objectives:
+        print("Error: Project description and at least one objective are required")
+        sys.exit(1)
+    
+    # Initialize and run the system
+    system = AgentSystem(workspace_path=args.workspace)
+    results = system.run_project(project_description, objectives)
+    
+    # Print results
+    system.print_results(results)
+    
+    # Save results if requested
+    if args.output:
+        with open(args.output, 'w') as f:
+            json.dump(results, f, indent=2, default=str)
+        print(f"\nResults saved to {args.output}")
+    
+    # Exit with appropriate code
+    if results["final_status"]["failed"] > 0:
+        sys.exit(1)
+    elif results["final_status"]["completion_percentage"] < 100:
+        sys.exit(2)
+    else:
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
+

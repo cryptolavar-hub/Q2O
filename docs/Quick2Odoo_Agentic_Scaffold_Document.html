@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick2Odoo Agentic Scaffold - Complete Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 0.5rem;
+        }
+        
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        nav {
+            background: #2c3e50;
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        nav ul {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+        }
+        
+        nav a {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+        
+        nav a:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        
+        main {
+            padding: 2rem;
+        }
+        
+        section {
+            margin-bottom: 3rem;
+            scroll-margin-top: 80px;
+        }
+        
+        h2 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        h3 {
+            color: #764ba2;
+            font-size: 1.5em;
+            margin: 1.5rem 0 1rem;
+        }
+        
+        h4 {
+            color: #555;
+            font-size: 1.2em;
+            margin: 1rem 0 0.5rem;
+        }
+        
+        p {
+            margin-bottom: 1rem;
+            text-align: justify;
+        }
+        
+        ul, ol {
+            margin-left: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        li {
+            margin-bottom: 0.5rem;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #e83e8c;
+        }
+        
+        pre {
+            background: #2c3e50;
+            color: #f8f8f2;
+            padding: 1rem;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        
+        pre code {
+            background: transparent;
+            color: inherit;
+            padding: 0;
+        }
+        
+        .feature-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+        
+        .agent-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .agent-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .agent-card h4 {
+            color: #667eea;
+            margin-top: 0;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+        
+        .error {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+        
+        .success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+        
+        .info {
+            background: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        
+        table th, table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        table th {
+            background: #667eea;
+            color: white;
+            font-weight: bold;
+        }
+        
+        table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .glossary-term {
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        footer {
+            background: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 2rem;
+            margin-top: 3rem;
+        }
+        
+        .toc {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+        
+        .toc h3 {
+            margin-top: 0;
+        }
+        
+        .toc ul {
+            list-style: none;
+            margin-left: 0;
+        }
+        
+        .toc a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        
+        .toc a:hover {
+            text-decoration: underline;
+        }
+        
+        @media print {
+            nav {
+                display: none;
+            }
+            
+            body {
+                background: white;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Quick2Odoo Agentic Scaffold</h1>
+            <p>Complete Documentation & User Guide</p>
+            <p style="font-size: 0.9em; margin-top: 0.5rem;">Multi-Agent Development System for QuickBooks to Odoo Integration</p>
+        </header>
+        
+        <nav>
+            <ul>
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#objectives">Objectives</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#architecture">Architecture</a></li>
+                <li><a href="#installation">Installation</a></li>
+                <li><a href="#usage">Usage</a></li>
+                <li><a href="#troubleshooting">Troubleshooting</a></li>
+                <li><a href="#glossary">Glossary</a></li>
+            </ul>
+        </nav>
+        
+        <main>
+            <section id="overview">
+                <h2>Project Overview</h2>
+                <p>
+                    The <strong>Quick2Odoo Agentic Scaffold</strong> is a sophisticated multi-agent development system designed to automate the creation of a complete SaaS application for migrating data from QuickBooks to Odoo v18. This system leverages specialized AI agents that work collaboratively to generate, test, and quality-assure production-ready code across multiple technology stacks.
+                </p>
+                <p>
+                    The system is built to handle complex enterprise requirements including multi-tenant SaaS architecture, OAuth integrations, real-time data synchronization, workflow orchestration, infrastructure as code, and comprehensive security implementations.
+                </p>
+                
+                <div class="feature-box">
+                    <h3>What Makes This System Unique</h3>
+                    <ul>
+                        <li><strong>Specialized Agents</strong>: Each agent type is optimized for specific domains (infrastructure, integration, frontend, workflow, security)</li>
+                        <li><strong>Template-Based Generation</strong>: Uses Jinja2 templates for maintainable, customizable code generation</li>
+                        <li><strong>Configurable Project Layouts</strong>: Flexible directory structures adaptable to different project needs</li>
+                        <li><strong>Comprehensive Quality Assurance</strong>: Automated testing, security scanning, and code quality validation</li>
+                        <li><strong>Production-Ready Output</strong>: Generates deployable code with proper error handling, logging, and documentation</li>
+                    </ul>
+                </div>
+            </section>
+            
+            <section id="objectives">
+                <h2>Project Objectives</h2>
+                <p>
+                    The primary objective of this system is to automate the development of a complete QuickBooks to Odoo migration SaaS platform. The generated application should:
+                </p>
+                
+                <h3>Core Objectives</h3>
+                <ol>
+                    <li>
+                        <strong>Multi-Tenant SaaS Architecture</strong>
+                        <ul>
+                            <li>Support multiple customers with isolated data</li>
+                            <li>Implement subscription-based billing via Stripe</li>
+                            <li>Provide SSO authentication capabilities</li>
+                        </ul>
+                    </li>
+                    <li>
+                        <strong>QuickBooks Integration</strong>
+                        <ul>
+                            <li>OAuth 2.0 authentication with QuickBooks Online</li>
+                            <li>Support for QuickBooks Desktop via Web Connector</li>
+                            <li>Data synchronization and backfill capabilities</li>
+                        </ul>
+                    </li>
+                    <li>
+                        <strong>Odoo v18 Integration</strong>
+                        <ul>
+                            <li>XML-RPC API integration</li>
+                            <li>Data mapping and transformation</li>
+                            <li>Real-time synchronization</li>
+                        </ul>
+                    </li>
+                    <li>
+                        <strong>Infrastructure & Deployment</strong>
+                        <ul>
+                            <li>Terraform-based infrastructure as code</li>
+                            <li>Kubernetes deployment with Helm charts</li>
+                            <li>Azure cloud infrastructure</li>
+                            <li>WAF and security configurations</li>
+                        </ul>
+                    </li>
+                    <li>
+                        <strong>User Experience</strong>
+                        <ul>
+                            <li>Next.js-based frontend with TypeScript</li>
+                            <li>Onboarding wizard for new customers</li>
+                            <li>Real-time job status via Server-Sent Events (SSE)</li>
+                            <li>Theme support (light/dark mode)</li>
+                        </ul>
+                    </li>
+                    <li>
+                        <strong>Workflow Orchestration</strong>
+                        <ul>
+                            <li>Temporal-based workflow management</li>
+                            <li>Reliable data synchronization</li>
+                            <li>Error handling and retry mechanisms</li>
+                        </ul>
+                    </li>
+                </ol>
+                
+                <h3>Technical Objectives</h3>
+                <ul>
+                    <li>Generate production-ready code following best practices</li>
+                    <li>Ensure comprehensive test coverage</li>
+                    <li>Implement security best practices from the start</li>
+                    <li>Provide configurable and extensible architecture</li>
+                    <li>Support CI/CD pipeline integration</li>
+                    <li>Generate comprehensive documentation</li>
+                </ul>
+            </section>
+            
+            <section id="features">
+                <h2>Key Features</h2>
+                
+                <h3>1. Multi-Agent Architecture</h3>
+                <div class="agent-card">
+                    <h4>Specialized Agent Types</h4>
+                    <p>The system includes 9 specialized agent types, each optimized for specific tasks:</p>
+                    <ul>
+                        <li><strong>Orchestrator Agent</strong>: Manages task breakdown and distribution</li>
+                        <li><strong>Coder Agent</strong>: Generates FastAPI endpoints and SQLAlchemy models</li>
+                        <li><strong>Testing Agent</strong>: Creates and executes pytest test suites</li>
+                        <li><strong>QA Agent</strong>: Performs code quality reviews</li>
+                        <li><strong>Infrastructure Agent</strong>: Generates Terraform and Helm configurations</li>
+                        <li><strong>Integration Agent</strong>: Creates OAuth and API client code</li>
+                        <li><strong>Frontend Agent</strong>: Generates Next.js/React components</li>
+                        <li><strong>Workflow Agent</strong>: Creates Temporal workflow definitions</li>
+                        <li><strong>Security Agent</strong>: Performs security audits</li>
+                    </ul>
+                </div>
+                
+                <h3>2. Intelligent Task Management</h3>
+                <ul>
+                    <li><strong>Automatic Task Breakdown</strong>: Orchestrator analyzes objectives and creates manageable tasks</li>
+                    <li><strong>Dependency Resolution</strong>: Automatic dependency detection and ordering</li>
+                    <li><strong>Progress Tracking</strong>: Real-time status updates and completion percentages</li>
+                    <li><strong>Error Handling</strong>: Graceful failure handling with detailed error reports</li>
+                </ul>
+                
+                <h3>3. Template-Based Code Generation</h3>
+                <ul>
+                    <li><strong>Jinja2 Templates</strong>: Maintainable, reusable template system</li>
+                    <li><strong>Fallback Support</strong>: Inline templates as fallback if external templates unavailable</li>
+                    <li><strong>Customizable</strong>: Easy to modify templates for project-specific needs</li>
+                    <li><strong>Type-Safe</strong>: Generates properly typed code with Pydantic models</li>
+                </ul>
+                
+                <h3>4. Quality Assurance</h3>
+                <ul>
+                    <li><strong>Automated Testing</strong>: pytest-based test generation and execution</li>
+                    <li><strong>Static Analysis</strong>: Integration with ruff, mypy, bandit, and safety</li>
+                    <li><strong>Code Quality Metrics</strong>: Complexity analysis, style checking, and best practice validation</li>
+                    <li><strong>Infrastructure Validation</strong>: Terraform and Helm configuration validation</li>
+                </ul>
+                
+                <h3>5. Configurable Project Layouts</h3>
+                <ul>
+                    <li><strong>Flexible Structure</strong>: Configurable directory layouts via ProjectLayout class</li>
+                    <li><strong>Default Presets</strong>: Sensible defaults for standard projects</li>
+                    <li><strong>JSON Configuration</strong>: Load custom layouts from configuration files</li>
+                    <li><strong>Multi-Project Support</strong>: Different layouts for different project types</li>
+                </ul>
+                
+                <h3>6. CI/CD Integration</h3>
+                <ul>
+                    <li><strong>GitHub Actions</strong>: Pre-configured CI/CD pipeline</li>
+                    <li><strong>Multi-Version Testing</strong>: Tests across Python 3.10, 3.11, 3.12</li>
+                    <li><strong>Coverage Reports</strong>: Codecov integration for coverage tracking</li>
+                    <li><strong>Security Scanning</strong>: Automated security checks on every commit</li>
+                </ul>
+            </section>
+            
+            <section id="architecture">
+                <h2>System Architecture</h2>
+                
+                <h3>Agent System Overview</h3>
+                <p>
+                    The system follows a coordinator-worker pattern where the Orchestrator Agent breaks down high-level objectives into tasks and distributes them to specialized agents.
+                </p>
+                
+                <div class="agent-card">
+                    <h4>Orchestrator Agent</h4>
+                    <p><strong>Role</strong>: Project coordinator and task manager</p>
+                    <p><strong>Responsibilities</strong>:</p>
+                    <ul>
+                        <li>Analyzes project objectives and context</li>
+                        <li>Detects objective types (infrastructure, integration, frontend, workflow, API)</li>
+                        <li>Identifies technology stacks from objectives</li>
+                        <li>Creates tasks with appropriate agent assignments</li>
+                        <li>Manages task dependencies</li>
+                        <li>Tracks project progress and completion status</li>
+                    </ul>
+                </div>
+                
+                <div class="agent-card">
+                    <h4>Coder Agent</h4>
+                    <p><strong>Role</strong>: Backend code generation</p>
+                    <p><strong>Responsibilities</strong>:</p>
+                    <ul>
+                        <li>Generates FastAPI endpoints with Pydantic models</li>
+                        <li>Creates SQLAlchemy data models with multi-tenant support</li>
+                        <li>Implements service layer business logic</li>
+                        <li>Generates API documentation</li>
+                        <li>Uses Jinja2 templates for code generation</li>
+                    </ul>
+                </div>
+                
+                <div class="agent-card">
+                    <h4>Infrastructure Agent</h4>
+                    <p><strong>Role</strong>: Infrastructure as Code generation</p>
+                    <p><strong>Responsibilities</strong>:</p>
+                    <ul>
+                        <li>Generates Terraform configurations for Azure</li>
+                        <li>Creates Helm charts for Kubernetes deployments</li>
+                        <li>Configures WAF policies and security rules</li>
+                        <li>Sets up Application Insights and monitoring</li>
+                        <li>Validates generated configurations</li>
+                    </ul>
+                </div>
+                
+                <div class="agent-card">
+                    <h4>Integration Agent</h4>
+                    <p><strong>Role</strong>: External API integration code</p>
+                    <p><strong>Responsibilities</strong>:</p>
+                    <ul>
+                        <li>Generates QuickBooks OAuth 2.0 flows</li>
+                        <li>Creates Odoo XML-RPC client code</li>
+                        <li>Implements Stripe billing integration</li>
+                        <li>Generates webhook handlers</li>
+                        <li>Creates API client wrappers</li>
+                    </ul>
+                </div>
+                
+                <div class="agent-card">
+                    <h4>Frontend Agent</h4>
+                    <p><strong>Role</strong>: Frontend UI generation</p>
+                    <p><strong>Responsibilities</strong>:</p>
+                    <ul>
+                        <li>Generates Next.js pages and routes</li>
+                        <li>Creates React components with TypeScript</li>
+                        <li>Implements authentication flows</li>
+                        <li>Generates theme toggle components</li>
+                        <li>Creates onboarding wizards</li>
+                    </ul>
+                </div>
+                
+                <div class="agent-card">
+                    <h4>Workflow Agent</h4>
+                    <p><strong>Role</strong>: Temporal workflow generation</p>
+                    <p><strong>Responsibilities</strong>:</p>
+                    <ul>
+                        <li>Creates Temporal workflow definitions</li>
+                        <li>Generates activity implementations</li>
+                        <li>Creates worker configurations</li>
+                        <li>Implements backfill and sync workflows</li>
+                    </ul>
+                </div>
+                
+                <div class="agent-card">
+                    <h4>Testing Agent</h4>
+                    <p><strong>Role</strong>: Test generation and execution</p>
+                    <p><strong>Responsibilities</strong>:</p>
+                    <ul>
+                        <li>Generates pytest test files</li>
+                        <li>Executes tests using pytest</li>
+                        <li>Collects test results and coverage</li>
+                        <li>Generates test reports</li>
+                    </ul>
+                </div>
+                
+                <div class="agent-card">
+                    <h4>QA Agent</h4>
+                    <p><strong>Role</strong>: Code quality assurance</p>
+                    <p><strong>Responsibilities</strong>:</p>
+                    <ul>
+                        <li>Reviews code for quality issues</li>
+                        <li>Checks code style and formatting</li>
+                        <li>Validates error handling</li>
+                        <li>Provides improvement recommendations</li>
+                    </ul>
+                </div>
+                
+                <div class="agent-card">
+                    <h4>Security Agent</h4>
+                    <p><strong>Role</strong>: Security auditing</p>
+                    <p><strong>Responsibilities</strong>:</p>
+                    <ul>
+                        <li>Scans code for security vulnerabilities</li>
+                        <li>Checks for hardcoded secrets</li>
+                        <li>Validates authentication implementations</li>
+                        <li>Reviews OAuth flows for security issues</li>
+                    </ul>
+                </div>
+                
+                <h3>Data Flow</h3>
+                <ol>
+                    <li><strong>Project Input</strong>: User provides project description and objectives</li>
+                    <li><strong>Task Breakdown</strong>: Orchestrator analyzes and creates tasks</li>
+                    <li><strong>Task Distribution</strong>: Tasks assigned to appropriate agents</li>
+                    <li><strong>Code Generation</strong>: Agents generate code using templates</li>
+                    <li><strong>Validation</strong>: Testing and QA agents validate generated code</li>
+                    <li><strong>Output</strong>: Generated files written to workspace directory</li>
+                </ol>
+            </section>
+            
+            <section id="installation">
+                <h2>Installation & Setup</h2>
+                
+                <h3>Prerequisites</h3>
+                <ul>
+                    <li><strong>Python</strong>: 3.10, 3.11, or 3.12</li>
+                    <li><strong>pip</strong>: Latest version</li>
+                    <li><strong>Git</strong>: For version control (optional but recommended)</li>
+                    <li><strong>Terraform</strong>: 1.6.0+ (optional, for infrastructure validation)</li>
+                    <li><strong>Helm</strong>: 3.13.0+ (optional, for Helm validation)</li>
+                </ul>
+                
+                <h3>Installation Steps</h3>
+                
+                <h4>1. Clone or Download the Project</h4>
+                <pre><code>git clone &lt;repository-url&gt;
+cd QuickOdoo</code></pre>
+                
+                <h4>2. Create Virtual Environment</h4>
+                <pre><code># On Windows
+python -m venv venv
+venv\Scripts\activate
+
+# On Linux/Mac
+python3 -m venv venv
+source venv/bin/activate</code></pre>
+                
+                <h4>3. Install Dependencies</h4>
+                <pre><code>pip install --upgrade pip
+pip install -r requirements.txt</code></pre>
+                
+                <div class="info">
+                    <strong>Note:</strong> The installation includes all necessary packages with pinned versions for reproducibility.
+                </div>
+                
+                <h4>4. Verify Installation</h4>
+                <pre><code>python -c "from agents import OrchestratorAgent; print('Installation successful!')"</code></pre>
+                
+                <h3>Optional: Install Infrastructure Tools</h3>
+                <p>For infrastructure validation, install Terraform and Helm:</p>
+                
+                <h4>Terraform</h4>
+                <ul>
+                    <li><strong>Windows</strong>: Download from <a href="https://www.terraform.io/downloads" target="_blank">terraform.io/downloads</a></li>
+                    <li><strong>Linux</strong>: <code>sudo apt-get install terraform</code></li>
+                    <li><strong>Mac</strong>: <code>brew install terraform</code></li>
+                </ul>
+                
+                <h4>Helm</h4>
+                <ul>
+                    <li><strong>Windows</strong>: <code>choco install kubernetes-helm</code></li>
+                    <li><strong>Linux</strong>: Follow <a href="https://helm.sh/docs/intro/install/" target="_blank">Helm installation guide</a></li>
+                    <li><strong>Mac</strong>: <code>brew install helm</code></li>
+                </ul>
+                
+                <h3>Configuration</h3>
+                <p>The system uses default configurations but can be customized:</p>
+                
+                <h4>Project Layout Configuration</h4>
+                <p>Create a custom layout JSON file:</p>
+                <pre><code>{
+  "project_layout": {
+    "api_dir": "backend/api",
+    "web_dir": "frontend/web",
+    "infra_dir": "infrastructure",
+    "terraform_dir": "infrastructure/terraform"
+  }
+}</code></pre>
+            </section>
+            
+            <section id="usage">
+                <h2>Usage Guide</h2>
+                
+                <h3>Command Line Usage</h3>
+                
+                <h4>Basic Usage</h4>
+                <pre><code># Run with command-line arguments
+python main.py --project "QuickBooks to Odoo Integration" \
+               --objective "User authentication" \
+               --objective "Data synchronization"</code></pre>
+                
+                <h4>Using Configuration File</h4>
+                <p>Create a JSON configuration file:</p>
+                <pre><code>{
+  "project_description": "QuickBooks to Odoo Online Integration SaaS",
+  "objectives": [
+    "OAuth authentication with QuickBooks",
+    "Odoo v18 integration",
+    "Stripe billing setup",
+    "Terraform infrastructure",
+    "Next.js frontend"
+  ]
+}</code></pre>
+                
+                <p>Then run:</p>
+                <pre><code>python main.py --config config.json --workspace ./my_project</code></pre>
+                
+                <h4>Command Line Options</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Option</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>--project</code></td>
+                            <td>Project description</td>
+                            <td><code>--project "My Project"</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>--objective</code></td>
+                            <td>Project objective (can be repeated)</td>
+                            <td><code>--objective "Feature 1"</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>--config</code></td>
+                            <td>Path to JSON config file</td>
+                            <td><code>--config config.json</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>--workspace</code></td>
+                            <td>Workspace directory path</td>
+                            <td><code>--workspace ./output</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>--log-level</code></td>
+                            <td>Logging level (DEBUG, INFO, WARNING, ERROR)</td>
+                            <td><code>--log-level DEBUG</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>--output</code></td>
+                            <td>Path to save results JSON</td>
+                            <td><code>--output results.json</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>Programmatic Usage</h3>
+                <pre><code>from main import AgentSystem
+
+# Initialize the system
+system = AgentSystem(workspace_path="./my_workspace")
+
+# Run a project
+results = system.run_project(
+    project_description="QuickBooks to Odoo Integration",
+    objectives=[
+        "OAuth authentication",
+        "Data synchronization",
+        "Frontend dashboard"
+    ]
+)
+
+# Access results
+print(f"Completion: {results['final_status']['completion_percentage']}%")
+print(f"Tasks completed: {results['final_status']['completed']}")
+print(f"Tasks failed: {results['final_status']['failed']}")</code></pre>
+                
+                <h3>Example Use Cases</h3>
+                
+                <h4>1. Quick Start Test</h4>
+                <pre><code>python main.py \
+  --project "Test Project" \
+  --objective "Create FastAPI endpoint" \
+  --workspace ./test_output</code></pre>
+                
+                <h4>2. Full Feature Set</h4>
+                <pre><code>python main.py \
+  --config full_features.json \
+  --workspace ./full_project \
+  --log-level INFO \
+  --output results.json</code></pre>
+                
+                <h4>3. Infrastructure Only</h4>
+                <pre><code>python main.py \
+  --project "Infrastructure Setup" \
+  --objective "Terraform Azure configuration" \
+  --objective "Helm charts for Kubernetes"</code></pre>
+                
+                <h3>Understanding Output</h3>
+                <p>The system generates files in the workspace directory following this structure:</p>
+                <pre><code>workspace/
+├── api/
+│   └── app/
+│       ├── endpoints.py      # FastAPI endpoints
+│       ├── models.py         # SQLAlchemy models
+│       ├── oauth_qbo.py      # QuickBooks OAuth
+│       └── clients/
+│           ├── qbo.py        # QuickBooks client
+│           └── odoo.py       # Odoo client
+├── web/
+│   └── pages/
+│       ├── onboarding.tsx    # Onboarding page
+│       └── mappings.tsx      # Mapping page
+├── infra/
+│   └── terraform/
+│       └── azure/
+│           ├── main.tf       # Main Terraform config
+│           └── variables.tf  # Terraform variables
+├── k8s/
+│   └── helm/
+│       └── q2o/
+│           ├── Chart.yaml    # Helm chart
+│           └── values.yaml   # Helm values
+└── tests/
+    └── test_*.py            # Generated tests</code></pre>
+            </section>
+            
+            <section id="troubleshooting">
+                <h2>Troubleshooting</h2>
+                
+                <h3>Common Issues and Solutions</h3>
+                
+                <div class="error">
+                    <h4>Issue: Import Errors</h4>
+                    <p><strong>Symptoms:</strong> <code>ModuleNotFoundError</code> or <code>ImportError</code></p>
+                    <p><strong>Solutions:</strong></p>
+                    <ul>
+                        <li>Verify virtual environment is activated: <code>which python</code> (should show venv path)</li>
+                        <li>Reinstall dependencies: <code>pip install -r requirements.txt --force-reinstall</code></li>
+                        <li>Check Python version: <code>python --version</code> (should be 3.10+)</li>
+                        <li>Verify PYTHONPATH includes project root</li>
+                    </ul>
+                </div>
+                
+                <div class="warning">
+                    <h4>Issue: Template Not Found</h4>
+                    <p><strong>Symptoms:</strong> <code>TemplateNotFound</code> error</p>
+                    <p><strong>Solutions:</strong></p>
+                    <ul>
+                        <li>Check that <code>templates/</code> directory exists in project root</li>
+                        <li>Verify template files have <code>.j2</code> extension</li>
+                        <li>System will fall back to inline templates if external templates unavailable</li>
+                        <li>Check file permissions on template files</li>
+                    </ul>
+                </div>
+                
+                <div class="error">
+                    <h4>Issue: Tests Fail to Execute</h4>
+                    <p><strong>Symptoms:</strong> pytest errors or test execution failures</p>
+                    <p><strong>Solutions:</strong></p>
+                    <ul>
+                        <li>Install pytest: <code>pip install pytest pytest-asyncio pytest-cov</code></li>
+                        <li>Check that generated code is importable: <code>python -c "from api.app import endpoints"</code></li>
+                        <li>Verify PYTHONPATH: <code>export PYTHONPATH=$PWD:$PYTHONPATH</code></li>
+                        <li>Run tests manually: <code>pytest tests/ -v</code></li>
+                    </ul>
+                </div>
+                
+                <div class="warning">
+                    <h4>Issue: Terraform/Helm Validation Fails</h4>
+                    <p><strong>Symptoms:</strong> Infrastructure validation errors</p>
+                    <p><strong>Solutions:</strong></p>
+                    <ul>
+                        <li>Verify Terraform is installed: <code>terraform version</code></li>
+                        <li>Verify Helm is installed: <code>helm version</code></li>
+                        <li>Validation is optional - system will skip if tools not available</li>
+                        <li>Check generated Terraform files for syntax errors</li>
+                        <li>Run Terraform validation manually: <code>terraform fmt -check</code></li>
+                    </ul>
+                </div>
+                
+                <div class="info">
+                    <h4>Issue: Windows Path Issues</h4>
+                    <p><strong>Symptoms:</strong> Path separator errors on Windows</p>
+                    <p><strong>Solutions:</strong></p>
+                    <ul>
+                        <li>Use <code>os.path.join()</code> instead of hardcoded paths (already implemented)</li>
+                        <li>Check that paths use forward slashes or raw strings: <code>r"C:\path\to\file"</code></li>
+                        <li>System uses <code>pathlib.Path</code> where possible for cross-platform compatibility</li>
+                    </ul>
+                </div>
+                
+                <div class="error">
+                    <h4>Issue: Permission Denied</h4>
+                    <p><strong>Symptoms:</strong> File write permission errors</p>
+                    <p><strong>Solutions:</strong></p>
+                    <ul>
+                        <li>Check workspace directory permissions</li>
+                        <li>Run with appropriate user permissions</li>
+                        <li>Verify disk space available</li>
+                        <li>Check antivirus isn't blocking file writes</li>
+                    </ul>
+                </div>
+                
+                <div class="warning">
+                    <h4>Issue: Agent Not Processing Tasks</h4>
+                    <p><strong>Symptoms:</strong> Tasks remain in PENDING status</p>
+                    <p><strong>Solutions:</strong></p>
+                    <ul>
+                        <li>Check task dependencies - tasks may be blocked</li>
+                        <li>Review logs for errors: <code>--log-level DEBUG</code></li>
+                        <li>Verify agent is registered with orchestrator</li>
+                        <li>Check that task type matches agent capabilities</li>
+                        <li>Increase max iterations if needed (default: 100)</li>
+                    </ul>
+                </div>
+                
+                <h3>Debug Mode</h3>
+                <p>Run with debug logging for detailed information:</p>
+                <pre><code>python main.py --log-level DEBUG --project "Test" --objective "Feature"</code></pre>
+                
+                <h3>Verification Steps</h3>
+                <ol>
+                    <li><strong>Check Installation</strong>:
+                        <pre><code>python -c "from agents import *; from utils import *; print('OK')"</code></pre>
+                    </li>
+                    <li><strong>Test Template System</strong>:
+                        <pre><code>python -c "from utils import get_renderer; r = get_renderer(); print(r.template_exists('api/fastapi_endpoint.j2'))"</code></pre>
+                    </li>
+                    <li><strong>Test Project Layout</strong>:
+                        <pre><code>python -c "from utils import ProjectLayout; pl = ProjectLayout(); print(pl.api_dir)"</code></pre>
+                    </li>
+                    <li><strong>Run Quick Test</strong>:
+                        <pre><code>python quick_test.py</code></pre>
+                    </li>
+                </ol>
+                
+                <h3>Getting Help</h3>
+                <ul>
+                    <li>Review log files for detailed error messages</li>
+                    <li>Check generated code for syntax errors</li>
+                    <li>Verify all dependencies are installed correctly</li>
+                    <li>Run tests individually to isolate issues</li>
+                    <li>Consult the codebase review document for known issues</li>
+                </ul>
+            </section>
+            
+            <section id="glossary">
+                <h2>Glossary</h2>
+                <p>Technical terms and concepts used in this documentation:</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Term</th>
+                            <th>Definition</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="glossary-term">Agent</span></td>
+                            <td>A specialized software component that performs specific tasks in the multi-agent system. Each agent has a specific role (e.g., code generation, testing, infrastructure).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">FastAPI</span></td>
+                            <td>A modern Python web framework for building APIs. Used in this system for generating REST API endpoints.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Jinja2</span></td>
+                            <td>A templating engine for Python. Used to generate code from templates, making code generation maintainable and customizable.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Orchestrator</span></td>
+                            <td>The central coordinator agent that breaks down projects into tasks and distributes them to specialized agents.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Terraform</span></td>
+                            <td>An Infrastructure as Code (IaC) tool used to define and provision cloud infrastructure using declarative configuration files.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Helm</span></td>
+                            <td>A package manager for Kubernetes that simplifies deployment of applications using charts (pre-configured Kubernetes resources).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">OAuth 2.0</span></td>
+                            <td>An authorization framework that enables applications to obtain limited access to user accounts on HTTP services. Used for QuickBooks integration.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Pydantic</span></td>
+                            <td>A Python library for data validation using Python type annotations. Used in FastAPI for request/response validation.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">SQLAlchemy</span></td>
+                            <td>A Python SQL toolkit and Object-Relational Mapping (ORM) library. Used for database interactions and model definitions.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Temporal</span></td>
+                            <td>A workflow orchestration platform that ensures reliable execution of distributed applications. Used for data synchronization workflows.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Next.js</span></td>
+                            <td>A React framework for building web applications. Used for generating the frontend user interface.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">pytest</span></td>
+                            <td>A Python testing framework that makes it easy to write simple and scalable test cases.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">SSE (Server-Sent Events)</span></td>
+                            <td>A web standard that enables servers to push data to web browsers. Used for real-time job status updates.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">WAF (Web Application Firewall)</span></td>
+                            <td>A security solution that monitors and filters HTTP traffic to and from web applications. Configured via Terraform in this system.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Multi-Tenant</span></td>
+                            <td>An architecture where a single instance of software serves multiple customers (tenants), with data isolation between tenants.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">XML-RPC</span></td>
+                            <td>A remote procedure call (RPC) protocol using XML. Used by Odoo for API communication.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Workspace</span></td>
+                            <td>The directory where generated code and project files are created.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Task</span></td>
+                            <td>A unit of work assigned to an agent. Tasks have status (pending, in_progress, completed, failed, blocked) and dependencies.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Template</span></td>
+                            <td>A Jinja2 template file (.j2) that defines the structure and content of generated code.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Project Layout</span></td>
+                            <td>A configuration that defines the directory structure for generated files (e.g., where API code, frontend files, infrastructure configs are placed).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">CI/CD</span></td>
+                            <td>Continuous Integration/Continuous Deployment - automated processes for testing and deploying code changes.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Static Analysis</span></td>
+                            <td>Analysis of code without executing it, used to find bugs, security issues, and code quality problems.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">IaC (Infrastructure as Code)</span></td>
+                            <td>The practice of managing and provisioning infrastructure through machine-readable definition files, rather than manual configuration.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="glossary-term">Webhook</span></td>
+                            <td>An HTTP callback that allows external systems to notify your application of events (e.g., Stripe payment events).</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+        </main>
+        
+        <footer>
+            <p>&copy; 2024 Quick2Odoo Agentic Scaffold Project</p>
+            <p>For support and updates, visit the project repository</p>
+            <p style="margin-top: 1rem; font-size: 0.9em; opacity: 0.8;">
+                Last Updated: December 2024 | Version 1.0
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
