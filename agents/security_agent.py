@@ -6,6 +6,8 @@ Focuses on security-specific checks beyond general QA.
 from typing import Dict, Any, List
 from agents.base_agent import BaseAgent, AgentType, Task, TaskStatus
 from agents.qa_agent import QAAgent
+from utils.security_scanner import get_scanner
+from utils.secrets_validator import get_secrets_validator
 import os
 import logging
 import re
@@ -19,6 +21,8 @@ class SecurityAgent(BaseAgent):
         self.workspace_path = workspace_path
         self.reviewed_files: List[str] = []
         self.security_reports: Dict[str, Dict[str, Any]] = {}
+        self.security_scanner = get_scanner(workspace_path)
+        self.secrets_validator = get_secrets_validator()
 
     def process_task(self, task: Task) -> Task:
         """
@@ -112,19 +116,39 @@ class SecurityAgent(BaseAgent):
                     result["critical_issues"].append(f"{message} in {file_path}")
                     result["security_score"] -= score
             
-            # Check for hardcoded secrets
-            secret_patterns = [
-                (r'password\s*=\s*["\'][^"\']+["\']', 'Potential hardcoded password', 15),
-                (r'api_key\s*=\s*["\'][^"\']+["\']', 'Potential hardcoded API key', 15),
-                (r'secret\s*=\s*["\'][^"\']+["\']', 'Potential hardcoded secret', 15),
-                (r'token\s*=\s*["\'][^"\']+["\']', 'Potential hardcoded token', 10),
-            ]
+            # Check for hardcoded secrets using secrets validator
+            secret_issues = self.secrets_validator.validate_no_secrets(content, file_path)
+            if secret_issues:
+                result["critical_issues"].extend(secret_issues)
+                result["security_score"] -= len(secret_issues) * 10
             
-            for pattern, message, score in secret_patterns:
-                if re.search(pattern, content, re.IGNORECASE):
-                    result["critical_issues"].append(f"{message} in {file_path}")
-                    result["security_score"] -= score
+            # Run bandit scan for Python files
+            if file_path.endswith('.py'):
+                bandit_issues = self.security_scanner.scan_with_bandit(full_path)
+                for issue in bandit_issues:
+                    severity = issue.get("issue_severity", "MEDIUM")
+                    if severity in ["HIGH", "CRITICAL"]:
+                        result["critical_issues"].append(
+                            f"Bandit: {issue.get('issue_text', 'Unknown issue')} at line {issue.get('line_number', '?')}"
+                        )
+                        result["security_score"] -= 15
+                    else:
+                        result["warnings"].append(
+                            f"Bandit: {issue.get('issue_text', 'Unknown issue')} at line {issue.get('line_number', '?')}"
+                        )
+                        result["security_score"] -= 5
+                
+                # Run semgrep scan
+                semgrep_issues = self.security_scanner.scan_with_semgrep(full_path)
+                for issue in semgrep_issues:
+                    severity = issue.get("extra", {}).get("severity", "WARNING")
+                    if severity in ["ERROR", "WARNING"]:
+                        result["warnings"].append(
+                            f"Semgrep: {issue.get('message', 'Unknown issue')} at line {issue.get('start', {}).get('line', '?')}"
+                        )
+                        result["security_score"] -= 3
             
+            # Original regex checks (keep as initial filter)
             # Check for SQL injection risks
             if re.search(r'execute\s*\([^)]*\+', content):
                 result["warnings"].append(f"Potential SQL injection risk in {file_path}")

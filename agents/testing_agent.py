@@ -2,9 +2,10 @@
 Testing Agent - Writes and executes tests for implemented code.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from agents.base_agent import BaseAgent, AgentType, Task, TaskStatus
 from utils.template_renderer import TemplateRenderer, get_renderer
+from utils.project_layout import ProjectLayout, get_default_layout
 import os
 import sys
 import logging
@@ -15,8 +16,9 @@ import subprocess
 class TestingAgent(BaseAgent):
     """Agent responsible for writing and executing tests."""
 
-    def __init__(self, agent_id: str = "testing_main", workspace_path: str = "."):
-        super().__init__(agent_id, AgentType.TESTING)
+    def __init__(self, agent_id: str = "testing_main", workspace_path: str = ".", 
+                 project_layout: Optional[ProjectLayout] = None):
+        super().__init__(agent_id, AgentType.TESTING, project_layout)
         self.workspace_path = workspace_path
         self.test_files: List[str] = []
         self.test_results: Dict[str, Dict[str, Any]] = {}

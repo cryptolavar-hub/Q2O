@@ -2,9 +2,10 @@
 Coder Agent - Implements coding tasks and generates code based on requirements.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from agents.base_agent import BaseAgent, AgentType, Task, TaskStatus
 from utils.template_renderer import TemplateRenderer, get_renderer
+from utils.project_layout import ProjectLayout, get_default_layout
 import os
 import logging
 
@@ -12,8 +13,9 @@ import logging
 class CoderAgent(BaseAgent):
     """Agent responsible for implementing code based on task requirements."""
 
-    def __init__(self, agent_id: str = "coder_main", workspace_path: str = "."):
-        super().__init__(agent_id, AgentType.CODER)
+    def __init__(self, agent_id: str = "coder_main", workspace_path: str = ".", 
+                 project_layout: Optional[ProjectLayout] = None):
+        super().__init__(agent_id, AgentType.CODER, project_layout)
         self.workspace_path = workspace_path
         self.implemented_files: List[str] = []
         self.template_renderer = get_renderer()
@@ -95,68 +97,68 @@ class CoderAgent(BaseAgent):
             if "api" in description_lower or "endpoint" in description_lower:
                 structure["files"].append({
                     "type": "fastapi",
-                    "path": "api/app/endpoints.py",
+                    "path": os.path.join(self.project_layout.api_app_dir, "endpoints.py"),
                     "description": "FastAPI endpoints implementation"
                 })
             
             if "model" in description_lower or "database" in description_lower:
                 structure["files"].append({
                     "type": "model",
-                    "path": "api/app/models.py",
+                    "path": os.path.join(self.project_layout.api_app_dir, "models.py"),
                     "description": "SQLAlchemy data models"
                 })
 
             if "service" in description_lower or "business logic" in description_lower:
                 structure["files"].append({
                     "type": "service",
-                    "path": "api/app/services.py",
+                    "path": os.path.join(self.project_layout.api_app_dir, "services.py"),
                     "description": "Business logic service"
                 })
             
             if "search" in description_lower:
                 structure["files"].append({
                     "type": "api",
-                    "path": "api/app/search.py",
+                    "path": os.path.join(self.project_layout.api_app_dir, "search.py"),
                     "description": "Search endpoints"
                 })
             
             if "mapping" in description_lower:
                 structure["files"].append({
                     "type": "api",
-                    "path": "api/app/mappings.py",
+                    "path": os.path.join(self.project_layout.api_app_dir, "mappings.py"),
                     "description": "Mappings endpoints"
                 })
             
             if "sse" in description_lower or "stream" in description_lower:
                 structure["files"].append({
                     "type": "api",
-                    "path": "api/app/sse_sign.py",
+                    "path": os.path.join(self.project_layout.api_app_dir, "sse_sign.py"),
                     "description": "SSE signing"
                 })
                 structure["files"].append({
                     "type": "api",
-                    "path": "api/app/ops_stream.py",
+                    "path": os.path.join(self.project_layout.api_app_dir, "ops_stream.py"),
                     "description": "SSE stream endpoint"
                 })
             
             if "ops" in description_lower or "admin" in description_lower:
                 structure["files"].append({
                     "type": "api",
-                    "path": "api/app/ops_admin.py",
+                    "path": os.path.join(self.project_layout.api_app_dir, "ops_admin.py"),
                     "description": "Admin operations endpoints"
                 })
             
             if "audit" in description_lower:
                 structure["files"].append({
                     "type": "api",
-                    "path": "api/app/audit.py",
+                    "path": os.path.join(self.project_layout.api_app_dir, "audit.py"),
                     "description": "Audit logging"
                 })
             
             if "entities" in description_lower or "backfill" in description_lower:
                 structure["files"].append({
                     "type": "api",
-                    "path": "api/app/entities.py",
+                    "path": os.path.join(self.project_layout.api_app_dir, "entities.py"),
                     "description": "Entity sync endpoints"
                 })
 
@@ -166,7 +168,7 @@ class CoderAgent(BaseAgent):
                 page_name = objective.lower().replace(' ', '_')
                 structure["files"].append({
                     "type": "page",
-                    "path": f"web/pages/{page_name}.tsx",
+                    "path": os.path.join(self.project_layout.web_pages_dir, f"{page_name}.tsx"),
                     "description": f"Next.js page for {objective}"
                 })
             
@@ -174,7 +176,7 @@ class CoderAgent(BaseAgent):
                 component_name = ''.join(word.capitalize() for word in objective.split())
                 structure["files"].append({
                     "type": "component",
-                    "path": f"web/components/{component_name}.tsx",
+                    "path": os.path.join(self.project_layout.web_components_dir, f"{component_name}.tsx"),
                     "description": f"React component for {objective}"
                 })
 
@@ -183,7 +185,7 @@ class CoderAgent(BaseAgent):
             if "python" in tech_stack:
                 structure["files"].append({
                     "type": "generic",
-                    "path": f"api/app/{objective.lower().replace(' ', '_')}.py",
+                    "path": os.path.join(self.project_layout.api_app_dir, f"{objective.lower().replace(' ', '_')}.py"),
                     "description": f"Implementation for {objective}"
                 })
             else:

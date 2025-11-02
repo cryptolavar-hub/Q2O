@@ -3,8 +3,10 @@ Workflow Agent - Handles Temporal workflow orchestration.
 Generates workflow definitions, activities, and worker code.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from agents.base_agent import BaseAgent, AgentType, Task, TaskStatus
+from utils.project_layout import ProjectLayout, get_default_layout
+from utils.template_renderer import get_renderer
 import os
 import logging
 
@@ -12,10 +14,12 @@ import logging
 class WorkflowAgent(BaseAgent):
     """Agent responsible for Temporal workflow orchestration."""
 
-    def __init__(self, agent_id: str = "workflow_main", workspace_path: str = "."):
-        super().__init__(agent_id, AgentType.WORKFLOW)
+    def __init__(self, agent_id: str = "workflow_main", workspace_path: str = ".", 
+                 project_layout: Optional[ProjectLayout] = None):
+        super().__init__(agent_id, AgentType.WORKFLOW, project_layout)
         self.workspace_path = workspace_path
         self.workflow_files: List[str] = []
+        self.template_renderer = get_renderer()
 
     def process_task(self, task: Task) -> Task:
         """
@@ -66,7 +70,7 @@ class WorkflowAgent(BaseAgent):
 
     def _create_backfill_workflow(self, task: Task) -> str:
         """Create backfill workflow."""
-        file_path = "shared/temporal_defs/workflows/backfill.py"
+        file_path = os.path.join(self.project_layout.workflows_dir, "backfill.py")
         full_path = os.path.join(self.workspace_path, file_path)
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         

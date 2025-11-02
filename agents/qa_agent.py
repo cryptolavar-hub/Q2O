@@ -4,6 +4,7 @@ QA Agent - Performs quality assurance reviews on code and tests.
 
 from typing import Dict, Any, List, Optional
 from agents.base_agent import BaseAgent, AgentType, Task, TaskStatus
+from utils.code_quality_scanner import get_quality_scanner
 import os
 import logging
 import re
@@ -17,6 +18,7 @@ class QAAgent(BaseAgent):
         self.workspace_path = workspace_path
         self.reviewed_files: List[str] = []
         self.qa_reports: Dict[str, Dict[str, Any]] = {}
+        self.quality_scanner = get_quality_scanner(workspace_path)
 
     def process_task(self, task: Task) -> Task:
         """
@@ -62,8 +64,7 @@ class QAAgent(BaseAgent):
                 "qa_results": qa_results,
                 "overall_score": avg_score,
                 "qa_report": qa_report,
-                "status": "passed" if avg_score >= 70 else "needs_improvement",
-                "status": "completed"
+                "status": "passed" if avg_score >= 70 else "needs_improvement"
             }
 
             self.complete_task(task.id, task.result)
@@ -166,6 +167,26 @@ class QAAgent(BaseAgent):
                     review_result["strengths"].extend(result["strengths"])
                 if result.get("recommendations"):
                     review_result["recommendations"].extend(result["recommendations"])
+            
+            # Run external quality scanners for Python files
+            if file_path.endswith('.py'):
+                # mypy type checking
+                mypy_errors = self.quality_scanner.check_types_with_mypy(full_path)
+                if mypy_errors:
+                    review_result["issues"].extend([f"mypy: {err}" for err in mypy_errors[:5]])  # Limit to 5
+                    review_result["score"] -= min(len(mypy_errors) * 2, 20)
+                
+                # ruff linting
+                ruff_issues = self.quality_scanner.lint_with_ruff(full_path)
+                if ruff_issues:
+                    review_result["issues"].extend([f"ruff: {issue}" for issue in ruff_issues[:5]])  # Limit to 5
+                    review_result["score"] -= min(len(ruff_issues), 15)
+                
+                # black formatting
+                black_issues = self.quality_scanner.check_format_with_black(full_path)
+                if black_issues:
+                    review_result["recommendations"].append("Code formatting issues detected - run 'black' to fix")
+                    review_result["score"] -= 5
             
             # Ensure score doesn't go below 0
             review_result["score"] = max(0, review_result["score"])

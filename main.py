@@ -23,6 +23,7 @@ from agents import (
     AgentType,
     TaskStatus
 )
+from utils.project_layout import ProjectLayout, get_default_layout, load_layout_from_config
 
 
 def setup_logging(log_level: str = "INFO"):
@@ -37,27 +38,37 @@ def setup_logging(log_level: str = "INFO"):
 class AgentSystem:
     """Main system that coordinates all agents."""
 
-    def __init__(self, workspace_path: str = "."):
+    def __init__(self, workspace_path: str = ".", project_layout: ProjectLayout = None):
         """
         Initialize the agent system.
         
         Args:
             workspace_path: Path to the workspace directory
+            project_layout: Optional custom project layout
         """
         self.workspace_path = Path(workspace_path)
         self.workspace_path.mkdir(parents=True, exist_ok=True)
         
+        # Load project layout (from config file, custom, or default)
+        if project_layout is None:
+            config_path = self.workspace_path / "project_layout.json"
+            if config_path.exists():
+                project_layout = load_layout_from_config(str(config_path))
+            else:
+                project_layout = get_default_layout()
+        self.project_layout = project_layout
+        
         # Initialize orchestrator
         self.orchestrator = OrchestratorAgent()
         
-        # Initialize specialized agents
-        self.coder_agents = [CoderAgent(workspace_path=str(self.workspace_path))]
-        self.testing_agents = [TestingAgent(workspace_path=str(self.workspace_path))]
+        # Initialize specialized agents with project layout
+        self.coder_agents = [CoderAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout)]
+        self.testing_agents = [TestingAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout)]
         self.qa_agents = [QAAgent(workspace_path=str(self.workspace_path))]
-        self.infrastructure_agents = [InfrastructureAgent(workspace_path=str(self.workspace_path))]
-        self.integration_agents = [IntegrationAgent(workspace_path=str(self.workspace_path))]
-        self.frontend_agents = [FrontendAgent(workspace_path=str(self.workspace_path))]
-        self.workflow_agents = [WorkflowAgent(workspace_path=str(self.workspace_path))]
+        self.infrastructure_agents = [InfrastructureAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout)]
+        self.integration_agents = [IntegrationAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout)]
+        self.frontend_agents = [FrontendAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout)]
+        self.workflow_agents = [WorkflowAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout)]
         self.security_agents = [SecurityAgent(workspace_path=str(self.workspace_path))]
         
         # Register agents with orchestrator
