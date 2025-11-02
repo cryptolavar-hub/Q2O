@@ -23,6 +23,16 @@ from agents import (
     AgentType,
     TaskStatus
 )
+
+# Optional: NodeAgent for Node.js support
+try:
+    from agents.node_agent import NodeAgent
+    HAS_NODE_AGENT = True
+except ImportError:
+    NodeAgent = None
+    HAS_NODE_AGENT = False
+
+from utils.load_balancer import get_load_balancer
 from utils.project_layout import ProjectLayout, get_default_layout, load_layout_from_config
 
 
@@ -58,18 +68,68 @@ class AgentSystem:
                 project_layout = get_default_layout()
         self.project_layout = project_layout
         
+        # Initialize load balancer for high availability
+        self.load_balancer = get_load_balancer()
+        
         # Initialize orchestrator
         self.orchestrator = OrchestratorAgent()
         
-        # Initialize specialized agents with project layout
-        self.coder_agents = [CoderAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout)]
-        self.testing_agents = [TestingAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout)]
-        self.qa_agents = [QAAgent(workspace_path=str(self.workspace_path))]
-        self.infrastructure_agents = [InfrastructureAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout)]
-        self.integration_agents = [IntegrationAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout)]
-        self.frontend_agents = [FrontendAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout)]
-        self.workflow_agents = [WorkflowAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout)]
-        self.security_agents = [SecurityAgent(workspace_path=str(self.workspace_path))]
+        # Initialize specialized agents with project layout and load balancer
+        # Multiple instances per type for redundancy and uptime
+        self.coder_agents = [
+            CoderAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
+            CoderAgent(agent_id="coder_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+        ]
+        self.testing_agents = [
+            TestingAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
+            TestingAgent(agent_id="testing_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+        ]
+        self.qa_agents = [
+            QAAgent(workspace_path=str(self.workspace_path)),
+            QAAgent(agent_id="qa_backup", workspace_path=str(self.workspace_path))
+        ]
+        self.infrastructure_agents = [
+            InfrastructureAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
+            InfrastructureAgent(agent_id="infrastructure_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+        ]
+        self.integration_agents = [
+            IntegrationAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
+            IntegrationAgent(agent_id="integration_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+        ]
+        self.frontend_agents = [
+            FrontendAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
+            FrontendAgent(agent_id="frontend_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+        ]
+        self.workflow_agents = [
+            WorkflowAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
+            WorkflowAgent(agent_id="workflow_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+        ]
+        self.security_agents = [
+            SecurityAgent(workspace_path=str(self.workspace_path)),
+            SecurityAgent(agent_id="security_backup", workspace_path=str(self.workspace_path))
+        ]
+        
+        # Node.js agent (if available)
+        self.node_agents = []
+        if HAS_NODE_AGENT:
+            self.node_agents = [
+                NodeAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
+                NodeAgent(agent_id="node_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+            ]
+        
+        # Register all agents with load balancer
+        all_agent_lists = [
+            self.coder_agents, self.testing_agents, self.qa_agents,
+            self.infrastructure_agents, self.integration_agents,
+            self.frontend_agents, self.workflow_agents, self.security_agents
+        ]
+        
+        if HAS_NODE_AGENT:
+            all_agent_lists.append(self.node_agents)
+        
+        for agent_list in all_agent_lists:
+            for agent in agent_list:
+                self.load_balancer.register_agent(agent, capacity=5)
         
         # Register agents with orchestrator
         for agent in self.coder_agents:
@@ -107,6 +167,16 @@ class AgentSystem:
         self.logger.info(f"Project: {project_description}")
         self.logger.info(f"Objectives: {len(objectives)}")
         self.logger.info("=" * 80)
+        
+        # Emit dashboard project start event
+        try:
+            from api.dashboard.events import get_event_manager
+            import asyncio
+            
+            event_manager = get_event_manager()
+            asyncio.create_task(event_manager.emit_project_start(project_description, objectives))
+        except Exception:
+            pass  # Dashboard optional
         
         # Break down project into tasks
         tasks = self.orchestrator.break_down_project(project_description, objectives)
@@ -168,6 +238,20 @@ class AgentSystem:
         
         # Get final project status
         final_status = self.orchestrator.get_project_status()
+        
+        # Emit dashboard project complete event
+        try:
+            from api.dashboard.events import get_event_manager
+            import asyncio
+            
+            event_manager = get_event_manager()
+            asyncio.run(event_manager.emit_project_complete({
+                "project_description": project_description,
+                "objectives": objectives,
+                "final_status": final_status
+            }))
+        except Exception:
+            pass  # Dashboard optional
         
         # Collect results
         results = {

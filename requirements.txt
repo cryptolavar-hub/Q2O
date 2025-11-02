@@ -53,3 +53,6 @@ safety==3.0.1
 # Development
 ipython==8.21.0
 ipdb==0.13.13
+
+# Dashboard (WebSocket support)
+websockets==12.0

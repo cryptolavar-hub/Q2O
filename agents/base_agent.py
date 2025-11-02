@@ -29,6 +29,7 @@ class AgentType(Enum):
     """Type of agent."""
     ORCHESTRATOR = "orchestrator"
     CODER = "coder"
+    NODEJS = "nodejs"  # Node.js specialized agent
     TESTING = "testing"
     QA = "qa"
     INFRASTRUCTURE = "infrastructure"
@@ -114,6 +115,96 @@ class BaseAgent(ABC):
         """
         return task.agent_type == self.agent_type
 
+    def _emit_task_started(self, task_id: str, task: Task):
+        """Emit dashboard event for task started."""
+        try:
+            from api.dashboard.events import get_event_manager
+            import asyncio
+            
+            event_manager = get_event_manager()
+            asyncio.create_task(event_manager.emit_task_update(
+                task_id=task_id,
+                status="in_progress",
+                title=task.title,
+                agent_id=self.agent_id,
+                agent_type=self.agent_type.value,
+                started_at=task.started_at.isoformat() if task.started_at else None,
+                dependencies=task.dependencies,
+                progress=0
+            ))
+        except Exception:
+            # Fail silently if dashboard not available
+            pass
+    
+    def _emit_task_complete(self, task_id: str, task: Task):
+        """Emit dashboard event for task completed."""
+        try:
+            from api.dashboard.events import get_event_manager
+            import asyncio
+            
+            event_manager = get_event_manager()
+            
+            # Calculate duration
+            duration = None
+            if task.started_at and task.completed_at:
+                duration = (task.completed_at - task.started_at).total_seconds()
+            
+            asyncio.create_task(event_manager.emit_task_update(
+                task_id=task_id,
+                status="completed",
+                title=task.title,
+                agent_id=self.agent_id,
+                agent_type=self.agent_type.value,
+                started_at=task.started_at.isoformat() if task.started_at else None,
+                completed_at=task.completed_at.isoformat() if task.completed_at else None,
+                duration=duration,
+                progress=100
+            ))
+            
+            # Emit agent activity
+            asyncio.create_task(event_manager.emit_agent_activity(
+                agent_id=self.agent_id,
+                agent_type=self.agent_type.value,
+                activity="task_completed",
+                task_id=task_id,
+                status="idle" if len(self.active_tasks) == 0 else "active"
+            ))
+        except Exception:
+            # Fail silently if dashboard not available
+            pass
+    
+    def _emit_task_failed(self, task_id: str, task: Task, error: str):
+        """Emit dashboard event for task failed."""
+        try:
+            from api.dashboard.events import get_event_manager
+            import asyncio
+            
+            event_manager = get_event_manager()
+            asyncio.create_task(event_manager.emit_task_update(
+                task_id=task_id,
+                status="failed",
+                title=task.title,
+                agent_id=self.agent_id,
+                agent_type=self.agent_type.value,
+                started_at=task.started_at.isoformat() if task.started_at else None,
+                completed_at=task.completed_at.isoformat() if task.completed_at else None,
+                error=error,
+                progress=0
+            ))
+            
+            # Emit agent activity
+            asyncio.create_task(event_manager.emit_agent_activity(
+                agent_id=self.agent_id,
+                agent_type=self.agent_type.value,
+                activity="task_failed",
+                task_id=task_id,
+                error=error,
+                status="idle" if len(self.active_tasks) == 0 else "active"
+            ))
+        except Exception:
+            # Fail silently if dashboard not available
+            pass
+
     def assign_task(self, task: Task) -> bool:
         """
         Assign a task to this agent.
@@ -132,7 +223,26 @@ class BaseAgent(ABC):
         self.active_tasks[task.id] = task
         task.start()
         self.logger.info(f"Assigned task {task.id}: {task.title}")
-
+        
+        # Emit dashboard event
+        self._emit_task_started(task.id, task)
+        
+        # Emit agent activity
+        try:
+            from api.dashboard.events import get_event_manager
+            import asyncio
+            
+            event_manager = get_event_manager()
+            asyncio.create_task(event_manager.emit_agent_activity(
+                agent_id=self.agent_id,
+                agent_type=self.agent_type.value,
+                activity="task_started",
+                task_id=task.id,
+                status="active"
+            ))
+        except Exception:
+            pass
+        
         return True
 
     def complete_task(self, task_id: str, result: Any = None):
@@ -151,6 +261,9 @@ class BaseAgent(ABC):
         task.complete(result)
         self.completed_tasks.append(task)
         self.logger.info(f"Completed task {task_id}: {task.title}")
+        
+        # Emit dashboard event
+        self._emit_task_complete(task_id, task)
 
     def fail_task(self, task_id: str, error: str):
         """
@@ -168,6 +281,9 @@ class BaseAgent(ABC):
         task.fail(error)
         self.failed_tasks.append(task)
         self.logger.error(f"Failed task {task_id}: {task.title} - {error}")
+        
+        # Emit dashboard event
+        self._emit_task_failed(task_id, task, error)
 
     def get_status(self) -> Dict[str, Any]:
         """

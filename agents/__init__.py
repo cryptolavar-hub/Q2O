@@ -14,6 +14,12 @@ from agents.frontend_agent import FrontendAgent
 from agents.workflow_agent import WorkflowAgent
 from agents.security_agent import SecurityAgent
 
+# Optional NodeAgent import
+try:
+    from agents.node_agent import NodeAgent
+except ImportError:
+    NodeAgent = None
+
 __all__ = [
     'BaseAgent',
     'AgentType',
@@ -29,4 +35,8 @@ __all__ = [
     'WorkflowAgent',
     'SecurityAgent',
 ]
+
+# Conditionally add NodeAgent to exports
+if NodeAgent is not None:
+    __all__.append('NodeAgent')
 

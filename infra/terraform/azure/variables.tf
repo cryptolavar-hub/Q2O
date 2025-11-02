@@ -39,6 +39,6 @@ variable "ip_allowlist" {
 variable "alert_email" {
   description = "Email address for alerts"
   type        = string
-  default     = "admin@quick2odoo.online"
+  default     = "info@quick2odoo.com"
 }
 

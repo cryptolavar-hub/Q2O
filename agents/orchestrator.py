@@ -314,13 +314,29 @@ class OrchestratorAgent(BaseAgent):
             self.logger.warning(f"Task {task.id} is blocked by dependencies")
             return False
 
-        # Select an agent (simple round-robin for now)
-        available_agents = self.agents[agent_type]
-        agent = available_agents[0]  # Could implement load balancing
+        # Use load balancer if available, otherwise fallback to round-robin
+        try:
+            from utils.load_balancer import get_load_balancer, TaskPriority
+            
+            load_balancer = get_load_balancer()
+            priority = TaskPriority.NORMAL  # Could be determined from task metadata
+            
+            instance = load_balancer.route_task(task, priority=priority, routing_algorithm="least_busy")
+            
+            if instance and instance.agent.assign_task(task):
+                task.status = TaskStatus.IN_PROGRESS
+                self.logger.info(f"Assigned task {task.id} to {instance.agent_id} via load balancer")
+                return True
+        except Exception as e:
+            self.logger.warning(f"Load balancer not available, using fallback: {e}")
         
-        if agent.assign_task(task):
-            self.logger.info(f"Assigned task {task.id} to agent {agent.agent_id}")
-            return True
+        # Fallback: Try to assign to available agents (round-robin)
+        available_agents = self.agents[agent_type]
+        for agent in available_agents:
+            if agent.assign_task(task):
+                task.status = TaskStatus.IN_PROGRESS
+                self.logger.info(f"Assigned task {task.id} to {agent.agent_id}")
+                return True
 
         return False
 
