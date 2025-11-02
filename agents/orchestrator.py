@@ -325,6 +325,11 @@ class OrchestratorAgent(BaseAgent):
             
             if instance and instance.agent.assign_task(task):
                 task.status = TaskStatus.IN_PROGRESS
+                
+                # Initialize retry metadata if not present
+                if "retry_count" not in task.metadata:
+                    task.metadata["retry_count"] = 0
+                
                 self.logger.info(f"Assigned task {task.id} to {instance.agent_id} via load balancer")
                 return True
         except Exception as e:
@@ -335,6 +340,11 @@ class OrchestratorAgent(BaseAgent):
         for agent in available_agents:
             if agent.assign_task(task):
                 task.status = TaskStatus.IN_PROGRESS
+                
+                # Initialize retry metadata if not present
+                if "retry_count" not in task.metadata:
+                    task.metadata["retry_count"] = 0
+                
                 self.logger.info(f"Assigned task {task.id} to {agent.agent_id}")
                 return True
 
@@ -429,6 +439,25 @@ class OrchestratorAgent(BaseAgent):
             self.distribute_tasks()
         elif status == TaskStatus.FAILED:
             task.fail(error or "Unknown error")
+            
+            # Auto-retry logic: Check if task should be retried
+            from utils.retry_policy import get_policy_manager
+            
+            policy_manager = get_policy_manager()
+            policy = policy_manager.get_policy(task.agent_type.value, task.title)
+            
+            # Check if task has retries remaining (stored in metadata)
+            retry_count = task.metadata.get("retry_count", 0)
+            
+            if retry_count < policy.max_retries:
+                self.logger.info(
+                    f"Task {task_id} failed, scheduling retry ({retry_count + 1}/{policy.max_retries})"
+                )
+                task.metadata["retry_count"] = retry_count + 1
+                task.status = TaskStatus.PENDING  # Reset to pending for retry
+                # Task will be picked up by distribute_tasks() on next iteration
+            else:
+                self.logger.error(f"Task {task_id} failed after {retry_count} retries, giving up")
 
     def get_project_status(self) -> Dict[str, Any]:
         """

@@ -204,19 +204,27 @@ class AgentSystem:
             for agent in all_agents:
                 for task_id, task in list(agent.active_tasks.items()):
                     self.logger.info(f"Agent {agent.agent_id} processing task {task_id}")
-                    updated_task = agent.process_task(task)
-                    
-                    # Update orchestrator
-                    if updated_task.status == TaskStatus.COMPLETED:
-                        agent.complete_task(task_id, updated_task.result)
-                        self.orchestrator.update_task_status(
-                            task_id, TaskStatus.COMPLETED, updated_task.result
-                        )
-                    elif updated_task.status == TaskStatus.FAILED:
-                        agent.fail_task(task_id, updated_task.error or "Unknown error")
-                        self.orchestrator.update_task_status(
-                            task_id, TaskStatus.FAILED, None, updated_task.error
-                        )
+                    # Process task with automatic retry
+                    try:
+                        updated_task = agent.process_task_with_retry(task)
+                        
+                        # Update orchestrator
+                        if updated_task.status == TaskStatus.COMPLETED:
+                            agent.complete_task(task_id, updated_task.result)
+                            self.orchestrator.update_task_status(
+                                task_id, TaskStatus.COMPLETED, updated_task.result
+                            )
+                        elif updated_task.status == TaskStatus.FAILED:
+                            agent.fail_task(task_id, updated_task.error or "Unknown error")
+                            self.orchestrator.update_task_status(
+                                task_id, TaskStatus.FAILED, None, updated_task.error
+                            )
+                    except Exception as e:
+                        # Task processing raised exception after retries exhausted
+                        error_msg = f"Task processing failed after retries: {str(e)}"
+                        self.logger.error(f"Task {task_id}: {error_msg}")
+                        agent.fail_task(task_id, error_msg)
+                        self.orchestrator.update_task_status(task_id, TaskStatus.FAILED, None, error_msg)
             
             # Check if all tasks are completed
             status = self.orchestrator.get_project_status()

@@ -81,7 +81,7 @@ class Task:
 class BaseAgent(ABC):
     """Base class for all agents in the system."""
 
-    def __init__(self, agent_id: str, agent_type: AgentType, project_layout: Optional[ProjectLayout] = None):
+    def __init__(self, agent_id: str, agent_type: AgentType, project_layout: Optional[ProjectLayout] = None, enable_messaging: bool = True):
         self.agent_id = agent_id
         self.agent_type = agent_type
         self.logger = logging.getLogger(f"{agent_type.value}.{agent_id}")
@@ -89,6 +89,55 @@ class BaseAgent(ABC):
         self.completed_tasks: List[Task] = []
         self.failed_tasks: List[Task] = []
         self.project_layout: ProjectLayout = project_layout or get_default_layout()
+        self.enable_messaging = enable_messaging
+        
+        # Initialize messaging if enabled
+        if enable_messaging:
+            try:
+                from agents.messaging import MessagingMixin
+                # Apply messaging mixin dynamically
+                for attr_name in dir(MessagingMixin):
+                    if not attr_name.startswith('_') and callable(getattr(MessagingMixin, attr_name)):
+                        if not hasattr(self, attr_name):
+                            setattr(self, attr_name, getattr(MessagingMixin, attr_name).__get__(self, self.__class__))
+                
+                # Initialize messaging
+                self.message_broker = None
+                self.message_handlers = {}
+                self._init_messaging()
+            except Exception as e:
+                self.logger.warning(f"Messaging initialization failed (continuing without messaging): {e}")
+                self.enable_messaging = False
+    
+    def _init_messaging(self):
+        """Initialize messaging capabilities."""
+        try:
+            from utils.message_broker import get_default_broker
+            from utils.message_protocol import MessageType
+            
+            self.message_broker = get_default_broker()
+            self.message_handlers = {}
+            
+            # Subscribe to channels
+            def message_handler(msg_dict):
+                self._handle_incoming_message(msg_dict)
+            
+            self.message_broker.subscribe("agents", message_handler)
+            self.message_broker.subscribe(f"agents.{self.agent_type.value}", message_handler)
+            self.message_broker.subscribe(f"agents.{self.agent_id}", message_handler)
+            
+            # Announce presence
+            self.announce_presence()
+        except Exception as e:
+            self.logger.warning(f"Messaging setup failed: {e}")
+    
+    def announce_presence(self):
+        """Announce agent presence (can be overridden)."""
+        pass
+    
+    def _handle_incoming_message(self, message_dict: Dict[str, Any]):
+        """Handle incoming message (can be overridden)."""
+        pass
 
     @abstractmethod
     def process_task(self, task: Task) -> Task:
@@ -102,6 +151,90 @@ class BaseAgent(ABC):
             The updated task
         """
         pass
+    
+    def process_task_with_retry(self, task: Task) -> Task:
+        """
+        Process a task with automatic retry mechanism.
+        
+        Args:
+            task: The task to process
+            
+        Returns:
+            The updated task
+        """
+        from utils.retry_policy import get_policy_manager
+        from utils.load_balancer import get_load_balancer
+        import time
+        
+        policy_manager = get_policy_manager()
+        policy = policy_manager.get_policy(self.agent_type.value, task.title)
+        
+        self.logger.info(f"Processing task {task.id} with retry policy: max_retries={policy.max_retries}, strategy={policy.strategy.value}")
+        
+        last_exception = None
+        
+        for attempt in range(policy.max_retries + 1):
+            try:
+                # Process the task
+                result = self.process_task(task)
+                
+                # If successful, record success and return
+                if attempt > 0:
+                    self.logger.info(f"Task {task.id} succeeded on retry attempt {attempt + 1}")
+                    load_balancer = get_load_balancer()
+                    load_balancer.record_task_success(self.agent_id)
+                
+                return result
+            
+            except Exception as e:
+                last_exception = e
+                
+                # Check if we should retry this exception
+                if not policy.should_retry(e, attempt):
+                    self.logger.warning(f"Task {task.id} failed with non-retryable exception: {type(e).__name__}")
+                    break
+                
+                # Check if we have retries remaining
+                if attempt < policy.max_retries:
+                    delay = policy.get_delay(attempt)
+                    self.logger.warning(
+                        f"Task {task.id} failed on attempt {attempt + 1}/{policy.max_retries + 1}: {str(e)}. "
+                        f"Retrying in {delay:.2f}s..."
+                    )
+                    
+                    # Optionally try with a different agent instance (via load balancer)
+                    if attempt > 0:  # After first retry, try different agent
+                        try:
+                            load_balancer = get_load_balancer()
+                            alternative_instance = load_balancer.route_task(
+                                task, 
+                                routing_algorithm="health_based"
+                            )
+                            
+                            if alternative_instance and alternative_instance.agent_id != self.agent_id:
+                                self.logger.info(
+                                    f"Attempting task {task.id} on alternative agent {alternative_instance.agent_id}"
+                                )
+                                # Update task assignment
+                                task.assigned_agent = alternative_instance.agent_id
+                                continue  # Skip delay, try immediately on alternative agent
+                        except Exception as lb_error:
+                            self.logger.debug(f"Load balancer routing failed: {lb_error}")
+                    
+                    # Wait before retry
+                    time.sleep(delay)
+                else:
+                    # No more retries
+                    self.logger.error(f"Task {task.id} failed after {policy.max_retries + 1} attempts")
+                    load_balancer = get_load_balancer()
+                    load_balancer.record_task_failure(self.agent_id)
+        
+        # All retries exhausted - mark task as failed
+        error_msg = f"Task failed after {policy.max_retries + 1} attempts: {str(last_exception)}"
+        self.fail_task(task.id, error_msg)
+        
+        # Re-raise the exception for caller handling
+        raise last_exception or Exception(error_msg)
 
     def can_handle_task(self, task: Task) -> bool:
         """
