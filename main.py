@@ -310,15 +310,20 @@ class AgentSystem:
         print("-" * 80)
         
         for task_id, task_info in results["tasks"].items():
+            # Use ASCII-safe symbols for Windows compatibility
             status_symbol = {
-                "completed": "✓",
-                "failed": "✗",
-                "in_progress": "→",
-                "blocked": "⊘",
-                "pending": "○"
-            }.get(task_info["status"], "?")
+                "completed": "[OK]",
+                "failed": "[FAIL]",
+                "in_progress": "[...]",
+                "blocked": "[BLOCKED]",
+                "pending": "[ ]"
+            }.get(task_info["status"], "[?]")
             
-            print(f"{status_symbol} {task_id}: {task_info['title']}")
+            try:
+                print(f"{status_symbol} {task_id}: {task_info['title']}")
+            except UnicodeEncodeError:
+                # Fallback if still encoding issues
+                print(f"{status_symbol} {task_id}: {task_info['title'].encode('ascii', 'ignore').decode('ascii')}")
             if task_info["status"] == "failed" and task_info.get("error"):
                 print(f"  Error: {task_info['error']}")
         
