@@ -1,0 +1,10 @@
+{
+    "project_description": "QuickBooks to Odoo Online Integration SaaS",
+    "objectives": [
+      "OAuth authentication with QuickBooks",
+      "Odoo v18 integration",
+      "Stripe billing setup",
+      "Terraform infrastructure",
+      "Next.js frontend"
+    ]
+  }
