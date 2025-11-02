@@ -15,6 +15,9 @@ alembic==1.13.1
 httpx==0.26.0
 requests==2.31.0
 
+# VCS Integration (Git operations)
+# Note: Git CLI must be installed separately
+
 # Temporal workflow
 temporalio==1.8.0
 

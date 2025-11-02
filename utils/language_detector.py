@@ -6,7 +6,7 @@ Supports multi-language projects and auto-detection.
 import os
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Any
 from collections import defaultdict
 import logging
 

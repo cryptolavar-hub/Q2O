@@ -6,6 +6,7 @@ Coordinates the orchestrator and all agent types to complete projects.
 import argparse
 import logging
 import sys
+import os
 import json
 from pathlib import Path
 from typing import List, Dict, Any
@@ -150,6 +151,65 @@ class AgentSystem:
             self.orchestrator.register_agent(agent)
         
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize VCS integration if enabled
+        self.vcs_enabled = os.getenv("VCS_ENABLED", "false").lower() == "true"
+        if self.vcs_enabled:
+            from utils.git_manager import get_git_manager
+            self.git_manager = get_git_manager(str(self.workspace_path), auto_commit=True)
+            self.logger.info("VCS integration enabled")
+        else:
+            self.git_manager = None
+
+    def _handle_vcs_integration(self, project_description: str, objectives: List[str], results: Dict[str, Any]):
+        """Handle VCS operations after project completion."""
+        if not self.vcs_enabled or not self.git_manager:
+            return
+        
+        try:
+            from utils.vcs_integration import get_vcs_integration
+            
+            # Create feature branch
+            branch_name = f"feature/{project_description.lower().replace(' ', '-')[:50]}"
+            branch_name = branch_name.replace('/', '-').replace('_', '-')
+            
+            # Add timestamp to make unique
+            import time
+            branch_name = f"{branch_name}-{int(time.time())}"
+            
+            if self.git_manager.create_branch(branch_name):
+                self.logger.info(f"Created feature branch: {branch_name}")
+                
+                # Push branch
+                if self.git_manager.push_branch(branch_name):
+                    self.logger.info(f"Pushed branch: {branch_name}")
+                
+                # Collect all files created
+                all_files = []
+                for task_result in results.get("tasks", {}).values():
+                    if isinstance(task_result, dict):
+                        files = task_result.get("files_created", [])
+                        if files:
+                            all_files.extend(files)
+                
+                # Create PR
+                vcs = get_vcs_integration(str(self.workspace_path))
+                pr = vcs.create_project_pr(
+                    project_description=project_description,
+                    objectives=objectives,
+                    branch_name=branch_name,
+                    files_created=all_files if all_files else None
+                )
+                
+                if pr:
+                    self.logger.info(f"Created PR #{pr.get('number')}: {pr.get('html_url')}")
+                    results["pull_request"] = {
+                        "number": pr.get("number"),
+                        "url": pr.get("html_url"),
+                        "branch": branch_name
+                    }
+        except Exception as e:
+            self.logger.warning(f"VCS integration failed (optional feature): {e}")
 
     def run_project(self, project_description: str, objectives: List[str]) -> Dict[str, Any]:
         """
@@ -260,6 +320,9 @@ class AgentSystem:
             }))
         except Exception:
             pass  # Dashboard optional
+        
+        # VCS Integration: Create feature branch and PR if enabled
+        self._handle_vcs_integration(project_description, objectives, results)
         
         # Collect results
         results = {

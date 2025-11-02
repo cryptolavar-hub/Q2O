@@ -306,6 +306,44 @@ class BaseAgent(ABC):
             # Fail silently if dashboard not available
             pass
     
+    def _auto_commit_task(self, task: Task):
+        """Automatically commit files created by completed task."""
+        try:
+            from utils.git_manager import get_git_manager
+            
+            # Get workspace path (some agents have it, use project layout as fallback)
+            workspace_path = getattr(self, 'workspace_path', '.')
+            git_manager = get_git_manager(str(workspace_path))
+            
+            if not git_manager.auto_commit:
+                return
+            
+            # Extract files created from task result
+            files_created = []
+            if task.result and isinstance(task.result, dict):
+                files_created = task.result.get("files_created", [])
+                # Also check for agent-specific file lists
+                if not files_created:
+                    files_created = task.result.get("integration_files", [])
+                if not files_created:
+                    files_created = task.result.get("frontend_files", [])
+                if not files_created:
+                    files_created = task.result.get("infrastructure_files", [])
+                if not files_created:
+                    files_created = task.result.get("workflow_files", [])
+                if not files_created:
+                    files_created = task.result.get("node_files", [])
+            
+            if files_created:
+                git_manager.auto_commit_task_completion(
+                    task_id=task.id,
+                    task_title=task.title,
+                    files_created=files_created
+                )
+        except Exception as e:
+            # Fail silently - VCS integration is optional
+            self.logger.debug(f"Auto-commit failed (optional feature): {e}")
+    
     def _emit_task_failed(self, task_id: str, task: Task, error: str):
         """Emit dashboard event for task failed."""
         try:
@@ -394,6 +432,9 @@ class BaseAgent(ABC):
         task.complete(result)
         self.completed_tasks.append(task)
         self.logger.info(f"Completed task {task_id}: {task.title}")
+        
+        # Auto-commit if VCS integration enabled
+        self._auto_commit_task(task)
         
         # Emit dashboard event
         self._emit_task_complete(task_id, task)

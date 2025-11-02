@@ -1,0 +1,16 @@
+{
+  "vcs": {
+    "enabled": false,
+    "auto_commit": true,
+    "auto_create_branch": true,
+    "auto_create_pr": true,
+    "base_branch": "main",
+    "commit_author": "Multi-Agent System <agent@example.com>"
+  },
+  "github": {
+    "token_env_var": "GITHUB_TOKEN",
+    "repo_env_var": "GITHUB_REPO",
+    "api_base": "https://api.github.com"
+  }
+}
+
