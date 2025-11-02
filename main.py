@@ -184,13 +184,26 @@ class AgentSystem:
                 if self.git_manager.push_branch(branch_name):
                     self.logger.info(f"Pushed branch: {branch_name}")
                 
-                # Collect all files created
+                # Collect all files created from all agents' completed tasks
                 all_files = []
-                for task_result in results.get("tasks", {}).values():
-                    if isinstance(task_result, dict):
-                        files = task_result.get("files_created", [])
-                        if files:
-                            all_files.extend(files)
+                all_agents = (
+                    self.coder_agents + self.testing_agents + self.qa_agents +
+                    self.infrastructure_agents + self.integration_agents +
+                    self.frontend_agents + self.workflow_agents + self.security_agents
+                )
+                if hasattr(self, 'node_agents'):
+                    all_agents.extend(self.node_agents)
+                
+                for agent in all_agents:
+                    # Check completed tasks
+                    for completed_task in agent.completed_tasks:
+                        if completed_task.result and isinstance(completed_task.result, dict):
+                            # Try various file list keys
+                            for key in ["files_created", "integration_files", "frontend_files", 
+                                       "infrastructure_files", "workflow_files", "node_files"]:
+                                files = completed_task.result.get(key, [])
+                                if files:
+                                    all_files.extend(files)
                 
                 # Create PR
                 vcs = get_vcs_integration(str(self.workspace_path))
