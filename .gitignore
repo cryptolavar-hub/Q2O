@@ -204,6 +204,9 @@ cython_debug/
 # Backup files
 *.bak
 
+# Scripts with sensitive tokens
+push_with_token.ps1
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
