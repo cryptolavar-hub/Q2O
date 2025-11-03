@@ -290,7 +290,8 @@ if __name__ == '__main__':
             "passed": 0,
             "failed": 0,
             "errors": 0,
-            "output": ""
+            "output": "",
+            "coverage": None
         }
         
         try:
@@ -299,14 +300,21 @@ if __name__ == '__main__':
             env = os.environ.copy()
             env["PYTHONPATH"] = self.workspace_path
             
-            # Run pytest on the test file
+            # Run pytest on the test file with coverage
+            coverage_dir = os.path.join(self.workspace_path, ".coverage_reports")
+            os.makedirs(coverage_dir, exist_ok=True)
+            
             cmd = [
                 sys.executable, "-m", "pytest",
                 full_test_path,
                 "-v",  # Verbose
                 "--tb=short",  # Short traceback
                 "--no-header",  # No header
-                "-p", "no:warnings"  # Suppress warnings
+                "-p", "no:warnings",  # Suppress warnings
+                "--cov",  # Enable coverage
+                "--cov-report=term",  # Terminal report
+                "--cov-report=html:" + os.path.join(coverage_dir, "htmlcov"),
+                "--cov-report=json:" + os.path.join(coverage_dir, "coverage.json")
             ]
             
             process_result = subprocess.run(
@@ -338,6 +346,10 @@ if __name__ == '__main__':
                 result["failed"] = 1
                 result["test_count"] = 1
             
+            # Extract coverage information if available
+            if "--cov" in " ".join(cmd):
+                result["coverage"] = self._extract_coverage_from_output(output)
+            
         except subprocess.TimeoutExpired:
             result["status"] = "timeout"
             result["output"] = "Test execution timed out"
@@ -353,4 +365,37 @@ if __name__ == '__main__':
         
         self.test_results[test_file] = result
         return result
+    
+    def _extract_coverage_from_output(self, output: str) -> Dict[str, Any]:
+        """
+        Extract coverage information from pytest output.
+        
+        Args:
+            output: Pytest output string
+            
+        Returns:
+            Dictionary with coverage information
+        """
+        import re
+        
+        coverage_info = {
+            "total_coverage": 0,
+            "statements": 0,
+            "missing": 0,
+            "coverage_percent": 0
+        }
+        
+        try:
+            # Look for TOTAL coverage line
+            # Example: "TOTAL    100    20   80%"
+            total_match = re.search(r'TOTAL\s+(\d+)\s+(\d+)\s+(\d+)%', output)
+            if total_match:
+                coverage_info["statements"] = int(total_match.group(1))
+                coverage_info["missing"] = int(total_match.group(2))
+                coverage_info["coverage_percent"] = int(total_match.group(3))
+                coverage_info["total_coverage"] = int(total_match.group(3))
+        except Exception as e:
+            self.logger.warning(f"Error extracting coverage info: {e}")
+        
+        return coverage_info
 

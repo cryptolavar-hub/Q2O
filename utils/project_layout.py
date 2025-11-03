@@ -41,6 +41,11 @@ class ProjectLayout:
     workflows_dir: str = "shared/temporal_defs/workflows"
     activities_dir: str = "shared/temporal_defs/activities"
     
+    # Worker paths
+    worker_dir: str = "worker"
+    worker_temporal_dir: str = "worker/temporal"
+    worker_activities_dir: str = "worker/temporal/activities"
+    
     # Test paths
     tests_dir: str = "tests"
     
@@ -74,6 +79,9 @@ class ProjectLayout:
             'temporal_dir': self.temporal_dir,
             'workflows_dir': self.workflows_dir,
             'activities_dir': self.activities_dir,
+            'worker_dir': self.worker_dir,
+            'worker_temporal_dir': self.worker_temporal_dir,
+            'worker_activities_dir': self.worker_activities_dir,
             'tests_dir': self.tests_dir,
             'config_dir': self.config_dir,
         }
