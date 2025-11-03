@@ -128,7 +128,11 @@ class MessagingMixin:
                     urgency="high"
                 )
         """
+        import uuid
+        from utils.message_protocol import AgentMessage, MessageType
+        
         message = AgentMessage(
+            message_id=str(uuid.uuid4()),
             message_type=MessageType.REQUEST_HELP,  # Reuse REQUEST_HELP for research
             sender_agent_id=self.agent_id,
             sender_agent_type=self.agent_type.value,

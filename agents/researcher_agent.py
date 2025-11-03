@@ -935,4 +935,3 @@ class ResearcherAgent(BaseAgent):
             
         except Exception as e:
             self.logger.error(f"Error handling research request message: {e}", exc_info=True)
-
