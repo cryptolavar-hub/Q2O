@@ -1,0 +1,8 @@
+{
+  "project_description": "Test ResearcherAgent Functionality",
+  "objectives": [
+    "Research latest FastAPI authentication best practices",
+    "Implement OAuth based on research findings"
+  ]
+}
+

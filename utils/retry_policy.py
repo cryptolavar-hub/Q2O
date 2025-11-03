@@ -126,6 +126,13 @@ class RetryPolicyManager:
                 backoff_factor=2.0,
                 strategy=RetryStrategy.EXPONENTIAL
             ),
+            "researcher": RetryPolicy(
+                max_retries=4,  # More retries for web searches (network issues)
+                initial_delay=2.0,
+                backoff_factor=2.0,
+                strategy=RetryStrategy.EXPONENTIAL,
+                max_delay=60.0  # Cap delay for web requests
+            ),
             # Default for all other agents
             "default": RetryPolicy(
                 max_retries=3,

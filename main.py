@@ -21,6 +21,7 @@ from agents import (
     FrontendAgent,
     WorkflowAgent,
     SecurityAgent,
+    ResearcherAgent,
     AgentType,
     TaskStatus
 )
@@ -109,6 +110,10 @@ class AgentSystem:
             SecurityAgent(workspace_path=str(self.workspace_path)),
             SecurityAgent(agent_id="security_backup", workspace_path=str(self.workspace_path))
         ]
+        self.researcher_agents = [
+            ResearcherAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
+            ResearcherAgent(agent_id="researcher_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+        ]
         
         # Node.js agent (if available)
         self.node_agents = []
@@ -122,7 +127,8 @@ class AgentSystem:
         all_agent_lists = [
             self.coder_agents, self.testing_agents, self.qa_agents,
             self.infrastructure_agents, self.integration_agents,
-            self.frontend_agents, self.workflow_agents, self.security_agents
+            self.frontend_agents, self.workflow_agents, self.security_agents,
+            self.researcher_agents
         ]
         
         if HAS_NODE_AGENT:
@@ -148,6 +154,8 @@ class AgentSystem:
         for agent in self.workflow_agents:
             self.orchestrator.register_agent(agent)
         for agent in self.security_agents:
+            self.orchestrator.register_agent(agent)
+        for agent in self.researcher_agents:
             self.orchestrator.register_agent(agent)
         
         self.logger = logging.getLogger(__name__)
@@ -189,7 +197,8 @@ class AgentSystem:
                 all_agents = (
                     self.coder_agents + self.testing_agents + self.qa_agents +
                     self.infrastructure_agents + self.integration_agents +
-                    self.frontend_agents + self.workflow_agents + self.security_agents
+                    self.frontend_agents + self.workflow_agents + self.security_agents +
+                    self.researcher_agents
                 )
                 if hasattr(self, 'node_agents'):
                     all_agents.extend(self.node_agents)
@@ -271,7 +280,8 @@ class AgentSystem:
             all_agents = (
                 self.coder_agents + self.testing_agents + self.qa_agents +
                 self.infrastructure_agents + self.integration_agents +
-                self.frontend_agents + self.workflow_agents + self.security_agents
+                self.frontend_agents + self.workflow_agents + self.security_agents +
+                self.researcher_agents
             )
             
             for agent in all_agents:
@@ -357,7 +367,8 @@ class AgentSystem:
                 "integration": [agent.get_status() for agent in self.integration_agents],
                 "frontend": [agent.get_status() for agent in self.frontend_agents],
                 "workflow": [agent.get_status() for agent in self.workflow_agents],
-                "security": [agent.get_status() for agent in self.security_agents]
+                "security": [agent.get_status() for agent in self.security_agents],
+                "researcher": [agent.get_status() for agent in self.researcher_agents]
             }
         }
         

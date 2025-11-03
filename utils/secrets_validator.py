@@ -109,6 +109,12 @@ class SecretsValidator:
         'BILLING_CANCEL_URL': 'Billing cancel redirect URL',
         'APP_URL': 'Application base URL',
         'API_URL': 'API base URL',
+        
+        # Research Agent (Web Search)
+        'GOOGLE_SEARCH_API_KEY': 'Google Custom Search API key',
+        'GOOGLE_SEARCH_CX': 'Google Custom Search Engine ID',
+        'BING_SEARCH_API_KEY': 'Bing Search API key (Azure)',
+        'RESEARCH_DAILY_LIMIT': 'Daily limit for research searches (default: 100)',
     }
     
     def __init__(self):
@@ -260,6 +266,7 @@ class SecretsValidator:
             'OAuth Providers': [],
             'NextAuth': [],
             'Temporal': [],
+            'Research Agent': [],
             'Application': [],
             'URLs': [],
             'Other': []
@@ -274,6 +281,8 @@ class SecretsValidator:
                 categories['Odoo'].append(var)
             elif 'STRIPE' in var:
                 categories['Stripe'].append(var)
+            elif any(x in var for x in ['GOOGLE_SEARCH', 'BING_SEARCH', 'RESEARCH']):
+                categories['Research Agent'].append(var)
             elif any(x in var for x in ['GOOGLE', 'OKTA', 'AZURE', 'OAUTH']):
                 categories['OAuth Providers'].append(var)
             elif 'NEXTAUTH' in var:

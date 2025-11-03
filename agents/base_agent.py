@@ -37,6 +37,7 @@ class AgentType(Enum):
     FRONTEND = "frontend"
     WORKFLOW = "workflow"
     SECURITY = "security"
+    RESEARCHER = "researcher"  # Web research agent
 
 
 @dataclass

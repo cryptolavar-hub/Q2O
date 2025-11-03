@@ -26,7 +26,7 @@ python main.py --config config_example.json --workspace ./my_project
 
 ## ✨ Features
 
-- **10 Specialized Agents**: Orchestrator, Coder, Testing, QA, Infrastructure, Integration, Frontend, Workflow, Security, Node.js
+- **11 Specialized Agents**: Orchestrator, Coder, Testing, QA, Infrastructure, Integration, Frontend, Workflow, Security, Researcher, Node.js
 - **Real-time Dashboard**: WebSocket-powered monitoring with live task tracking and metrics
 - **Advanced Load Balancing**: High availability with agent redundancy, failover, and circuit breakers
 - **Multi-Language Support**: Python, Node.js (20.x LTS), TypeScript, JavaScript, Terraform, Helm
@@ -44,6 +44,7 @@ python main.py --config config_example.json --workspace ./my_project
 The system uses 10 specialized AI agents that work collaboratively:
 
 - **Orchestrator Agent**: Breaks down projects into manageable tasks, manages load balancing
+- **Researcher Agent**: Conducts web research, gathers documentation, extracts code examples (NEW!)
 - **Coder Agent**: Generates FastAPI endpoints and SQLAlchemy models
 - **Infrastructure Agent**: Creates Terraform and Helm configurations
 - **Integration Agent**: Generates OAuth and API client code

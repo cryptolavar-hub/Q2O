@@ -81,6 +81,26 @@ class OrchestratorAgent(BaseAgent):
         objective_type = self._detect_objective_type(objective_lower)
         tech_stack = self._detect_tech_stack(objective_lower)
         
+        # SMART DETECTION: Check if research is needed FIRST
+        needs_research = self._needs_research(objective_lower, objective_type, tech_stack, context)
+        
+        if needs_research:
+            research_task = Task(
+                id=f"task_{start_counter:04d}_research",
+                title=f"Research: {objective}",
+                description=f"Conduct web research for: {objective}\n\nContext: {context}\n\nResearch needed to gather information about implementation approaches, best practices, and code examples.",
+                agent_type=AgentType.RESEARCHER,
+                tech_stack=tech_stack,
+                metadata={
+                    "objective": objective,
+                    "research_query": objective,
+                    "complexity": self._estimate_complexity(objective),
+                    "research_depth": "adaptive"
+                }
+            )
+            tasks.append(research_task)
+            start_counter += 1
+        
         # Create infrastructure tasks first (if needed)
         if objective_type in ["infrastructure", "terraform", "helm", "kubernetes", "k8s", "waf", "azure"]:
             infra_task = Task(
@@ -100,13 +120,16 @@ class OrchestratorAgent(BaseAgent):
         
         # Create integration tasks (if needed)
         if objective_type in ["integration", "quickbooks", "qbo", "odoo", "stripe", "oauth", "webhook"]:
+            # Add research dependency if research task exists
+            dependencies = [t.id for t in tasks if t.agent_type in [AgentType.INFRASTRUCTURE, AgentType.RESEARCHER]]
+            
             integration_task = Task(
                 id=f"task_{start_counter:04d}_integration",
                 title=f"Integration: {objective}",
                 description=f"Implement integration for: {objective}\n\nContext: {context}",
                 agent_type=AgentType.INTEGRATION,
                 tech_stack=tech_stack,
-                dependencies=[t.id for t in tasks if t.agent_type == AgentType.INFRASTRUCTURE],
+                dependencies=dependencies,
                 metadata={
                     "objective": objective,
                     "integration_type": self._detect_integration_type(objective_lower),
@@ -118,13 +141,16 @@ class OrchestratorAgent(BaseAgent):
         
         # Create workflow tasks (if needed)
         if objective_type in ["workflow", "temporal", "backfill", "sync"]:
+            # Add research dependency if research task exists
+            dependencies = [t.id for t in tasks if t.agent_type in [AgentType.INTEGRATION, AgentType.RESEARCHER]]
+            
             workflow_task = Task(
                 id=f"task_{start_counter:04d}_workflow",
                 title=f"Workflow: {objective}",
                 description=f"Create Temporal workflow for: {objective}\n\nContext: {context}",
                 agent_type=AgentType.WORKFLOW,
                 tech_stack=tech_stack,
-                dependencies=[t.id for t in tasks if t.agent_type == AgentType.INTEGRATION],
+                dependencies=dependencies,
                 metadata={
                     "objective": objective,
                     "workflow_type": objective_type,
@@ -258,6 +284,46 @@ class OrchestratorAgent(BaseAgent):
             return "webhook"
         return "generic"
 
+    def _needs_research(self, objective: str, objective_type: str, tech_stack: List[str], context: str) -> bool:
+        """
+        Smart detection: Determine if research is needed for this objective.
+        
+        Args:
+            objective: The objective string
+            objective_type: Detected objective type
+            tech_stack: Detected tech stack
+            context: Project context
+            
+        Returns:
+            True if research is needed, False otherwise
+        """
+        # Keywords that indicate research is needed
+        research_keywords = [
+            'latest', 'best practices', 'how to', 'explore', 'find', 'discover',
+            'research', 'investigate', 'learn about', 'compare', 'evaluate',
+            'new', 'emerging', 'trends', 'state of the art'
+        ]
+        
+        # Check for research keywords
+        if any(keyword in objective for keyword in research_keywords):
+            return True
+        
+        # Unknown or uncommon tech stack - needs research
+        known_tech = {'python', 'fastapi', 'nextjs', 'react', 'typescript', 'javascript',
+                     'terraform', 'helm', 'kubernetes', 'temporal', 'quickbooks', 'odoo', 'stripe'}
+        
+        unknown_tech = [tech for tech in tech_stack if tech.lower() not in known_tech]
+        if unknown_tech:
+            self.logger.info(f"Unknown tech detected: {unknown_tech} - research needed")
+            return True
+        
+        # Complex objectives that might benefit from research
+        if len(objective.split()) > 10:  # Long, complex objective
+            return True
+        
+        # Otherwise, no research needed (we have templates and knowledge)
+        return False
+    
     def _estimate_complexity(self, objective: str) -> str:
         """
         Estimate the complexity of an objective.

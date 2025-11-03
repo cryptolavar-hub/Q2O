@@ -1,6 +1,6 @@
 """
 Multi-Agent Development System
-Provides agents for orchestrating, coding, testing, QA, infrastructure, integration, frontend, workflow, and security.
+Provides agents for orchestrating, coding, testing, QA, infrastructure, integration, frontend, workflow, security, and research.
 """
 
 from agents.base_agent import BaseAgent, AgentType, Task, TaskStatus
@@ -13,6 +13,7 @@ from agents.integration_agent import IntegrationAgent
 from agents.frontend_agent import FrontendAgent
 from agents.workflow_agent import WorkflowAgent
 from agents.security_agent import SecurityAgent
+from agents.researcher_agent import ResearcherAgent
 
 # Optional NodeAgent import
 try:
@@ -34,6 +35,7 @@ __all__ = [
     'FrontendAgent',
     'WorkflowAgent',
     'SecurityAgent',
+    'ResearcherAgent',
 ]
 
 # Conditionally add NodeAgent to exports
