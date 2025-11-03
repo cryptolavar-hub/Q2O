@@ -1,10 +1,10 @@
 # Multi-Agent Development System
 
-A sophisticated multi-agent system for managing software development projects. The system consists of 10 specialized agents that work together to break down, implement, test, and quality-assure development tasks.
+A sophisticated multi-agent system for managing software development projects. The system consists of 11 specialized agents that work together to break down, implement, test, quality-assure, and research development tasks.
 
 ## Architecture
 
-### 10 Specialized Agents
+### 11 Specialized Agents
 
 1. **Orchestrator Agent** (`OrchestratorAgent`)
    - Breaks down projects into manageable tasks
@@ -77,7 +77,23 @@ A sophisticated multi-agent system for managing software development projects. T
    - Generates .env.example files for environment variables
    - Provides security recommendations and fixes
 
-10. **Node.js Agent** (`NodeAgent`)
+10. **Researcher Agent** (`ResearcherAgent`) ⭐ NEW
+   - Conducts automated web research for project objectives
+   - Multi-provider search (Google Custom Search, Bing, DuckDuckGo with automatic fallback)
+   - Smart detection of when research is needed (unknown tech, "latest" keywords, complex objectives)
+   - 90-day knowledge caching across all projects (~/.quickodoo/research_cache/)
+   - Adaptive research depth (quick, deep, comprehensive, adaptive)
+   - Code example extraction from documentation
+   - Official documentation discovery and prioritization
+   - Quality validation with confidence scoring (0-100)
+   - Web scraping capabilities (Level 1-2: search + documentation)
+   - Handles research requests from other agents via message broker
+   - Parallel execution (independent tasks run during research)
+   - Rate limiting protection (configurable daily limits per provider)
+   - Outputs: JSON (for agents) + Markdown (for humans) saved to research/ directory
+   - Integration with all agents via `request_research()` method
+
+11. **Node.js Agent** (`NodeAgent`)
     - Generates Node.js/Express.js applications
     - Creates TypeScript-based Node.js projects
     - Supports Node.js 20.x LTS (latest stable)
