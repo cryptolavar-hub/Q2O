@@ -298,6 +298,13 @@ class ResearcherAgent(BaseAgent):
         
         # Track research requests
         self.research_requests: Dict[str, Dict] = {}
+        
+        # Subscribe to research channel for agent requests
+        if hasattr(self, 'message_broker') and self.message_broker:
+            def research_request_handler(msg):
+                self._handle_research_request_message(msg)
+            self.message_broker.subscribe("research", research_request_handler)
+            self.logger.info("ResearcherAgent subscribed to research channel")
     
     def process_task(self, task: Task) -> Task:
         """
@@ -870,6 +877,9 @@ class ResearcherAgent(BaseAgent):
         cached = self.cache.get(query)
         if cached:
             self.logger.info(f"Returning cached research to {requesting_agent_id}")
+            # Send cached results back to requesting agent
+            if hasattr(self, 'share_result'):
+                self.share_result("research_results", cached, target_agent_id=requesting_agent_id)
             return cached
         
         # If not cached and urgency is high, conduct research immediately
@@ -889,12 +899,40 @@ class ResearcherAgent(BaseAgent):
             
             # Process immediately
             self.process_task(research_task)
+            
+            # Send results back to requesting agent
+            if hasattr(self, 'share_result'):
+                self.share_result("research_results", research_task.result, target_agent_id=requesting_agent_id)
+            
             return research_task.result
         
         # Otherwise, queue for orchestrator
+        self.logger.info(f"Research request queued for orchestrator: {query}")
         return None
-
-
-# Update AgentType enum in base_agent.py
-# This would need to be added to the AgentType enum
+    
+    def _handle_research_request_message(self, message: Dict[str, Any]):
+        """
+        Handle incoming research request message from other agents.
+        
+        Args:
+            message: Message from message broker
+        """
+        try:
+            payload = message.get("payload", message)
+            
+            # Extract request details
+            query = payload.get("query")
+            requesting_agent = payload.get("requesting_agent")
+            urgency = payload.get("urgency", "normal")
+            
+            if not query:
+                self.logger.warning("Research request missing query")
+                return
+            
+            # Process request
+            self.logger.info(f"Processing research request from {requesting_agent}: {query}")
+            self.handle_research_request(requesting_agent, query, urgency)
+            
+        except Exception as e:
+            self.logger.error(f"Error handling research request message: {e}", exc_info=True)
 

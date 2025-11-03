@@ -107,6 +107,45 @@ class MessagingMixin:
         self.send_message(message)
         logger.info(f"Requested help for task {task_id}: {help_type}")
     
+    def request_research(self, query: str, task_id: str = None, urgency: str = "normal", depth: str = "adaptive"):
+        """
+        Request research from ResearcherAgent.
+        
+        Convenience method for agents to request web research during task execution.
+        
+        Args:
+            query: Research query (e.g., "FastAPI OAuth best practices")
+            task_id: ID of the requesting task (optional)
+            urgency: Urgency level - "low", "normal", "high" (default: "normal")
+            depth: Research depth - "quick", "deep", "comprehensive", "adaptive" (default: "adaptive")
+        
+        Example:
+            # In your agent's process_task method:
+            if self.needs_external_info:
+                self.request_research(
+                    query="JWT validation best practices Python",
+                    task_id=task.id,
+                    urgency="high"
+                )
+        """
+        message = AgentMessage(
+            message_type=MessageType.REQUEST_HELP,  # Reuse REQUEST_HELP for research
+            sender_agent_id=self.agent_id,
+            sender_agent_type=self.agent_type.value,
+            target_agent_type="researcher",  # Target ResearcherAgent
+            channel="research",  # Research-specific channel
+            payload={
+                "help_type": "research",
+                "query": query,
+                "task_id": task_id or "adhoc",
+                "urgency": urgency,
+                "depth": depth,
+                "requesting_agent": self.agent_id
+            }
+        )
+        self.send_message(message)
+        logger.info(f"Requested research from {self.agent_id}: {query} (urgency: {urgency})")
+    
     def share_result(self, result_type: str, data: Any, target_agent_id: Optional[str] = None):
         """Share a result with other agents."""
         message = create_share_result_message(
