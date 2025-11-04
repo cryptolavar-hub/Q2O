@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 @workflow.defn
 class BackfillWorkflow:
     """
-    Workflow for syncing entities from QuickBooks to Odoo
+    Workflow for syncing entities from source accounting platform to Odoo
+    Supports: QuickBooks, SAGE, Wave, Expensify, and more
     """
     
     @workflow.run

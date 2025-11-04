@@ -25,8 +25,8 @@ def test_small():
     
     # Run small test
     results = system.run_project(
-        project_description="QuickBooks to Odoo - Small Test",
-        objectives=["QuickBooks OAuth authentication"]
+        project_description="Multi-Platform to Odoo Migration - Small Test",
+        objectives=["QuickBooks OAuth authentication (example platform)"]
     )
     
     # Print results

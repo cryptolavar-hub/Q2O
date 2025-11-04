@@ -1,7 +1,8 @@
 {
-  "project_description": "QuickBooks to Odoo Online - Small Test",
+  "project_description": "Multi-Platform to Odoo v18 - Small Test",
+  "platforms": ["QuickBooks"],
   "objectives": [
-    "QuickBooks OAuth authentication"
+    "QuickBooks OAuth authentication (example platform)"
   ]
 }
 

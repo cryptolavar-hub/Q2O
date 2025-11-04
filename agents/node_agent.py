@@ -120,7 +120,7 @@ class NodeAgent(BaseAgent):
             package_data = {
                 "name": "q2o-nodejs-project",
                 "version": "1.0.0",
-                "description": "QuickBooks to Odoo Node.js integration",
+                "description": "Multi-Platform to Odoo Node.js integration",
                 "main": "src/index.js",
                 "type": "module",  # ESM modules
                 "engines": {
@@ -197,7 +197,7 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/api', (req, res) => {
-  res.json({ message: 'QuickBooks to Odoo API', version: '1.0.0' });
+  res.json({ message: 'Multi-Platform to Odoo Migration API', version: '1.0.0' });
 });
 
 // Error handling

@@ -1,7 +1,8 @@
 {
-    "project_description": "QuickBooks to Odoo Online Integration SaaS",
+    "project_description": "Multi-Platform to Odoo v18 Migration SaaS",
+    "platforms": ["QuickBooks", "SAGE", "Wave"],
     "objectives": [
-      "OAuth authentication with QuickBooks",
+      "OAuth authentication with multiple platforms (QuickBooks, SAGE)",
       "Odoo v18 integration",
       "Stripe billing setup",
       "Terraform infrastructure",

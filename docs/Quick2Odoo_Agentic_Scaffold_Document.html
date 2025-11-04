@@ -292,9 +292,9 @@
         <header>
             <h1>Quick2Odoo Agentic Scaffold</h1>
             <p>Complete Documentation & User Guide</p>
-            <p style="font-size: 0.9em; margin-top: 0.5rem;">Multi-Agent Development System for QuickBooks to Odoo Integration</p>
+            <p style="font-size: 0.9em; margin-top: 0.5rem;">Multi-Agent Development System for Multi-Platform to Odoo v18 Migration</p>
             <p style="font-size: 0.8em; margin-top: 0.5rem; opacity: 0.8;">Version 2.0 | Last Updated: November 2025</p>
-            <p style="font-size: 0.75em; margin-top: 0.3rem; opacity: 0.7;">✨ Now with ResearcherAgent & Multi-Platform Support</p>
+            <p style="font-size: 0.75em; margin-top: 0.3rem; opacity: 0.7;">✨ Now with ResearcherAgent & Multi-Platform Support (QuickBooks, SAGE, Wave, Expensify, doola, Dext)</p>
         </header>
         
         <nav>
@@ -318,7 +318,7 @@
             <section id="overview">
                 <h2>Project Overview</h2>
                 <p>
-                    The <strong>Quick2Odoo Agentic Scaffold</strong> is a sophisticated multi-agent development system designed to automate the creation of a complete SaaS application for migrating data from QuickBooks to Odoo v18. This system leverages specialized AI agents that work collaboratively to generate, test, and quality-assure production-ready code across multiple technology stacks.
+                    The <strong>Quick2Odoo Agentic Scaffold</strong> is a sophisticated multi-agent development system designed to automate the creation of complete SaaS applications for migrating data from <strong>any accounting platform</strong> to Odoo v18. Supporting QuickBooks, SAGE, Wave, Expensify, doola, Dext, and more, this system leverages specialized AI agents that work collaboratively to generate, test, and quality-assure production-ready code across multiple technology stacks with an extensible architecture for unlimited platform integrations.
                 </p>
                 <p>
                     The system is built to handle complex enterprise requirements including multi-tenant SaaS architecture, OAuth integrations, real-time data synchronization, workflow orchestration, infrastructure as code, and comprehensive security implementations.
@@ -347,7 +347,7 @@
             <section id="objectives">
                 <h2>Project Objectives</h2>
                 <p>
-                    The primary objective of this system is to automate the development of a complete QuickBooks to Odoo migration SaaS platform. The generated application should:
+                    The primary objective of this system is to automate the development of complete <strong>multi-platform to Odoo v18 migration</strong> SaaS applications. Supporting QuickBooks, SAGE, Wave, Expensify, and other accounting platforms, the generated applications should:
                 </p>
                 
                 <h3>Core Objectives</h3>
@@ -361,11 +361,12 @@
                         </ul>
                     </li>
                     <li>
-                        <strong>QuickBooks Integration</strong>
+                        <strong>Multi-Platform Integrations</strong>
                         <ul>
-                            <li>OAuth 2.0 authentication with QuickBooks Online</li>
+                            <li>OAuth 2.0 authentication for multiple platforms (QuickBooks, SAGE, Wave, etc.)</li>
                             <li>Support for QuickBooks Desktop via Web Connector</li>
-                            <li>Data synchronization and backfill capabilities</li>
+                            <li>Platform-specific API clients and data synchronization</li>
+                            <li>Extensible architecture for adding new accounting platforms</li>
                         </ul>
                     </li>
                     <li>
@@ -1448,16 +1449,17 @@ broker = get_message_broker(broker_type="redis", redis_url="redis://localhost:63
                 
                 <h4>Basic Usage</h4>
                 <pre><code># Run with command-line arguments
-python main.py --project "QuickBooks to Odoo Integration" \
-               --objective "User authentication" \
+python main.py --project "Multi-Platform to Odoo Migration" \
+               --objective "Multi-platform OAuth authentication" \
                --objective "Data synchronization"</code></pre>
                 
                 <h4>Using Configuration File</h4>
                 <p>Create a JSON configuration file:</p>
                 <pre><code>{
-  "project_description": "QuickBooks to Odoo Online Integration SaaS",
+  "project_description": "Multi-Platform to Odoo v18 Migration SaaS",
+  "platforms": ["QuickBooks", "SAGE", "Wave"],
   "objectives": [
-    "OAuth authentication with QuickBooks",
+    "OAuth authentication with multiple platforms",
     "Odoo v18 integration",
     "Stripe billing setup",
     "Terraform infrastructure",
@@ -1519,9 +1521,9 @@ system = AgentSystem(workspace_path="./my_workspace")
 
 # Run a project
 results = system.run_project(
-    project_description="QuickBooks to Odoo Integration",
+    project_description="Multi-Platform to Odoo Migration",
     objectives=[
-        "OAuth authentication",
+        "Multi-platform OAuth authentication",
         "Data synchronization",
         "Frontend dashboard"
     ]

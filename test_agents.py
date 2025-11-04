@@ -156,7 +156,7 @@ def test_orchestrator_breakdown():
     
     print(f"\nBreaking down {len(test_objectives)} objectives...")
     tasks = orchestrator.break_down_project(
-        project_description="QuickBooks to Odoo migration SaaS",
+        project_description="Multi-Platform to Odoo migration SaaS",
         objectives=test_objectives
     )
     
@@ -209,9 +209,9 @@ def test_full_system_small():
     print("Objectives: QuickBooks OAuth, Odoo connection, Mappings UI")
     
     results = system.run_project(
-        project_description="QuickBooks to Odoo integration test",
+        project_description="Multi-Platform to Odoo integration test",
         objectives=[
-            "QuickBooks Online OAuth",
+            "Multi-platform OAuth (QuickBooks example)",
             "Odoo connection save",
             "Mappings search UI"
         ]

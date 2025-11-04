@@ -1,7 +1,8 @@
 {
-  "project_description": "QuickBooks to Odoo Online Integration - Test Project",
+  "project_description": "Multi-Platform to Odoo v18 Migration - Test Project",
+  "platforms": ["QuickBooks", "SAGE"],
   "objectives": [
-    "QuickBooks OAuth authentication",
+    "Multi-platform OAuth authentication (QuickBooks, SAGE)",
     "Odoo v18 JSON-RPC client",
     "Onboarding wizard UI",
     "Temporal backfill workflow",
