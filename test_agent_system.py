@@ -79,7 +79,8 @@ def test_all_features():
     
     results = system.run_project(
         project_description=config["project_description"],
-        objectives=config["objectives"]
+        objectives=config["objectives"],
+        platforms=config.get("platforms", [])
     )
     
     system.print_results(results)

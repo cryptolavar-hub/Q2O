@@ -9,7 +9,7 @@ import sys
 import os
 import json
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from agents import (
     OrchestratorAgent,
@@ -233,13 +233,14 @@ class AgentSystem:
         except Exception as e:
             self.logger.warning(f"VCS integration failed (optional feature): {e}")
 
-    def run_project(self, project_description: str, objectives: List[str]) -> Dict[str, Any]:
+    def run_project(self, project_description: str, objectives: List[str], platforms: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Run a complete project with all agents.
         
         Args:
             project_description: High-level project description
             objectives: List of objectives/features to implement
+            platforms: Optional list of target platforms (e.g., ["QuickBooks", "SAGE", "Wave"])
             
         Returns:
             Dictionary with project results
@@ -247,6 +248,8 @@ class AgentSystem:
         self.logger.info("=" * 80)
         self.logger.info("Starting Multi-Agent Development Project")
         self.logger.info(f"Project: {project_description}")
+        if platforms:
+            self.logger.info(f"Target Platforms: {', '.join(platforms)}")
         self.logger.info(f"Objectives: {len(objectives)}")
         self.logger.info("=" * 80)
         
@@ -256,6 +259,11 @@ class AgentSystem:
             import asyncio
             
             event_manager = get_event_manager()
+            project_data = {
+                "description": project_description,
+                "objectives": objectives,
+                "platforms": platforms or []
+            }
             asyncio.create_task(event_manager.emit_project_start(project_description, objectives))
         except Exception:
             pass  # Dashboard optional
@@ -348,6 +356,7 @@ class AgentSystem:
         results = {
             "project_description": project_description,
             "objectives": objectives,
+            "platforms": platforms or [],
             "final_status": final_status,
             "tasks": {
                 task.id: {
@@ -501,9 +510,11 @@ Examples:
             config = json.load(f)
         project_description = config.get("project_description", "")
         objectives = config.get("objectives", [])
+        platforms = config.get("platforms", [])
     elif args.project and args.objectives:
         project_description = args.project
         objectives = args.objectives
+        platforms = []  # No platforms specified via command line
     else:
         # Interactive mode or example
         print("Multi-Agent Development System")
@@ -524,6 +535,8 @@ Examples:
                 objectives.append(obj)
         else:
             objectives = args.objectives
+        
+        platforms = []  # No platforms in interactive mode
     
     if not project_description or not objectives:
         print("Error: Project description and at least one objective are required")
@@ -531,7 +544,7 @@ Examples:
     
     # Initialize and run the system
     system = AgentSystem(workspace_path=args.workspace)
-    results = system.run_project(project_description, objectives)
+    results = system.run_project(project_description, objectives, platforms)
     
     # Print results
     system.print_results(results)
