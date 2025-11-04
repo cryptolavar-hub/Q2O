@@ -21,16 +21,24 @@ python main.py --config config_example.json --workspace ./my_project
 
 ### **Core Documentation**
 - **[Complete HTML Documentation](docs/Quick2Odoo_Agentic_Scaffold_Document.html)** - Full user guide with 11 agents, ResearcherAgent, web search, template system, ProjectLayout, latest features (Updated Nov 2025)
-- **[Agent System Overview](README_AGENTS.md)** - Detailed architecture for all 11 agents including ResearcherAgent
-- **[Testing Guide](TESTING_GUIDE.md)** - How to test the system with pytest-cov and coverage reporting
-- **[Implementation Roadmap](IMPLEMENTATION_ROADMAP_COMPLETE.md)** - Complete development roadmap with Phase 1-3 done, Phase 4-5 multi-platform expansion planned
+- **[Agent System Overview](docs/md_docs/README_AGENTS.md)** - Detailed architecture for all 11 agents including ResearcherAgent
+- **[Testing Guide](docs/md_docs/TESTING_GUIDE.md)** - How to test the system with pytest-cov and coverage reporting
+- **[Implementation Roadmap](docs/md_docs/IMPLEMENTATION_ROADMAP_COMPLETE.md)** - Complete development roadmap with Phase 1-3 done, Phase 4-5 multi-platform expansion planned
 
 ### **Specialized Guides**
-- **[ResearcherAgent Guide](RESEARCHER_AGENT_GUIDE.md)** - Web research capability, multi-provider search, caching
-- **[Agent Communication Guide](AGENT_RESEARCH_COMMUNICATION.md)** - How agents request research from each other
-- **[Usage Guide](USAGE_GUIDE.md)** - Comprehensive usage examples and best practices
-- **[Deployment Checklist](DEPLOYMENT_CHECKLIST.md)** - Production deployment guide
-- **[VCS Integration Guide](VCS_INTEGRATION_GUIDE.md)** - Git and GitHub automation setup
+- **[ResearcherAgent Guide](docs/md_docs/RESEARCHER_AGENT_GUIDE.md)** - Web research capability, multi-provider search, caching
+- **[Agent Communication Guide](docs/md_docs/AGENT_RESEARCH_COMMUNICATION.md)** - How agents request research from each other
+- **[Usage Guide](docs/md_docs/USAGE_GUIDE.md)** - Comprehensive usage examples and best practices
+- **[Deployment Checklist](docs/md_docs/DEPLOYMENT_CHECKLIST.md)** - Production deployment guide
+- **[VCS Integration Guide](docs/md_docs/VCS_INTEGRATION_GUIDE.md)** - Git and GitHub automation setup
+
+### **Additional Documentation**
+📂 **[View All Documentation](docs/md_docs/)** - Complete collection of 58 markdown documents including:
+- Codebase reviews and verification reports
+- Implementation summaries and progress reports
+- Feature roadmaps and status updates
+- Session summaries and completion reports
+- GitHub sync instructions and guides
 
 ## ✨ Features
 
