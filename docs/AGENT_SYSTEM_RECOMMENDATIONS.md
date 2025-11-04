@@ -1,13 +1,13 @@
 # Multi-Agent System Recommendations
-## Based on QuickBooks 2 Odoo Online Features Document
+## Case Study: QuickBooks to Odoo Migration (Example Platform)
 
-After analyzing the "Quickbook 2 Odoo online -- Features.pdf" document, here are my recommendations for enhancing the multi-agent system to effectively handle this specific project.
+After analyzing the "Quickbook 2 Odoo online -- Features.pdf" document, here are recommendations for enhancing the multi-agent system to effectively handle platform-to-Odoo migrations. **This document uses QuickBooks as an example**, but the same principles apply to SAGE, Wave, Expensify, and other accounting platforms.
 
 ## Executive Summary
 
 The document outlines a **complex enterprise SaaS application** with 14 major feature areas involving:
 - Multiple technology stacks (Python API, Next.js frontend, Kubernetes, Terraform)
-- External integrations (QuickBooks, Odoo, Stripe, Azure, Temporal)
+- External integrations (Source platforms like QuickBooks/SAGE/Wave, Odoo, Stripe, Azure, Temporal)
 - Infrastructure as Code (Terraform, Helm)
 - Security & Compliance requirements
 - Real-time features (SSE)
@@ -33,7 +33,7 @@ The current agent system is generic and needs specialization for this project.
 **Why Needed**: The project requires extensive infrastructure work (features 1, 11, 12) that doesn't fit into generic code generation.
 
 #### B. **Integration Agent** (`IntegrationAgent`)
-- **Purpose**: Handle external API integrations (QuickBooks, Odoo, Stripe)
+- **Purpose**: Handle external API integrations (Source platforms: QuickBooks, SAGE, Wave, etc. + Odoo + Stripe)
 - **Capabilities**:
   - Generate API client code for external services
   - Create OAuth/authentication flows
@@ -81,7 +81,7 @@ The current agent system is generic and needs specialization for this project.
 ### 2. **Enhance Orchestrator Agent**
 
 #### A. **Domain-Specific Task Breakdown**
-The orchestrator should understand QuickBooks-to-Odoo domain concepts:
+The orchestrator should understand multi-platform-to-Odoo domain concepts (example: QuickBooks):
 - Recognize integration patterns (OAuth, webhooks, data sync)
 - Understand infrastructure requirements (K8s, Terraform, Azure)
 - Identify frontend vs backend vs infrastructure tasks
@@ -139,8 +139,8 @@ project/
 ```
 
 #### C. **Integration Patterns**
-Generate code following specific patterns:
-- QuickBooks OAuth flow
+Generate code following platform-specific patterns:
+- Platform OAuth flows (QuickBooks, SAGE, Wave, etc.)
 - Odoo JSON-RPC client
 - Stripe webhook handling
 - Temporal workflow patterns

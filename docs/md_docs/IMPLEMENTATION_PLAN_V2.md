@@ -844,9 +844,9 @@ python -m pytest tests/test_sage_integration.py -v
 
 ## 🎓 **Lessons Learned & Best Practices**
 
-### **From QuickBooks Integration**:
+### **From Multi-Platform Integrations** (QuickBooks, SAGE, Wave):
 
-1. **OAuth is complex** - Dedicate time to get it right
+1. **OAuth is complex** - Dedicate time to get it right (varies by platform)
 2. **Rate limiting matters** - Implement from day one
 3. **Data mapping is tricky** - Document every field
 4. **Test with real data** - Sandbox isn't always accurate
@@ -868,7 +868,7 @@ python -m pytest tests/test_sage_integration.py -v
 - **Architecture**: See `IMPLEMENTATION_ROADMAP_COMPLETE.md`
 - **Research**: Use ResearcherAgent (automated!)
 - **Templates**: See `templates/integration/` directory
-- **Examples**: See existing QuickBooks integration
+- **Examples**: See existing integrations (QuickBooks, SAGE, Wave, etc.)
 
 ### **Getting Help**:
 - GitHub Issues: https://github.com/cryptolavar-hub/Q2O/issues

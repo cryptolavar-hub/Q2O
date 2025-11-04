@@ -1,8 +1,8 @@
-# Quick2Odoo - Multi-Agent Development System
+# Quick2Odoo - Multi-Platform Odoo Migration System
 
-**QuickBooks to Odoo Integration SaaS Platform Generator**
+**AI-Powered Multi-Platform to Odoo v18 Migration SaaS Generator**
 
-A sophisticated multi-agent development system designed to automate the creation of a complete SaaS application for migrating data from QuickBooks to Odoo v18.
+A sophisticated multi-agent development system that automates the creation of complete, production-ready SaaS applications for migrating data from **any accounting platform** to Odoo v18. Supports QuickBooks, SAGE, Wave, Expensify, doola, Dext, and more with an extensible architecture for unlimited platform integrations.
 
 ## 🚀 Quick Start
 
@@ -11,7 +11,7 @@ A sophisticated multi-agent development system designed to automate the creation
 pip install -r requirements.txt
 
 # Run with command-line arguments
-python main.py --project "QuickBooks to Odoo Integration" --objective "OAuth authentication"
+python main.py --project "Multi-Platform Odoo Migration" --objective "OAuth authentication"
 
 # Or use a configuration file
 python main.py --config config_example.json --workspace ./my_project
@@ -39,6 +39,26 @@ python main.py --config config_example.json --workspace ./my_project
 - Feature roadmaps and status updates
 - Session summaries and completion reports
 - GitHub sync instructions and guides
+
+## 🌐 Multi-Platform Support
+
+**Migrate from ANY accounting platform to Odoo v18!**
+
+### **Currently Supported Platforms:**
+- 💼 **QuickBooks** (Online & Desktop via WebConnector)
+- 📊 **SAGE** (50, 100, 200, X3)
+- 🌊 **Wave** Accounting
+- 💳 **Expensify**
+- 🏢 **doola** 
+- 📄 **Dext** (formerly Receipt Bank)
+
+### **Extensible Architecture:**
+Our multi-agent system automatically adapts to new platforms. Simply add platform-specific OAuth flows and API mappings - the agents handle code generation, testing, security, and deployment automatically!
+
+### **Coming Soon:**
+Xero, FreshBooks, Zoho Books, NetSuite, and more enterprise platforms.
+
+---
 
 ## ✨ Features
 
@@ -137,11 +157,12 @@ Create a JSON file:
 
 ```json
 {
-  "project_description": "QuickBooks to Odoo Integration SaaS",
+  "project_description": "Multi-Platform to Odoo Migration SaaS",
+  "platforms": ["QuickBooks", "SAGE", "Wave", "Expensify"],
   "objectives": [
-    "OAuth authentication",
-    "Data synchronization",
-    "Frontend dashboard"
+    "OAuth authentication for multiple platforms",
+    "Cross-platform data synchronization",
+    "Unified frontend dashboard"
   ]
 }
 ```
@@ -153,7 +174,7 @@ python main.py --config config.json --workspace ./my_project
 
 ## 🤝 Contributing
 
-This project is part of the QuickBooks to Odoo migration initiative.
+This project is part of the **Quick2Odoo** initiative - enabling seamless migration from any accounting platform to Odoo v18. We support QuickBooks, SAGE, Wave, Expensify, doola, Dext, and continuously expand to new platforms.
 
 ## 📄 License
 

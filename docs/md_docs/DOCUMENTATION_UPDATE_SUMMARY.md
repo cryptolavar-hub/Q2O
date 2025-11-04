@@ -293,9 +293,9 @@ class AccountingPlatformAdapter(ABC):
 - Timeline: 1-2 weeks for experienced developer
 
 #### **Lessons Learned & Best Practices**:
-- From QuickBooks integration
-- For future platforms
-- ResearcherAgent usage tips
+- From multi-platform integrations (QuickBooks, SAGE, Wave)
+- For expanding to new platforms
+- ResearcherAgent usage tips for platform research
 
 ---
 

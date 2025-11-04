@@ -56,9 +56,9 @@ Or manually:
 
 ```bash
 python main.py \
-  --project "QuickBooks to Odoo Test" \
-  --objective "QuickBooks OAuth" \
-  --objective "Odoo client" \
+  --project "Multi-Platform Odoo Migration Test" \
+  --objective "Multi-platform OAuth (QuickBooks, SAGE)" \
+  --objective "Odoo v18 client" \
   --workspace ./test_workspace
 ```
 

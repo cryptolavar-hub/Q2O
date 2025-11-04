@@ -304,7 +304,8 @@ python main.py \
 ```
 ================================================================================
 Starting Multi-Agent Development Project
-Project: QuickBooks to Odoo Online Integration - Test Project
+Project: Multi-Platform to Odoo v18 Migration - Test Project
+Platforms: QuickBooks, SAGE, Wave
 Objectives: 5
 ================================================================================
 2024-01-01 10:00:00 - orchestrator.orchestrator_main - INFO - Breaking down project: ...

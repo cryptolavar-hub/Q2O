@@ -50,7 +50,7 @@ That's it! The system will generate your code automatically.
 ```bash
 # Single objective
 python main.py \
-  --project "QuickBooks Integration" \
+  --project "Multi-Platform Odoo Migration" \
   --objective "OAuth authentication" \
   --workspace ./my_project
 
@@ -68,9 +68,10 @@ python main.py \
 Create `config.json`:
 ```json
 {
-  "project_description": "QuickBooks to Odoo Integration",
+  "project_description": "Multi-Platform to Odoo Migration",
+  "platforms": ["QuickBooks", "SAGE", "Wave"],
   "objectives": [
-    "OAuth authentication with QuickBooks",
+    "OAuth authentication for multiple platforms",
     "Odoo v18 integration",
     "Data synchronization workflow",
     "Next.js frontend dashboard"
@@ -311,7 +312,9 @@ Common variables available in templates:
 
 ### **Required Variables**
 
-#### **QuickBooks Integration**
+#### **Platform Integrations**
+
+**QuickBooks:**
 ```bash
 QBO_CLIENT_ID=your_client_id
 QBO_CLIENT_SECRET=your_client_secret
@@ -463,9 +466,9 @@ cat .coverage_reports/coverage.json
 
 ```bash
 python main.py \
-  --project "QuickBooks Integration" \
-  --objective "OAuth authentication with QuickBooks" \
-  --workspace ./qbo_project
+  --project "Multi-Platform Odoo Migration" \
+  --objective "OAuth authentication for QuickBooks and SAGE" \
+  --workspace ./migration_project
 ```
 
 **Generated Files**:
