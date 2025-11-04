@@ -115,13 +115,16 @@ class EventManager:
         self.system_metrics.update(metrics)
         await self.broadcast("metric_update", self.system_metrics)
     
-    async def emit_project_start(self, project_description: str, objectives: List[str]):
+    async def emit_project_start(self, project_description: str, objectives: List[str], platforms: List[str] = None):
         """Emit project start event."""
-        await self.broadcast("project_start", {
+        event_data = {
             "project_description": project_description,
             "objectives": objectives,
             "started_at": datetime.now().isoformat()
-        })
+        }
+        if platforms:
+            event_data["platforms"] = platforms
+        await self.broadcast("project_start", event_data)
     
     async def emit_project_complete(self, results: Dict[str, Any]):
         """Emit project completion event."""

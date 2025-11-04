@@ -259,12 +259,11 @@ class AgentSystem:
             import asyncio
             
             event_manager = get_event_manager()
-            project_data = {
-                "description": project_description,
-                "objectives": objectives,
-                "platforms": platforms or []
-            }
-            asyncio.create_task(event_manager.emit_project_start(project_description, objectives))
+            asyncio.create_task(event_manager.emit_project_start(
+                project_description, 
+                objectives, 
+                platforms or []
+            ))
         except Exception:
             pass  # Dashboard optional
         
