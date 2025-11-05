@@ -365,17 +365,23 @@ Proprietary - QuickOdoo Project
 
 ---
 
-## ✨ Future Enhancements
+## ✨ Features & Roadmap
 
-### **Planned Features**
-- [ ] Push notifications for project events
-- [ ] Dark mode support
-- [ ] Offline mode with queue
-- [ ] Project history view
-- [ ] Export reports to PDF
-- [ ] Biometric authentication
-- [ ] Multi-language support
-- [ ] Tablet-optimized layouts
+### **Implemented Features ✅**
+- [x] **Dark mode support** - Light, Dark, and Auto themes with system detection
+- [x] **Tablet-optimized layouts** - Responsive grids, drawer navigation, auto-scaling
+
+### **Planned Features 🚧**
+- [ ] Push notifications for project events (Week 3-4)
+- [ ] Project history view (Week 4)
+- [ ] Biometric authentication with Odoo JSON-RPC verification (Week 2-3)
+- [ ] Multi-language support (Week 4-5)
+- [ ] Export reports to PDF (Week 5-6)
+
+### **Not Planned ❌**
+- ❌ Offline mode with queue (Requires real-time connection)
+
+**[View Complete Roadmap →](FEATURE_ROADMAP.md)**
 
 ---
 

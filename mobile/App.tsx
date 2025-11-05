@@ -8,23 +8,55 @@
  * - Multi-platform support visualization
  * - Agent activity tracking
  * - Metrics and analytics
+ * - Dark mode support
+ * - Tablet-optimized layouts
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { Provider as PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar } from 'react-native';
+import { StatusBar, useColorScheme } from 'react-native';
 import MainNavigator from './src/navigation/MainNavigator';
 import { DashboardProvider } from './src/services/DashboardContext';
+import ThemeManager from './src/utils/ThemeManager';
+import { getTheme } from './src/utils/theme';
 
 const App = () => {
+  const systemColorScheme = useColorScheme();
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    // Initialize theme manager
+    ThemeManager.initialize().then(() => {
+      setIsDark(ThemeManager.isDarkMode());
+    });
+
+    // Listen to theme changes
+    const unsubscribe = ThemeManager.onThemeChange((mode, dark) => {
+      setIsDark(dark);
+    });
+
+    // Listen to system theme changes
+    const systemSub = ThemeManager.subscribeToSystemChanges();
+
+    return () => {
+      unsubscribe();
+      systemSub?.remove();
+    };
+  }, []);
+
+  const theme = getTheme(isDark);
+
   return (
     <SafeAreaProvider>
-      <PaperProvider>
+      <PaperProvider theme={theme}>
         <DashboardProvider>
-          <NavigationContainer>
-            <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+          <NavigationContainer theme={theme}>
+            <StatusBar
+              barStyle={isDark ? 'light-content' : 'dark-content'}
+              backgroundColor={theme.colors.surface}
+            />
             <MainNavigator />
           </NavigationContainer>
         </DashboardProvider>

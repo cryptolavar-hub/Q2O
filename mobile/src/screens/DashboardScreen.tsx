@@ -3,13 +3,14 @@
  * Real-time monitoring of projects, tasks, and agent activity
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   ScrollView,
   StyleSheet,
   RefreshControl,
   Alert,
+  Dimensions,
 } from 'react-native';
 import {
   Card,
@@ -22,15 +23,28 @@ import {
   Surface,
   Text,
   Badge,
+  useTheme,
 } from 'react-native-paper';
 import { useDashboard } from '../services/DashboardContext';
 import ConnectionStatus from '../components/ConnectionStatus';
 import TaskCard from '../components/TaskCard';
 import AgentActivityFeed from '../components/AgentActivityFeed';
+import ResponsiveLayout from '../utils/ResponsiveLayout';
 
 const DashboardScreen = ({ navigation }: any) => {
+  const theme = useTheme();
+  const [deviceInfo, setDeviceInfo] = useState(ResponsiveLayout.getDeviceInfo());
   const { state, refreshMetrics } = useDashboard();
   const [refreshing, setRefreshing] = React.useState(false);
+
+  useEffect(() => {
+    const updateLayout = () => {
+      setDeviceInfo(ResponsiveLayout.getDeviceInfo());
+    };
+
+    const subscription = Dimensions.addEventListener('change', updateLayout);
+    return () => subscription?.remove();
+  }, []);
 
   useEffect(() => {
     if (!state.connected) {
@@ -62,6 +76,8 @@ const DashboardScreen = ({ navigation }: any) => {
   };
 
   const stats = getTaskStatistics();
+
+  const styles = getResponsiveStyles(deviceInfo, theme);
 
   return (
     <ScrollView
@@ -222,15 +238,20 @@ const DashboardScreen = ({ navigation }: any) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  card: {
-    margin: 16,
-    marginBottom: 8,
-  },
+const getResponsiveStyles = (deviceInfo: any, theme: any) => {
+  const columns = ResponsiveLayout.getColumns();
+  const spacing = ResponsiveLayout.getSpacing();
+
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    card: {
+      margin: spacing * 2,
+      marginBottom: spacing,
+      width: deviceInfo.isTablet && columns === 2 ? '48%' : undefined,
+    },
   projectDesc: {
     marginVertical: 8,
     fontSize: 14,
@@ -303,11 +324,12 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  loadingContainer: {
-    padding: 32,
-    alignItems: 'center',
-  },
-});
+    loadingContainer: {
+      padding: spacing * 4,
+      alignItems: 'center',
+    },
+  });
+};
 
 export default DashboardScreen;
 

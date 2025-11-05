@@ -1,21 +1,64 @@
 /**
  * Metrics Screen - System Performance and Analytics
+ * Tablet-optimized with responsive grid
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
-import { Card, Title, Paragraph, Surface, Text } from 'react-native-paper';
+import { View, ScrollView, StyleSheet, RefreshControl, Dimensions } from 'react-native';
+import { Card, Title, Paragraph, Surface, Text, useTheme } from 'react-native-paper';
 import { useDashboard } from '../services/DashboardContext';
+import ResponsiveLayout from '../utils/ResponsiveLayout';
 
 const MetricsScreen = () => {
+  const theme = useTheme();
   const { state, refreshMetrics } = useDashboard();
   const [refreshing, setRefreshing] = useState(false);
+  const [deviceInfo, setDeviceInfo] = useState(ResponsiveLayout.getDeviceInfo());
+
+  useEffect(() => {
+    const updateLayout = () => {
+      setDeviceInfo(ResponsiveLayout.getDeviceInfo());
+    };
+
+    const subscription = Dimensions.addEventListener('change', updateLayout);
+    return () => subscription?.remove();
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await refreshMetrics();
     setRefreshing(false);
   };
+
+  const columns = ResponsiveLayout.getColumns();
+  const spacing = ResponsiveLayout.getSpacing();
+  const metricBoxWidth = deviceInfo.isTablet 
+    ? (columns === 3 ? '31%' : columns === 2 ? '48%' : '100%')
+    : '48%';
+
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.background },
+    card: { margin: spacing * 2 },
+    metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing * 2 },
+    metricBox: { 
+      width: metricBoxWidth, 
+      padding: spacing * 2, 
+      margin: '1%', 
+      borderRadius: 8, 
+      elevation: 2,
+      backgroundColor: theme.colors.surface,
+    },
+    metricValue: { 
+      fontSize: deviceInfo.isTablet ? 32 : 28, 
+      fontWeight: 'bold', 
+      color: theme.colors.primary,
+    },
+    metricLabel: { 
+      fontSize: deviceInfo.isTablet ? 14 : 12, 
+      color: theme.colors.onSurfaceVariant, 
+      marginTop: 4,
+    },
+  });
 
   return (
     <ScrollView
@@ -56,15 +99,6 @@ const MetricsScreen = () => {
     </ScrollView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  card: { margin: 16 },
-  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 16 },
-  metricBox: { width: '48%', padding: 16, margin: '1%', borderRadius: 8, elevation: 2 },
-  metricValue: { fontSize: 28, fontWeight: 'bold', color: '#2196F3' },
-  metricLabel: { fontSize: 12, color: '#666', marginTop: 4 },
-});
 
 export default MetricsScreen;
 
