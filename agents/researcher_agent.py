@@ -165,37 +165,63 @@ class WebSearcher:
         Returns:
             List of search results
         """
+        self.logger.info(f"Searching for: '{query}' (requesting {num_results} results)")
+        
         # Try Google first (if API key available and within limit)
-        if self.google_api_key and self.google_cx and self._check_rate_limit('google'):
-            try:
-                results = self._search_google(query, num_results)
-                if results:
-                    self._increment_count('google')
-                    return results
-            except Exception as e:
-                self.logger.warning(f"Google search failed: {e}")
+        if self.google_api_key and self.google_cx:
+            if self._check_rate_limit('google'):
+                try:
+                    self.logger.info("Attempting Google search...")
+                    results = self._search_google(query, num_results)
+                    if results:
+                        self._increment_count('google')
+                        self.logger.info(f"✓ Google returned {len(results)} results")
+                        return results
+                    else:
+                        self.logger.warning("Google returned 0 results")
+                except Exception as e:
+                    self.logger.warning(f"Google search failed: {e}")
+            else:
+                self.logger.info("Google rate limit reached, skipping")
+        else:
+            self.logger.info("Google API not configured, skipping")
         
         # Try Bing second (if API key available and within limit)
-        if self.bing_api_key and self._check_rate_limit('bing'):
-            try:
-                results = self._search_bing(query, num_results)
-                if results:
-                    self._increment_count('bing')
-                    return results
-            except Exception as e:
-                self.logger.warning(f"Bing search failed: {e}")
+        if self.bing_api_key:
+            if self._check_rate_limit('bing'):
+                try:
+                    self.logger.info("Attempting Bing search...")
+                    results = self._search_bing(query, num_results)
+                    if results:
+                        self._increment_count('bing')
+                        self.logger.info(f"✓ Bing returned {len(results)} results")
+                        return results
+                    else:
+                        self.logger.warning("Bing returned 0 results")
+                except Exception as e:
+                    self.logger.warning(f"Bing search failed: {e}")
+            else:
+                self.logger.info("Bing rate limit reached, skipping")
+        else:
+            self.logger.info("Bing API not configured, skipping")
         
         # Fallback to DuckDuckGo (free, no API key needed)
         if self._check_rate_limit('duckduckgo'):
             try:
+                self.logger.info("Falling back to DuckDuckGo search (free, no API key)...")
                 results = self._search_duckduckgo(query, num_results)
                 if results:
                     self._increment_count('duckduckgo')
+                    self.logger.info(f"✓ DuckDuckGo returned {len(results)} results")
                     return results
+                else:
+                    self.logger.warning("DuckDuckGo returned 0 results")
             except Exception as e:
-                self.logger.error(f"DuckDuckGo search failed: {e}")
+                self.logger.error(f"DuckDuckGo search failed: {e}", exc_info=True)
+        else:
+            self.logger.warning("DuckDuckGo rate limit reached")
         
-        self.logger.error("All search providers failed or rate limited")
+        self.logger.error(f"❌ All search providers failed or rate limited for query: '{query}'")
         return []
     
     def _search_google(self, query: str, num_results: int) -> List[Dict]:
@@ -263,15 +289,65 @@ class WebSearcher:
             return []
         
         results = []
-        with DDGS() as ddgs:
-            search_results = ddgs.text(query, max_results=num_results)
-            for item in search_results:
-                results.append({
-                    'title': item.get('title', ''),
-                    'url': item.get('href', ''),
-                    'snippet': item.get('body', ''),
-                    'source': 'duckduckgo'
-                })
+        max_retries = 3
+        base_delay = 2.0  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                # Add delay between attempts to avoid rate limiting
+                if attempt > 0:
+                    delay = base_delay * (attempt + 1)  # Exponential backoff
+                    self.logger.info(f"Retry attempt {attempt + 1}/{max_retries} after {delay}s delay...")
+                    time.sleep(delay)
+                
+                # duckduckgo-search 4.x API with timeout and region
+                ddgs = DDGS(timeout=20)  # Increased timeout
+                
+                # Add region parameter to help with rate limiting
+                search_results = ddgs.text(
+                    keywords=query,
+                    region='wt-wt',  # Global region
+                    safesearch='moderate',
+                    max_results=num_results
+                )
+                
+                # Handle both generator and list responses
+                if search_results:
+                    for item in search_results:
+                        results.append({
+                            'title': item.get('title', ''),
+                            'url': item.get('href', item.get('link', '')),  # Try both 'href' and 'link'
+                            'snippet': item.get('body', item.get('snippet', '')),  # Try both 'body' and 'snippet'
+                            'source': 'duckduckgo'
+                        })
+                        
+                        # Safety check - don't process more than requested
+                        if len(results) >= num_results:
+                            break
+                
+                if results:
+                    self.logger.info(f"✓ DuckDuckGo returned {len(results)} results for: {query}")
+                    return results
+                else:
+                    self.logger.warning(f"DuckDuckGo returned 0 results on attempt {attempt + 1}")
+                    
+            except Exception as e:
+                error_msg = str(e)
+                
+                # Check if it's a rate limit error
+                if 'Ratelimit' in error_msg or 'ratelimit' in error_msg.lower():
+                    self.logger.warning(f"DuckDuckGo rate limit hit on attempt {attempt + 1}/{max_retries}")
+                    if attempt < max_retries - 1:
+                        continue  # Retry
+                    else:
+                        self.logger.error("DuckDuckGo rate limit: All retries exhausted")
+                        self.logger.info("💡 Tip: Wait a few minutes or configure Google/Bing API keys for better reliability")
+                else:
+                    self.logger.error(f"DuckDuckGo search error: {e}", exc_info=True)
+                
+                # If this was the last attempt, return empty
+                if attempt == max_retries - 1:
+                    return []
         
         return results
 
