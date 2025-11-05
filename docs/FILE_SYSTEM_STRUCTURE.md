@@ -8,7 +8,7 @@
 ## 📂 Complete Directory Tree
 
 ```
-F:\BUSINESSES\PARTNERSHIPS\SWIT\SWIT\ODOO\QuickOdoo\QuickOdoo\
+/
 │
 ├── 📁 .github\
 │   └── workflows\

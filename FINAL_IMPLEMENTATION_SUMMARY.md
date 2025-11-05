@@ -386,7 +386,7 @@ COMPLETED ✅ (or FAILED ❌)
 Run in CMD:
 
 ```cmd
-cd F:\BUSINESSES\PARTNERSHIPS\SWIT\SWIT\ODOO\QuickOdoo\QuickOdoo
+cd /path/to/QuickOdoo    # Navigate to project root
 SECURE_COMMIT_AND_PUSH.bat
 ```
 

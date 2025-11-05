@@ -21,7 +21,7 @@ The batch file will:
 
 ```powershell
 # Navigate to project
-cd F:\BUSINESSES\PARTNERSHIPS\SWIT\SWIT\ODOO\QuickOdoo\QuickOdoo
+cd /path/to/QuickOdoo    # Navigate to project root
 
 # Stage files
 git add mobile/ MOBILE_APP_SUMMARY.md

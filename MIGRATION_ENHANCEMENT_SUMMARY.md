@@ -333,7 +333,7 @@ for entity_type, entities in changes.items():
 ### **Run in CMD (Not PowerShell)**
 
 ```cmd
-cd F:\BUSINESSES\PARTNERSHIPS\SWIT\SWIT\ODOO\QuickOdoo\QuickOdoo
+cd /path/to/QuickOdoo    # Navigate to project root
 SECURE_COMMIT_AND_PUSH.bat
 ```
 
