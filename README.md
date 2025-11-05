@@ -30,6 +30,8 @@ python main.py --config config_example.json --workspace ./my_project
 - **[Implementation Roadmap](docs/md_docs/IMPLEMENTATION_ROADMAP_COMPLETE.md)** - Complete development roadmap with Phase 1-3 done, Phase 4-5 multi-platform expansion planned
 
 ### **Specialized Guides**
+- **[QuickBooks Full Migration Guide](docs/QUICKBOOKS_FULL_MIGRATION_GUIDE.md)** ⭐ - Complete QuickBooks Online to Odoo v18 migration with ALL 40+ entities (NEW!)
+- **[QuickBooks Migration Summary](docs/QUICKBOOKS_FULL_MIGRATION_SUMMARY.md)** - Quick reference for full QB migration features (NEW!)
 - **[ResearcherAgent Guide](docs/md_docs/RESEARCHER_AGENT_GUIDE.md)** - Web research capability, multi-provider search, caching
 - **[Agent Communication Guide](docs/md_docs/AGENT_RESEARCH_COMMUNICATION.md)** - How agents request research from each other
 - **[Usage Guide](docs/md_docs/USAGE_GUIDE.md)** - Comprehensive usage examples and best practices
@@ -50,7 +52,7 @@ python main.py --config config_example.json --workspace ./my_project
 **Migrate from ANY accounting platform to Odoo v18!**
 
 ### **Currently Supported Platforms:**
-- 💼 **QuickBooks** (Online & Desktop via WebConnector)
+- 💼 **QuickBooks** (Online & Desktop via WebConnector) - **FULL migration with 40+ entity types** ⭐
 - 📊 **SAGE** (50, 100, 200, X3)
 - 🌊 **Wave** Accounting
 - 💳 **Expensify**
