@@ -121,10 +121,21 @@ test_config.json
 .env.local
 secrets/
 
+# Private/Local-only files
+COMPLETE_SESSION_REPORT.txt
+PUSH_INSTRUCTIONS_NOW.txt
+QuickOdoo.code-workspace
+commit_and_push_mobile.bat
+commit_phase1.cmd
+organize_and_commit.bat
+push_with_token.ps1
+COMMIT_AND_PUSH_NOW.bat
+PAGER_ISSUE_ANALYSIS.md
+
 # Node modules
 node_modules/
 mobile/node_modules/
 
 # Temporary files
-COMMIT_AND_PUSH_NOW.bat
-PAGER_ISSUE_ANALYSIS.md
+*.tmp
+*.bak

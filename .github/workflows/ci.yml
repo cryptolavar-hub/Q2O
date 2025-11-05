@@ -144,15 +144,11 @@ jobs:
       run: |
         python -c "from utils.infrastructure_validator import InfrastructureValidator; iv = InfrastructureValidator('.'); result = iv.validate_terraform(); print(result)"
       continue-on-error: true
-      if: |
-        find . -name '*.tf' -type f | head -1
 
     - name: Validate Helm charts
       run: |
         python -c "from utils.infrastructure_validator import InfrastructureValidator; iv = InfrastructureValidator('.'); result = iv.validate_helm(); print(result)"
       continue-on-error: true
-      if: |
-        find . -name 'Chart.yaml' -type f | head -1
 
   integration-tests:
     runs-on: ubuntu-latest
