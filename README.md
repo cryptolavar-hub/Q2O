@@ -60,6 +60,20 @@ Xero, FreshBooks, Zoho Books, NetSuite, and more enterprise platforms.
 
 ---
 
+## 📱 Mobile App (NEW!)
+
+**Quick2Odoo Mobile Dashboard** - Full-featured React Native app for Android and iOS!
+
+- 📊 **Real-time Dashboard**: Monitor projects, tasks, and agents on the go
+- 🚀 **Project Initiation**: Start new migrations directly from your mobile device
+- 📈 **Live Metrics**: System performance and analytics
+- 🔔 **Instant Updates**: WebSocket-powered real-time notifications
+- 🌐 **Multi-Platform Support**: Select and manage QuickBooks, SAGE, Wave, and more
+
+**[View Mobile App Documentation →](mobile/README.md)**
+
+---
+
 ## ✨ Features
 
 ### **Core Capabilities**
