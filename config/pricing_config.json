@@ -1,0 +1,140 @@
+{
+  "pricing_version": "1.0",
+  "currency": "USD",
+  "tax_rate": 0.0,
+  "last_updated": "2025-11-05",
+  
+  "tiers": {
+    "starter": {
+      "name": "Starter",
+      "base_price": 499.00,
+      "years_min": 1,
+      "years_max": 2,
+      "records_included": 5000,
+      "price_per_1000_extra_records": 5.00,
+      "best_for": "Small businesses, startups",
+      "features": [
+        "Full migration (all entities)",
+        "Email support",
+        "Up to 2 years historical data",
+        "Single company migration",
+        "Data validation report"
+      ]
+    },
+    "professional": {
+      "name": "Professional",
+      "base_price": 1499.00,
+      "years_min": 3,
+      "years_max": 5,
+      "records_included": 50000,
+      "price_per_1000_extra_records": 3.00,
+      "best_for": "Growing businesses",
+      "features": [
+        "Full migration (all entities)",
+        "Priority email support",
+        "Up to 5 years historical data",
+        "Multiple company migration",
+        "Data validation report",
+        "Balance sheet reconciliation"
+      ]
+    },
+    "enterprise": {
+      "name": "Enterprise",
+      "base_price": 4999.00,
+      "years_min": 6,
+      "years_max": 10,
+      "records_included": 500000,
+      "price_per_1000_extra_records": 2.00,
+      "best_for": "Established enterprises",
+      "features": [
+        "Full migration (all entities)",
+        "24/7 phone + email support",
+        "Up to 10 years historical data",
+        "Unlimited companies",
+        "Complete audit trail",
+        "Balance sheet validation",
+        "Dedicated migration specialist",
+        "Custom data transformations"
+      ]
+    },
+    "custom": {
+      "name": "Custom",
+      "base_price": 9999.00,
+      "years_min": 11,
+      "years_max": 99,
+      "records_included": 1000000,
+      "price_per_1000_extra_records": 1.50,
+      "best_for": "Large enterprises, complex migrations",
+      "features": [
+        "Full migration (all entities)",
+        "White-glove service",
+        "Unlimited historical data",
+        "Multi-platform consolidation",
+        "Custom data transformations",
+        "Dedicated migration team",
+        "Custom SLA",
+        "On-site support available"
+      ]
+    }
+  },
+  
+  "platform_multipliers": {
+    "QuickBooks Online": 1.0,
+    "QuickBooks Desktop": 1.3,
+    "SAGE 50": 1.2,
+    "SAGE 100": 1.4,
+    "SAGE 200": 1.5,
+    "SAGE X3": 1.8,
+    "Wave": 0.9,
+    "Expensify": 0.9,
+    "doola": 1.0,
+    "Dext": 1.0,
+    "Xero": 1.1,
+    "FreshBooks": 1.0,
+    "Zoho Books": 1.1,
+    "NetSuite": 2.0
+  },
+  
+  "years_multiplier": {
+    "description": "Additional cost per year beyond base tier minimum",
+    "rate_per_year": 0.10,
+    "note": "10% of base price per additional year"
+  },
+  
+  "volume_discounts": {
+    "description": "Discounts for consulting firms doing multiple migrations",
+    "enabled": true,
+    "tiers": [
+      {
+        "min_migrations_per_year": 10,
+        "discount_percent": 10,
+        "name": "Partner"
+      },
+      {
+        "min_migrations_per_year": 50,
+        "discount_percent": 20,
+        "name": "Gold Partner"
+      },
+      {
+        "min_migrations_per_year": 100,
+        "discount_percent": 30,
+        "name": "Platinum Partner"
+      }
+    ]
+  },
+  
+  "promotional_codes": {
+    "enabled": true,
+    "note": "Configured in Stripe dashboard"
+  },
+  
+  "stripe_configuration": {
+    "mode": "payment",
+    "payment_methods": ["card"],
+    "allow_promotion_codes": true,
+    "billing_address_collection": "required",
+    "success_url": "https://app.quick2odoo.com/billing/success?session_id={CHECKOUT_SESSION_ID}",
+    "cancel_url": "https://app.quick2odoo.com/billing/cancel"
+  }
+}
+

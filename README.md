@@ -29,9 +29,16 @@ python main.py --config config_example.json --workspace ./my_project
 - **[Testing Guide](docs/md_docs/TESTING_GUIDE.md)** - How to test the system with pytest-cov and coverage reporting
 - **[Implementation Roadmap](docs/md_docs/IMPLEMENTATION_ROADMAP_COMPLETE.md)** - Complete development roadmap with Phase 1-3 done, Phase 4-5 multi-platform expansion planned
 
-### **Specialized Guides**
-- **[QuickBooks Full Migration Guide](docs/QUICKBOOKS_FULL_MIGRATION_GUIDE.md)** ⭐ - Complete QuickBooks Online to Odoo v18 migration with ALL 40+ entities (NEW!)
+### **System Workflow & Architecture** 🔥
+- **[Complete System Workflow](docs/COMPLETE_SYSTEM_WORKFLOW.md)** ⭐⭐⭐ - **CRITICAL**: Understanding Phase 1 (Build SaaS) vs Phase 2 (Migrate Data), prerequisites, exact sequence, configuration requirements (NEW!)
+
+### **Migration & Billing Guides** ⭐
+- **[Billing System Architecture](docs/BILLING_SYSTEM_ARCHITECTURE.md)** - Data-volume-based pricing, Stripe integration, mobile billing UI (NEW!)
+- **[Full Migration Architecture](docs/FULL_MIGRATION_ARCHITECTURE.md)** - Complete technical overview of how 100% data migration works for any platform (NEW!)
+- **[QuickBooks Full Migration Guide](docs/QUICKBOOKS_FULL_MIGRATION_GUIDE.md)** - Complete QuickBooks Online to Odoo v18 migration with ALL 40+ entities (NEW!)
 - **[QuickBooks Migration Summary](docs/QUICKBOOKS_FULL_MIGRATION_SUMMARY.md)** - Quick reference for full QB migration features (NEW!)
+
+### **Specialized Guides**
 - **[ResearcherAgent Guide](docs/md_docs/RESEARCHER_AGENT_GUIDE.md)** - Web research capability, multi-provider search, caching
 - **[Agent Communication Guide](docs/md_docs/AGENT_RESEARCH_COMMUNICATION.md)** - How agents request research from each other
 - **[Usage Guide](docs/md_docs/USAGE_GUIDE.md)** - Comprehensive usage examples and best practices
@@ -73,6 +80,7 @@ Xero, FreshBooks, Zoho Books, NetSuite, and more enterprise platforms.
 
 - 📊 **Real-time Dashboard**: Monitor projects, tasks, and agents on the go
 - 🚀 **Project Initiation**: Start new migrations directly from your mobile device
+- 💳 **Billing & Pricing**: Calculate costs, select data range, pay via Stripe (NEW!)
 - 📈 **Live Metrics**: System performance and analytics
 - 🔔 **Instant Updates**: WebSocket-powered real-time notifications
 - 🌐 **Multi-Platform Support**: Select and manage QuickBooks, SAGE, Wave, and more
@@ -86,6 +94,7 @@ Xero, FreshBooks, Zoho Books, NetSuite, and more enterprise platforms.
 ### **Core Capabilities**
 - **11 Specialized Agents**: Orchestrator, Coder, Testing, QA, Infrastructure, Integration, Frontend, Workflow, Security, **Researcher** ⭐, Node.js
 - **Web Research (NEW!)** ⭐: Automated web search via Google/Bing/DuckDuckGo, 90-day caching, smart detection
+- **Data-Volume-Based Billing** ⭐: Intelligent pricing based on years of data, record count, and platform complexity (NEW!)
 - **Real-time Dashboard**: WebSocket-powered monitoring with live task tracking and metrics
 - **Advanced Load Balancing**: High availability with agent redundancy, failover, and circuit breakers
 - **Multi-Language Support**: Python, Node.js (20.x LTS), TypeScript, JavaScript, Terraform, Helm

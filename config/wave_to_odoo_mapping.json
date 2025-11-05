@@ -1,0 +1,67 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "source_platform": "Wave Accounting",
+    "target_platform": "Odoo v18",
+    "last_updated": "2025-11-05",
+    "api_type": "GraphQL",
+    "total_entities_mapped": 25
+  },
+  "entity_mappings": {
+    "customer": {
+      "odoo_model": "res.partner",
+      "field_mappings": {
+        "name": "name",
+        "email": "email",
+        "phone": "phone",
+        "address.addressLine1": "street",
+        "address.city": "city",
+        "address.postalCode": "zip",
+        "address.country.code": "country_id"
+      },
+      "computed_fields": {
+        "customer_rank": 1
+      }
+    },
+    "vendor": {
+      "odoo_model": "res.partner",
+      "field_mappings": {
+        "name": "name",
+        "email": "email",
+        "phone": "phone"
+      },
+      "computed_fields": {
+        "supplier_rank": 1
+      }
+    },
+    "product": {
+      "odoo_model": "product.product",
+      "field_mappings": {
+        "name": "name",
+        "description": "description",
+        "price": "list_price"
+      }
+    },
+    "invoice": {
+      "odoo_model": "account.move",
+      "field_mappings": {
+        "invoiceNumber": "name",
+        "invoiceDate": "invoice_date",
+        "dueDate": "invoice_date_due",
+        "customer.id": "partner_id",
+        "total.value": "amount_total",
+        "items": "invoice_line_ids"
+      },
+      "computed_fields": {
+        "move_type": "out_invoice"
+      }
+    }
+  },
+  "migration_sequence": [
+    "customer",
+    "vendor",
+    "product",
+    "invoice"
+  ]
+}
+

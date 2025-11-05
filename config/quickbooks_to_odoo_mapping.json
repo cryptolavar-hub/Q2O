@@ -1,0 +1,350 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "source_platform": "QuickBooks Online",
+    "target_platform": "Odoo v18",
+    "last_updated": "2025-11-05",
+    "total_entities_mapped": 40
+  },
+  "entity_mappings": {
+    "Customer": {
+      "odoo_model": "res.partner",
+      "field_mappings": {
+        "DisplayName": "name",
+        "CompanyName": "name",
+        "GivenName": "name_first",
+        "FamilyName": "name_last",
+        "PrimaryEmailAddr.Address": "email",
+        "PrimaryPhone.FreeFormNumber": "phone",
+        "Mobile.FreeFormNumber": "mobile",
+        "BillAddr.Line1": "street",
+        "BillAddr.City": "city",
+        "BillAddr.PostalCode": "zip",
+        "BillAddr.CountrySubDivisionCode": "state_id",
+        "BillAddr.Country": "country_id",
+        "Balance": "credit",
+        "Active": "active",
+        "Notes": "comment"
+      },
+      "computed_fields": {
+        "customer_rank": 1,
+        "company_type": "company_or_person"
+      }
+    },
+    "Vendor": {
+      "odoo_model": "res.partner",
+      "field_mappings": {
+        "DisplayName": "name",
+        "CompanyName": "name",
+        "PrimaryEmailAddr.Address": "email",
+        "PrimaryPhone.FreeFormNumber": "phone",
+        "BillAddr.Line1": "street",
+        "BillAddr.City": "city",
+        "BillAddr.PostalCode": "zip",
+        "Balance": "debit",
+        "Active": "active",
+        "AcctNum": "ref"
+      },
+      "computed_fields": {
+        "supplier_rank": 1,
+        "company_type": "company"
+      }
+    },
+    "Employee": {
+      "odoo_model": "hr.employee",
+      "field_mappings": {
+        "DisplayName": "name",
+        "GivenName": "name_first",
+        "FamilyName": "name_last",
+        "PrimaryEmailAddr.Address": "work_email",
+        "PrimaryPhone.FreeFormNumber": "work_phone",
+        "Mobile.FreeFormNumber": "mobile_phone",
+        "Active": "active"
+      }
+    },
+    "Account": {
+      "odoo_model": "account.account",
+      "field_mappings": {
+        "Name": "name",
+        "AcctNum": "code",
+        "Description": "note",
+        "AccountType": "user_type_id",
+        "Active": "deprecated"
+      },
+      "type_mapping": {
+        "Bank": "liquidity",
+        "Accounts Receivable": "receivable",
+        "Other Current Asset": "current_assets",
+        "Fixed Asset": "fixed_assets",
+        "Other Asset": "non_current_assets",
+        "Accounts Payable": "payable",
+        "Credit Card": "current_liabilities",
+        "Other Current Liability": "current_liabilities",
+        "Long Term Liability": "non_current_liabilities",
+        "Equity": "equity",
+        "Income": "income",
+        "Other Income": "income_other",
+        "Cost of Goods Sold": "direct_costs",
+        "Expense": "expenses",
+        "Other Expense": "expenses"
+      }
+    },
+    "Item": {
+      "odoo_model": "product.product",
+      "field_mappings": {
+        "Name": "name",
+        "Description": "description",
+        "Active": "active",
+        "UnitPrice": "list_price",
+        "PurchaseCost": "standard_price",
+        "Sku": "default_code",
+        "QtyOnHand": "qty_available"
+      },
+      "type_mapping": {
+        "Service": "service",
+        "Inventory": "product",
+        "NonInventory": "consu"
+      }
+    },
+    "Invoice": {
+      "odoo_model": "account.move",
+      "field_mappings": {
+        "DocNumber": "name",
+        "TxnDate": "invoice_date",
+        "DueDate": "invoice_date_due",
+        "CustomerRef.value": "partner_id",
+        "TotalAmt": "amount_total",
+        "Balance": "amount_residual",
+        "Line": "invoice_line_ids"
+      },
+      "computed_fields": {
+        "move_type": "out_invoice",
+        "journal_id": "sales_journal"
+      }
+    },
+    "Bill": {
+      "odoo_model": "account.move",
+      "field_mappings": {
+        "DocNumber": "ref",
+        "TxnDate": "invoice_date",
+        "DueDate": "invoice_date_due",
+        "VendorRef.value": "partner_id",
+        "TotalAmt": "amount_total",
+        "Balance": "amount_residual",
+        "Line": "invoice_line_ids"
+      },
+      "computed_fields": {
+        "move_type": "in_invoice",
+        "journal_id": "purchase_journal"
+      }
+    },
+    "Payment": {
+      "odoo_model": "account.payment",
+      "field_mappings": {
+        "TxnDate": "date",
+        "TotalAmt": "amount",
+        "CustomerRef.value": "partner_id",
+        "PaymentRefNum": "ref"
+      },
+      "computed_fields": {
+        "payment_type": "inbound",
+        "partner_type": "customer"
+      }
+    },
+    "BillPayment": {
+      "odoo_model": "account.payment",
+      "field_mappings": {
+        "TxnDate": "date",
+        "TotalAmt": "amount",
+        "VendorRef.value": "partner_id",
+        "PaymentRefNum": "ref"
+      },
+      "computed_fields": {
+        "payment_type": "outbound",
+        "partner_type": "supplier"
+      }
+    },
+    "JournalEntry": {
+      "odoo_model": "account.move",
+      "field_mappings": {
+        "DocNumber": "ref",
+        "TxnDate": "date",
+        "Line": "line_ids"
+      },
+      "computed_fields": {
+        "move_type": "entry",
+        "journal_id": "miscellaneous_journal"
+      }
+    },
+    "Class": {
+      "odoo_model": "account.analytic.account",
+      "field_mappings": {
+        "Name": "name",
+        "Active": "active"
+      },
+      "computed_fields": {
+        "plan_id": "default_plan"
+      }
+    },
+    "Department": {
+      "odoo_model": "hr.department",
+      "field_mappings": {
+        "Name": "name",
+        "Active": "active"
+      }
+    },
+    "PaymentMethod": {
+      "odoo_model": "account.payment.method",
+      "field_mappings": {
+        "Name": "name",
+        "Type": "payment_type"
+      }
+    },
+    "Term": {
+      "odoo_model": "account.payment.term",
+      "field_mappings": {
+        "Name": "name",
+        "DueDays": "line_ids"
+      }
+    },
+    "Estimate": {
+      "odoo_model": "sale.order",
+      "field_mappings": {
+        "DocNumber": "name",
+        "TxnDate": "date_order",
+        "CustomerRef.value": "partner_id",
+        "Line": "order_line"
+      },
+      "computed_fields": {
+        "state": "draft"
+      }
+    },
+    "PurchaseOrder": {
+      "odoo_model": "purchase.order",
+      "field_mappings": {
+        "DocNumber": "name",
+        "TxnDate": "date_order",
+        "VendorRef.value": "partner_id",
+        "Line": "order_line"
+      },
+      "computed_fields": {
+        "state": "draft"
+      }
+    },
+    "SalesReceipt": {
+      "odoo_model": "account.move",
+      "field_mappings": {
+        "DocNumber": "name",
+        "TxnDate": "invoice_date",
+        "CustomerRef.value": "partner_id",
+        "TotalAmt": "amount_total",
+        "Line": "invoice_line_ids"
+      },
+      "computed_fields": {
+        "move_type": "out_invoice",
+        "payment_state": "paid"
+      }
+    },
+    "CreditMemo": {
+      "odoo_model": "account.move",
+      "field_mappings": {
+        "DocNumber": "name",
+        "TxnDate": "invoice_date",
+        "CustomerRef.value": "partner_id",
+        "TotalAmt": "amount_total",
+        "Line": "invoice_line_ids"
+      },
+      "computed_fields": {
+        "move_type": "out_refund"
+      }
+    },
+    "VendorCredit": {
+      "odoo_model": "account.move",
+      "field_mappings": {
+        "DocNumber": "name",
+        "TxnDate": "invoice_date",
+        "VendorRef.value": "partner_id",
+        "TotalAmt": "amount_total",
+        "Line": "invoice_line_ids"
+      },
+      "computed_fields": {
+        "move_type": "in_refund"
+      }
+    },
+    "TimeActivity": {
+      "odoo_model": "account.analytic.line",
+      "field_mappings": {
+        "TxnDate": "date",
+        "EmployeeRef.value": "employee_id",
+        "CustomerRef.value": "partner_id",
+        "Hours": "unit_amount",
+        "HourlyRate": "amount",
+        "Description": "name"
+      }
+    }
+  },
+  "field_transformations": {
+    "address": {
+      "type": "composite",
+      "fields": ["Line1", "Line2", "Line3"],
+      "separator": "\n",
+      "target": "street"
+    },
+    "country": {
+      "type": "lookup",
+      "source_field": "Country",
+      "target_model": "res.country",
+      "search_field": "code"
+    },
+    "state": {
+      "type": "lookup",
+      "source_field": "CountrySubDivisionCode",
+      "target_model": "res.country.state",
+      "search_field": "code"
+    },
+    "currency": {
+      "type": "lookup",
+      "source_field": "CurrencyRef.value",
+      "target_model": "res.currency",
+      "search_field": "name"
+    },
+    "account": {
+      "type": "mapping_lookup",
+      "source_field": "AccountRef.value",
+      "uses_entity_mapping": true
+    },
+    "tax": {
+      "type": "mapping_lookup",
+      "source_field": "TaxCodeRef.value",
+      "uses_entity_mapping": true
+    }
+  },
+  "migration_sequence": [
+    "CompanyInfo",
+    "Account",
+    "TaxCode",
+    "TaxRate",
+    "Term",
+    "PaymentMethod",
+    "Customer",
+    "Vendor",
+    "Employee",
+    "Item",
+    "Class",
+    "Department",
+    "JournalEntry",
+    "Invoice",
+    "Bill",
+    "Estimate",
+    "PurchaseOrder",
+    "Payment",
+    "BillPayment",
+    "SalesReceipt",
+    "CreditMemo",
+    "VendorCredit",
+    "Deposit",
+    "Transfer",
+    "TimeActivity"
+  ]
+}
+

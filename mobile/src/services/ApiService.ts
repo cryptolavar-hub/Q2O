@@ -124,6 +124,73 @@ class ApiService {
     }
   }
 
+  // ==================== BILLING METHODS ====================
+
+  async getPricingTiers(): Promise<any[]> {
+    if (!this.client) {
+      throw new Error('API Service not initialized');
+    }
+
+    try {
+      const response = await this.client.get('/api/billing/pricing-tiers');
+      return response.data;
+    } catch (error: any) {
+      console.error('[API] Get pricing tiers error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to get pricing tiers');
+    }
+  }
+
+  async estimateMigrationCost(params: {
+    platform_name: string;
+    years_of_data: number;
+    estimated_records?: number | null;
+    tax_rate?: number;
+  }): Promise<any> {
+    if (!this.client) {
+      throw new Error('API Service not initialized');
+    }
+
+    try {
+      const response = await this.client.post('/api/billing/estimate', params);
+      return response.data;
+    } catch (error: any) {
+      console.error('[API] Estimate cost error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to estimate cost');
+    }
+  }
+
+  async createCheckoutSession(params: {
+    migration_id: string;
+    customer_email: string;
+    pricing_data: any;
+  }): Promise<any> {
+    if (!this.client) {
+      throw new Error('API Service not initialized');
+    }
+
+    try {
+      const response = await this.client.post('/api/billing/checkout', params);
+      return response.data;
+    } catch (error: any) {
+      console.error('[API] Create checkout error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to create checkout');
+    }
+  }
+
+  async checkPaymentStatus(session_id: string): Promise<any> {
+    if (!this.client) {
+      throw new Error('API Service not initialized');
+    }
+
+    try {
+      const response = await this.client.get(`/api/billing/payment/${session_id}/status`);
+      return response.data;
+    } catch (error: any) {
+      console.error('[API] Check payment status error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to check payment status');
+    }
+  }
+
   getBaseURL(): string {
     return this.baseURL;
   }

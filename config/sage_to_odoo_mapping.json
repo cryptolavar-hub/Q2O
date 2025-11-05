@@ -1,0 +1,109 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "source_platform": "SAGE (50/100/200/X3)",
+    "target_platform": "Odoo v18",
+    "last_updated": "2025-11-05",
+    "total_entities_mapped": 35
+  },
+  "entity_mappings": {
+    "Customer": {
+      "odoo_model": "res.partner",
+      "field_mappings": {
+        "name": "name",
+        "code": "ref",
+        "email": "email",
+        "telephone": "phone",
+        "address_line_1": "street",
+        "address_line_2": "street2",
+        "city": "city",
+        "postal_code": "zip",
+        "country_code": "country_id",
+        "balance": "credit",
+        "credit_limit": "credit_limit",
+        "notes": "comment"
+      },
+      "computed_fields": {
+        "customer_rank": 1
+      }
+    },
+    "Supplier": {
+      "odoo_model": "res.partner",
+      "field_mappings": {
+        "name": "name",
+        "code": "ref",
+        "email": "email",
+        "telephone": "phone",
+        "address_line_1": "street",
+        "city": "city",
+        "postal_code": "zip",
+        "balance": "debit"
+      },
+      "computed_fields": {
+        "supplier_rank": 1
+      }
+    },
+    "Product": {
+      "odoo_model": "product.product",
+      "field_mappings": {
+        "code": "default_code",
+        "description": "name",
+        "sales_price": "list_price",
+        "purchase_price": "standard_price",
+        "quantity_in_stock": "qty_available",
+        "reorder_level": "reorder_level"
+      },
+      "type_mapping": {
+        "Stock": "product",
+        "Service": "service",
+        "NonStock": "consu"
+      }
+    },
+    "NominalAccount": {
+      "odoo_model": "account.account",
+      "field_mappings": {
+        "code": "code",
+        "name": "name",
+        "account_type": "user_type_id"
+      }
+    },
+    "SalesInvoice": {
+      "odoo_model": "account.move",
+      "field_mappings": {
+        "invoice_number": "name",
+        "invoice_date": "invoice_date",
+        "due_date": "invoice_date_due",
+        "customer_code": "partner_id",
+        "total_amount": "amount_total",
+        "lines": "invoice_line_ids"
+      },
+      "computed_fields": {
+        "move_type": "out_invoice"
+      }
+    },
+    "PurchaseInvoice": {
+      "odoo_model": "account.move",
+      "field_mappings": {
+        "invoice_number": "ref",
+        "invoice_date": "invoice_date",
+        "due_date": "invoice_date_due",
+        "supplier_code": "partner_id",
+        "total_amount": "amount_total",
+        "lines": "invoice_line_ids"
+      },
+      "computed_fields": {
+        "move_type": "in_invoice"
+      }
+    }
+  },
+  "migration_sequence": [
+    "NominalAccount",
+    "Customer",
+    "Supplier",
+    "Product",
+    "SalesInvoice",
+    "PurchaseInvoice",
+    "Payment"
+  ]
+}
+
