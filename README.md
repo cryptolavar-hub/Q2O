@@ -4,18 +4,58 @@
 
 A sophisticated multi-agent development system that automates the creation of complete, production-ready SaaS applications for migrating data from **any accounting platform** to Odoo v18. Supports QuickBooks, SAGE, Wave, Expensify, doola, Dext, and more with an extensible architecture for unlimited platform integrations.
 
+## ⚠️ Python Version Requirements
+
+**IMPORTANT**: Quick2Odoo requires specific Python versions:
+
+| Status | Python Version | Notes |
+|--------|---------------|-------|
+| ✅ **Recommended** | **Python 3.12.10** | Fully tested, all dependencies work perfectly |
+| ✅ Supported | Python 3.11.x | Fully compatible |
+| ✅ Supported | Python 3.10.x | Fully compatible |
+| ❌ **NOT Compatible** | Python 3.13+ | Dependency conflicts (pydantic-core requires Rust compilation) |
+| ❌ Not Supported | Python 3.9 or older | Missing required features |
+
+### 📥 Download Python 3.12.10
+- **Windows**: https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe
+- **macOS**: https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg
+- **All platforms**: https://www.python.org/downloads/release/python-31210/
+
+### ✅ Quick Version Check
+```bash
+# Check your Python version
+python --version
+
+# If you have Python 3.12 installed but it's not default
+py -3.12 --version  # Windows
+python3.12 --version  # Mac/Linux
+```
+
 ## 🚀 Quick Start
 
 ```bash
-# Install dependencies
+# 1. Create virtual environment with Python 3.12
+py -3.12 -m venv venv          # Windows
+python3.12 -m venv venv        # Mac/Linux
+
+# 2. Activate virtual environment
+.\venv\Scripts\activate        # Windows PowerShell
+source venv/bin/activate       # Mac/Linux
+
+# 3. Verify Python version (should show 3.12.x)
+python --version
+
+# 4. Install dependencies
 pip install -r requirements.txt
 
-# Run with command-line arguments
+# 5. Run with command-line arguments
 python main.py --project "Multi-Platform Odoo Migration" --objective "OAuth authentication"
 
 # Or use a configuration file
 python main.py --config config_example.json --workspace ./my_project
 ```
+
+> **Note**: If you encounter a Python version error, see the [Python Version Requirements](#-python-version-requirements) section above.
 
 ## 📚 Documentation
 

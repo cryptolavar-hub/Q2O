@@ -1,5 +1,12 @@
 # Multi-Agent Development System - Production Dependencies
 # Pinned versions for reproducibility
+#
+# ⚠️ Python Version Requirements:
+#    - Supported: Python 3.10, 3.11, 3.12
+#    - Recommended: Python 3.12.10
+#    - NOT Compatible: Python 3.13+ (dependency conflicts)
+#
+# Download Python 3.12.10: https://www.python.org/downloads/release/python-31210/
 
 # Core FastAPI and ASGI server
 fastapi==0.110.0
@@ -47,7 +54,7 @@ isort==5.13.2
 # Security scanning
 bandit==1.7.8
 # semgrep==1.69.0  # Install separately (binary-based tool)
-safety==3.0.1
+safety>=3.2.0  # Updated to support pydantic 2.x
 
 # Infrastructure tools (optional - for validation, install separately)
 # terraform>=1.6.0  # Install separately if needed

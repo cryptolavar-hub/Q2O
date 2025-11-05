@@ -139,3 +139,9 @@ mobile/node_modules/
 # Temporary files
 *.tmp
 *.bak
+
+# Python installers (keep local only, don't commit to repo)
+python-*.exe
+python*.exe
+*.msi
+*.pkg

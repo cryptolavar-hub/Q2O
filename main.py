@@ -3,9 +3,49 @@ Main entry point for the Multi-Agent Development System.
 Coordinates the orchestrator and all agent types to complete projects.
 """
 
+import sys
+
+# Check Python version FIRST (before any imports)
+if sys.version_info < (3, 10):
+    print("=" * 70)
+    print("ERROR: Python 3.10 or higher is required!")
+    print(f"Current version: Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    print()
+    print("Quick2Odoo requires Python 3.10, 3.11, or 3.12")
+    print()
+    print("Please download Python 3.12 from:")
+    print("https://www.python.org/downloads/release/python-31210/")
+    print()
+    print("Then create a new virtual environment:")
+    print("  py -3.12 -m venv venv")
+    print("  .\\venv\\Scripts\\activate")
+    print("  pip install -r requirements.txt")
+    print("=" * 70)
+    sys.exit(1)
+
+if sys.version_info >= (3, 13):
+    print("=" * 70)
+    print("WARNING: Python 3.13+ detected!")
+    print(f"Current version: Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    print()
+    print("Quick2Odoo is tested with Python 3.10, 3.11, and 3.12.")
+    print("Python 3.13+ may have compatibility issues with some dependencies.")
+    print()
+    print("Recommended: Use Python 3.12.10")
+    print("Download from: https://www.python.org/downloads/release/python-31210/")
+    print()
+    print("Create virtual environment with Python 3.12:")
+    print("  py -3.12 -m venv venv")
+    print("  .\\venv\\Scripts\\activate")
+    print("  pip install -r requirements.txt")
+    print("=" * 70)
+    print()
+    response = input("Continue anyway? (y/N): ")
+    if response.lower() != 'y':
+        sys.exit(1)
+
 import argparse
 import logging
-import sys
 import os
 import json
 from pathlib import Path
