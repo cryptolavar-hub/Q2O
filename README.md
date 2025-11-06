@@ -31,6 +31,34 @@ py -3.12 --version  # Windows
 python3.12 --version  # Mac/Linux
 ```
 
+## 🎯 **How It Works: Agents Build Everything**
+
+Quick2Odoo uses a **multi-agent system** where specialized AI agents **dynamically build** complete migration solutions:
+
+```
+Your Request → Agents Research → Agents Generate Code → Agents Test → Complete SaaS Application
+```
+
+**Example**: Need SAGE to Odoo migration?
+
+```bash
+python main.py --project "SAGE Migration" \
+               --objective "Full SAGE 50 data migration to Odoo v18"
+```
+
+**What Happens**:
+1. **ResearcherAgent** searches web for SAGE API documentation
+2. **IntegrationAgent** generates SAGE API client (based on research)
+3. **CoderAgent** creates data mapping configuration
+4. **WorkflowAgent** builds orchestration layer
+5. **TestingAgent** generates tests
+6. **QAAgent** validates everything
+7. **Result**: Complete, working SAGE migration system (automatically built!)
+
+**The agents BUILD the solution** - you don't write code manually.
+
+---
+
 ## 🚀 Quick Start
 
 ```bash
@@ -48,14 +76,30 @@ python --version
 # 4. Install dependencies
 pip install -r requirements.txt
 
-# 5. Run with command-line arguments
-python main.py --project "Multi-Platform Odoo Migration" --objective "OAuth authentication"
+# 5. Have agents BUILD a migration solution
+python main.py --project "SAGE to Odoo Migration" \
+               --objective "Full data migration from SAGE 50/100/200 to Odoo v18" \
+               --objective "Support Customers, Invoices, Payments, Products, Accounts" \
+               --workspace ./sage_migration_saas
 
-# Or use a configuration file
-python main.py --config config_example.json --workspace ./my_project
+# The agents will research, generate, test, and validate a complete solution!
 ```
 
 > **Note**: If you encounter a Python version error, see the [Python Version Requirements](#-python-version-requirements) section above.
+
+---
+
+## 🏗️ **What You Get**
+
+After running the above command, the agents BUILD:
+- ✅ **SAGE API Client** (generated from research)
+- ✅ **Data Mapping Configuration** (SAGE → Odoo)
+- ✅ **Migration Orchestrator** (handles the flow)
+- ✅ **Tests** (validates everything works)
+- ✅ **API Endpoints** (REST APIs)
+- ✅ **Documentation** (auto-generated)
+
+**All in `./sage_migration_saas/`** - Ready to use!
 
 ## 📚 Documentation
 
