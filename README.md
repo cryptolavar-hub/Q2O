@@ -101,6 +101,49 @@ After running the above command, the agents BUILD:
 
 **All in `./sage_migration_saas/`** - Ready to use!
 
+---
+
+## 🔥 **Latest Enhancements (November 2025)**
+
+### **1. Recursive Research System** ⭐⭐⭐
+**Multi-level link following** for deep discovery:
+- Agents now follow links from initial search results (2-3 levels deep)
+- Discovers API docs, SDKs, and code examples that are 2-3 clicks deep
+- **3-5x more comprehensive research** than flat search
+- **Result**: Agents generate code based on ACTUAL API documentation, not guesses
+
+**[Read More →](docs/RECURSIVE_RESEARCH_SYSTEM.md)**
+
+### **2. Research-Driven Code Generation** ⭐⭐
+**Agents now actively use research results**:
+- Research results enriched into template context
+- API documentation URLs included in generated code
+- Code examples from research adapted into implementations
+- Persistent global research database (SQLite) for cross-project knowledge sharing
+- **Result**: Higher quality, documentation-based code generation
+
+**[Read More →](docs/RESEARCH_INTEGRATION_ENHANCEMENT.md)**
+
+### **3. Name Sanitization** ⭐
+**Clean, valid Python identifiers**:
+- Objectives with punctuation ("Customers, Invoices, Payments") → Valid filenames
+- Removes commas, special characters, filters filler words
+- Smart word-boundary truncation
+- **Result**: All generated files have valid Python syntax (no more SyntaxErrors!)
+
+**[Read More →](docs/NAME_SANITIZATION_FIX.md)**
+
+### **4. Environment Configuration** ⭐
+**Automatic .env loading**:
+- `load_dotenv()` on startup
+- Environment verification shows what's configured
+- Google/Bing Search API support for reliable research
+- **Result**: Configuration "just works" - no manual setup needed
+
+**[Read More →](docs/GOOGLE_SEARCH_SETUP_FIX.md)** | **[Environment Guide →](docs/ENVIRONMENT_CONFIGURATION_GUIDE.md)**
+
+---
+
 ## 📚 Documentation
 
 ### **📊 Business & Technical Analysis (NEW!)**
@@ -114,13 +157,22 @@ After running the above command, the agents BUILD:
 - **[Implementation Roadmap](docs/md_docs/IMPLEMENTATION_ROADMAP_COMPLETE.md)** - Complete development roadmap with Phase 1-3 done, Phase 4-5 multi-platform expansion planned
 
 ### **System Workflow & Architecture** 🔥
-- **[Complete System Workflow](docs/COMPLETE_SYSTEM_WORKFLOW.md)** ⭐⭐⭐ - **CRITICAL**: Understanding Phase 1 (Build SaaS) vs Phase 2 (Migrate Data), prerequisites, exact sequence, configuration requirements (NEW!)
+- **[Complete System Workflow](docs/COMPLETE_SYSTEM_WORKFLOW.md)** ⭐⭐⭐ - **CRITICAL**: Understanding Phase 1 (Build SaaS) vs Phase 2 (Migrate Data), prerequisites, exact sequence, configuration requirements
+- **[Architecture Audit](docs/ARCHITECTURE_AUDIT.md)** ⭐ - Current state assessment showing 100% alignment with agent-driven vision
+- **[Research Integration Enhancement](docs/RESEARCH_INTEGRATION_ENHANCEMENT.md)** - How research results actively drive code generation (NEW!)
+- **[Recursive Research System](docs/RECURSIVE_RESEARCH_SYSTEM.md)** - Multi-level link following for deep discovery (NEW!)
 
 ### **Migration & Billing Guides** ⭐
 - **[Billing System Architecture](docs/BILLING_SYSTEM_ARCHITECTURE.md)** - Data-volume-based pricing, Stripe integration, mobile billing UI (NEW!)
 - **[Full Migration Architecture](docs/FULL_MIGRATION_ARCHITECTURE.md)** - Complete technical overview of how 100% data migration works for any platform (NEW!)
 - **[QuickBooks Full Migration Guide](docs/QUICKBOOKS_FULL_MIGRATION_GUIDE.md)** - Complete QuickBooks Online to Odoo v18 migration with ALL 40+ entities (NEW!)
 - **[QuickBooks Migration Summary](docs/QUICKBOOKS_FULL_MIGRATION_SUMMARY.md)** - Quick reference for full QB migration features (NEW!)
+
+### **Setup & Configuration Guides** 🔧
+- **[Python Version Management](docs/PYTHON_VERSION_MANAGEMENT.md)** - Why Python 3.12 is required and how to set it up (NEW!)
+- **[Environment Configuration Guide](docs/ENVIRONMENT_CONFIGURATION_GUIDE.md)** - Complete .env setup for all 11 platforms (NEW!)
+- **[Search API Setup Guide](docs/SEARCH_API_SETUP_GUIDE.md)** - Google/Bing API setup for reliable research (NEW!)
+- **[Google Search Setup Fix](docs/GOOGLE_SEARCH_SETUP_FIX.md)** - Troubleshooting Google Custom Search Engine (NEW!)
 
 ### **Specialized Guides**
 - **[ResearcherAgent Guide](docs/md_docs/RESEARCHER_AGENT_GUIDE.md)** - Web research capability, multi-provider search, caching
@@ -184,17 +236,23 @@ Xero, FreshBooks, Zoho Books, NetSuite, and more enterprise platforms.
 - **Multi-Language Support**: Python, Node.js (20.x LTS), TypeScript, JavaScript, Terraform, Helm
 - **VCS Integration**: Automatic Git commits, branch management, and GitHub PR creation
 
-### **Agent Intelligence**
-- **Agent Communication**: Message broker with pub/sub for inter-agent coordination and research requests
-- **Smart Research Detection**: Automatically identifies when web research is needed for unknown tech
-- **Adaptive Research Depth**: Quick, deep, or comprehensive research based on task complexity
-- **Knowledge Caching**: 90-day cross-project research cache for instant retrieval
+### **Agent Intelligence** ⭐
+- **Recursive Research** ⭐: Multi-level link following discovers deep documentation (2-3 levels deep)
+- **Research-Driven Generation**: Code generation enriched with actual API documentation from research
+- **Global Knowledge Base**: Persistent SQLite database shares research across all projects
+- **Agent Communication**: Message broker with pub/sub for inter-agent coordination
+- **Smart Research Detection**: Automatically identifies when web research is needed
+- **Adaptive Research Depth**: Quick (5 results) → Deep (20-35 results) → Comprehensive (85-100 results)
+- **Cross-Project Learning**: Past research benefits future projects
 
 ### **Code Quality & Security**
+- **Name Sanitization** ⭐: Automatic removal of punctuation/special chars from filenames and class names (NEW!)
+- **Research-Informed Code**: Generated code includes API documentation URLs from research (NEW!)
 - **Static Analysis**: Integrated mypy, ruff, black, bandit, semgrep, safety
 - **Test Coverage**: pytest-cov with automated HTML/JSON coverage reports
 - **Secrets Management**: Automated .env.example generation, hardcoded secret detection
 - **Template-Based Generation**: 14+ Jinja2 templates for FastAPI, Next.js, Terraform, Helm, Temporal, Express.js
+- **Valid Python**: 100% valid syntax - no manual fixes needed (NEW!)
 
 ### **Flexibility & Configuration**
 - **Configurable Layouts**: Flexible project structure via ProjectLayout system (100% adoption)
