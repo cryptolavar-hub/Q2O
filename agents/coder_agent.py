@@ -4,13 +4,14 @@ Coder Agent - Implements coding tasks and generates code based on requirements.
 
 from typing import Dict, Any, List, Optional
 from agents.base_agent import BaseAgent, AgentType, Task, TaskStatus
+from agents.research_aware_mixin import ResearchAwareMixin
 from utils.template_renderer import TemplateRenderer, get_renderer
 from utils.project_layout import ProjectLayout, get_default_layout
 import os
 import logging
 
 
-class CoderAgent(BaseAgent):
+class CoderAgent(BaseAgent, ResearchAwareMixin):
     """Agent responsible for implementing code based on task requirements."""
 
     def __init__(self, agent_id: str = "coder_main", workspace_path: str = ".", 
@@ -32,6 +33,16 @@ class CoderAgent(BaseAgent):
         """
         try:
             self.logger.info(f"Processing coding task: {task.title}")
+            
+            # Load research results from dependencies
+            research_results = self.get_research_results(task)
+            
+            # Extract useful information from research
+            if research_results:
+                api_info = self.extract_api_info_from_research(research_results)
+                task.metadata['research_context'] = api_info
+                self.logger.info(f"Enriched task with research: {len(api_info.get('key_findings', []))} findings, "
+                               f"{len(api_info.get('code_examples', []))} examples")
             
             # Extract task information
             description = task.description
