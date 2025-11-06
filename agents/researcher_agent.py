@@ -928,21 +928,33 @@ class ResearcherAgent(BaseAgent):
             task: The research task
         """
         try:
-            # Send message via message broker if available
-            self.send_message(
-                message_type="research_complete",
+            import uuid
+            from utils.message_protocol import AgentMessage, MessageType
+            
+            # Create proper AgentMessage object
+            message = AgentMessage(
+                message_id=str(uuid.uuid4()),
+                message_type=MessageType.TASK_UPDATE,
+                sender_agent_id=self.agent_id,
+                sender_agent_type=self.agent_type.value,
+                channel="research",
                 payload={
+                    "event": "research_complete",
                     "query": query,
                     "task_id": task.id,
                     "confidence_score": results['confidence_score'],
                     "key_findings": results['key_findings'],
                     "documentation_urls": results['documentation_urls'],
                     "results_count": len(results['search_results'])
-                },
-                channel="research"
+                }
             )
+            
+            # Send via message broker
+            if hasattr(self, 'send_message'):
+                self.send_message(message)
+                self.logger.debug(f"Broadcast research completion for: {query}")
         except Exception as e:
-            self.logger.warning(f"Could not broadcast research completion: {e}")
+            self.logger.debug(f"Could not broadcast research completion: {e}")
     
     def handle_research_request(self, requesting_agent_id: str, query: str, 
                                urgency: str = "normal") -> Optional[Dict]:
