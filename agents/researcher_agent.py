@@ -408,27 +408,27 @@ class ResearcherAgent(BaseAgent):
                 # Conduct new research
                 research_results = self._conduct_research(query, task)
                 
-            # Cache results
-            self.cache.set(query, research_results)
-            research_results['cached'] = False
-        
-        # Save research to file
-        research_file = self._save_research_results(query, research_results, task)
-        
-        # Store in global research database for cross-project reuse
-        try:
-            from utils.research_database import store_research
-            project_name = task.metadata.get("project_name", "unknown")
-            research_id = store_research(research_results, project_name=project_name)
-            task.metadata["global_research_id"] = research_id
-            self.logger.info(f"Stored research in global database with ID {research_id}")
-        except Exception as e:
-            self.logger.warning(f"Could not store in global research database: {e}")
-        
-        # Prepare results for other agents
-        task.metadata["research_results"] = research_results
-        task.metadata["research_file"] = research_file
-        task.metadata["research_query"] = query
+                # Cache results
+                self.cache.set(query, research_results)
+                research_results['cached'] = False
+            
+            # Save research to file
+            research_file = self._save_research_results(query, research_results, task)
+            
+            # Store in global research database for cross-project reuse
+            try:
+                from utils.research_database import store_research
+                project_name = task.metadata.get("project_name", "unknown")
+                research_id = store_research(research_results, project_name=project_name)
+                task.metadata["global_research_id"] = research_id
+                self.logger.info(f"Stored research in global database with ID {research_id}")
+            except Exception as e:
+                self.logger.warning(f"Could not store in global research database: {e}")
+            
+            # Prepare results for other agents
+            task.metadata["research_results"] = research_results
+            task.metadata["research_file"] = research_file
+            task.metadata["research_query"] = query
             
             task.result = {
                 "query": query,
