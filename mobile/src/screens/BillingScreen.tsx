@@ -57,8 +57,9 @@ export default function BillingScreen({ route, navigation }: any) {
   const [estimate, setEstimate] = useState<PricingEstimate | null>(null);
   const [loading, setLoading] = useState(false);
   const [analyzingData, setAnalyzingData] = useState(false);
+  const [showInfo, setShowInfo] = useState(true);
 
-  // Available platforms
+  // Available platforms (agents can build support for any of these)
   const platforms = [
     'QuickBooks Online',
     'QuickBooks Desktop',
@@ -193,6 +194,33 @@ export default function BillingScreen({ route, navigation }: any) {
         <Title>Migration Pricing</Title>
         <Paragraph>Select your platform and data range</Paragraph>
       </Surface>
+
+      {/* Info Card - What You're Paying For */}
+      {showInfo && (
+        <Card style={[styles.card, styles.infoCard]}>
+          <Card.Content>
+            <View style={styles.infoHeader}>
+              <Text style={styles.infoTitle}>💡 About This Pricing</Text>
+              <Button
+                mode="text"
+                compact
+                onPress={() => setShowInfo(false)}
+              >
+                Dismiss
+              </Button>
+            </View>
+            <Paragraph style={styles.infoText}>
+              Quick2Odoo agents have built a comprehensive migration system for {platform}.
+              This pricing is for migrating <Text style={styles.bold}>YOUR company's data</Text> using 
+              that agent-built solution.
+            </Paragraph>
+            <Paragraph style={[styles.infoText, { marginTop: 8 }]}>
+              The agents researched the {platform} API, generated integration code, created data mappings, 
+              and built the entire migration pipeline. You're paying to use that system to migrate your data.
+            </Paragraph>
+          </Card.Content>
+        </Card>
+      )}
 
       {/* Platform Selection */}
       <Card style={styles.card}>
@@ -397,6 +425,30 @@ const styles = StyleSheet.create({
   card: {
     margin: 16,
     marginBottom: 8,
+  },
+  infoCard: {
+    backgroundColor: '#E3F2FD',
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1976D2',
+  },
+  infoText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#424242',
+  },
+  bold: {
+    fontWeight: '700',
   },
   platformGrid: {
     flexDirection: 'row',

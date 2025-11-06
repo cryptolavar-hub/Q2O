@@ -45,11 +45,13 @@ const DrawerNavigator = () => (
       drawerInactiveTintColor: 'gray',
     }}
   >
+    {/* PHASE 1: Building Solutions (Agents work here) */}
     <Drawer.Screen 
       name="Dashboard" 
       component={DashboardStack}
       options={{
         drawerIcon: ({ color, size }) => <Icon name="view-dashboard" size={size} color={color} />,
+        drawerLabel: '📊 Dashboard (Monitor Agents)',
       }}
     />
     <Drawer.Screen 
@@ -57,22 +59,31 @@ const DrawerNavigator = () => (
       component={NewProjectScreen}
       options={{
         drawerIcon: ({ color, size }) => <Icon name="plus-circle" size={size} color={color} />,
+        drawerLabel: '🏗️ New Project (Have Agents Build)',
       }}
     />
+    
+    {/* Monitoring & Analytics */}
     <Drawer.Screen 
       name="Metrics" 
       component={MetricsScreen}
       options={{
         drawerIcon: ({ color, size }) => <Icon name="chart-line" size={size} color={color} />,
+        drawerLabel: '📈 Metrics',
       }}
     />
+    
+    {/* Configuration */}
     <Drawer.Screen 
       name="Settings" 
       component={SettingsScreen}
       options={{
         drawerIcon: ({ color, size }) => <Icon name="cog" size={size} color={color} />,
+        drawerLabel: '⚙️ Settings',
       }}
     />
+    
+    {/* Note: Billing screens (Phase 2) are accessed via navigation.navigate() */}
   </Drawer.Navigator>
 );
 
@@ -100,10 +111,31 @@ const TabNavigator = () => (
       headerShown: false,
     })}
   >
-    <Tab.Screen name="Dashboard" component={DashboardStack} />
-    <Tab.Screen name="New Project" component={NewProjectScreen} />
-    <Tab.Screen name="Metrics" component={MetricsScreen} />
-    <Tab.Screen name="Settings" component={SettingsScreen} />
+    {/* PHASE 1: Building Solutions (Agents Build) */}
+    <Tab.Screen 
+      name="Dashboard" 
+      component={DashboardStack}
+      options={{ title: 'Monitor Agents' }}
+    />
+    <Tab.Screen 
+      name="New Project" 
+      component={NewProjectScreen}
+      options={{ title: 'Have Agents Build' }}
+    />
+    
+    {/* Monitoring & Configuration */}
+    <Tab.Screen 
+      name="Metrics" 
+      component={MetricsScreen}
+      options={{ title: 'Metrics' }}
+    />
+    <Tab.Screen 
+      name="Settings" 
+      component={SettingsScreen}
+      options={{ title: 'Settings' }}
+    />
+    
+    {/* Note: Billing screens (Phase 2) accessed via navigation.navigate() from other screens */}
   </Tab.Navigator>
 );
 

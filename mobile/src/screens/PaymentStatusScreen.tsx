@@ -155,9 +155,23 @@ export default function PaymentStatusScreen({ route, navigation }: any) {
       {isPaid && (
         <Card style={styles.card}>
           <Card.Content>
-            <Title>Next Steps</Title>
+            <Title>✅ Payment Confirmed - Migration Ready</Title>
+            <Paragraph style={{ marginTop: 8, marginBottom: 12 }}>
+              The Quick2Odoo agent-built migration system will now migrate your{' '}
+              <Text style={styles.boldText}>{paymentStatus.metadata?.platform || 'platform'}</Text> data to Odoo.
+            </Paragraph>
             <Paragraph>
-              Your migration will start automatically. You can monitor progress in real-time from the Dashboard.
+              <Text style={styles.boldText}>What happens next:</Text>
+            </Paragraph>
+            <View style={{ marginLeft: 16, marginTop: 8 }}>
+              <Paragraph>• The migration system (built by Quick2Odoo agents) initializes</Paragraph>
+              <Paragraph>• Your data is extracted from {paymentStatus.metadata?.platform}</Paragraph>
+              <Paragraph>• Data is transformed and mapped to Odoo format</Paragraph>
+              <Paragraph>• Data is loaded into your Odoo instance</Paragraph>
+              <Paragraph>• Validation and reporting completed</Paragraph>
+            </View>
+            <Paragraph style={{ marginTop: 12 }}>
+              You can monitor the migration progress in real-time from the Dashboard.
             </Paragraph>
           </Card.Content>
           <Card.Actions>
