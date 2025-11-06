@@ -4,6 +4,11 @@ Coordinates the orchestrator and all agent types to complete projects.
 """
 
 import sys
+import os
+
+# Load environment variables FIRST (before anything else)
+from dotenv import load_dotenv
+load_dotenv()  # This loads .env file into environment
 
 # Check Python version FIRST (before any imports)
 if sys.version_info < (3, 10):
@@ -85,6 +90,36 @@ def setup_logging(log_level: str = "INFO"):
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
+
+
+def verify_environment():
+    """Verify critical environment variables are loaded."""
+    logger = logging.getLogger("main")
+    
+    # Check if .env file exists
+    env_path = Path(".env")
+    if not env_path.exists():
+        logger.warning("⚠️  .env file not found! Create it from env.example")
+        logger.info("Run: cp env.example .env")
+        return False
+    
+    # Check Google Search API configuration
+    google_key = os.getenv("GOOGLE_SEARCH_API_KEY")
+    google_cx = os.getenv("GOOGLE_SEARCH_CX")
+    
+    if google_key and google_cx:
+        masked_key = google_key[:10] + "..." if len(google_key) > 10 else "***"
+        logger.info(f"✓ Google Search API configured: {masked_key}")
+    else:
+        logger.warning("⚠️  Google Search API not configured - will use DuckDuckGo (may have rate limits)")
+        logger.info("To configure: Add GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_CX to .env")
+    
+    # Check Bing API
+    bing_key = os.getenv("BING_SEARCH_API_KEY")
+    if bing_key:
+        logger.info(f"✓ Bing Search API configured")
+    
+    return True
 
 
 class AgentSystem:
@@ -542,6 +577,14 @@ Examples:
     
     # Setup logging
     setup_logging(args.log_level)
+    
+    # Verify environment configuration
+    print("=" * 70)
+    print("Environment Configuration Check")
+    print("=" * 70)
+    verify_environment()
+    print("=" * 70)
+    print()
     
     # Load project configuration
     if args.config:
