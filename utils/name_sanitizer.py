@@ -4,7 +4,7 @@ Converts user objectives/descriptions into valid Python identifiers
 """
 
 import re
-from typing import Optional
+from typing import Dict, Optional
 
 
 def sanitize_for_filename(text: str, max_length: int = 50) -> str:
