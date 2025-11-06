@@ -543,19 +543,66 @@ class ResearcherAgent(BaseAgent):
         research_results['documentation_urls'] = official_docs
         self.logger.info(f"Phase 3: Found {len(official_docs)} official documentation sources")
         
-        # Phase 4: Scrape content from top results
+        # Phase 4: Recursive research (scrape content and follow links)
         if depth in ['deep', 'comprehensive']:
-            scrape_count = 10 if depth == 'comprehensive' else 5
-            self.logger.info(f"Phase 4: Scraping content from top {scrape_count} results...")
+            self.logger.info(f"Phase 4: Starting recursive research (multi-level link following)...")
             
-            scraped_content = self._scrape_top_results(research_results['search_results'][:scrape_count])
-            research_results['scraped_content'] = scraped_content
-            
-            # Extract code examples
-            code_examples = self._extract_code_examples(scraped_content)
-            research_results['code_examples'] = code_examples
-            research_results['sources_consulted'].append('content_scraping')
-            self.logger.info(f"Phase 4: Extracted {len(code_examples)} code examples from {len(scraped_content)} pages")
+            # Use recursive researcher for deep content discovery
+            try:
+                from utils.recursive_researcher import RecursiveResearcher
+                
+                # Detect platform from query
+                platform = self._detect_platform_from_query(query)
+                
+                # Configure recursion depth
+                recursion_depth = 2 if depth == 'comprehensive' else 1
+                
+                researcher = RecursiveResearcher(
+                    max_depth=recursion_depth,
+                    max_links_per_page=10,
+                    request_timeout=10
+                )
+                
+                # Build focus keywords
+                focus_keywords = ['api', 'documentation', 'reference', 'sdk', 'guide', 'examples']
+                if platform:
+                    focus_keywords.extend([platform, 'authentication', 'entities', 'data model'])
+                
+                # Perform recursive research
+                recursive_data = researcher.recursive_research(
+                    research_results['search_results'],
+                    focus_keywords
+                )
+                
+                # Merge results
+                research_results['scraped_content'] = {
+                    **recursive_data.get('level_1_content', {}),
+                    **recursive_data.get('level_2_content', {})
+                }
+                research_results['code_examples'] = recursive_data.get('code_examples', [])
+                research_results['api_endpoints'] = recursive_data.get('api_endpoints', [])
+                research_results['github_repos'] = recursive_data.get('github_repos', [])
+                research_results['discovered_links'] = recursive_data.get('discovered_links', [])
+                research_results['sources_consulted'].append('recursive_research')
+                
+                self.logger.info(f"Phase 4: Recursive research complete - "
+                               f"{recursive_data.get('total_pages_scraped', 0)} pages scraped, "
+                               f"{len(research_results['code_examples'])} code examples, "
+                               f"{len(research_results['api_endpoints'])} API endpoints discovered")
+                
+            except Exception as e:
+                self.logger.warning(f"Recursive research failed, falling back to simple scraping: {e}")
+                
+                # Fallback to simple scraping
+                scrape_count = 10 if depth == 'comprehensive' else 5
+                scraped_content = self._scrape_top_results(research_results['search_results'][:scrape_count])
+                research_results['scraped_content'] = scraped_content
+                
+                # Extract code examples
+                code_examples = self._extract_code_examples(scraped_content)
+                research_results['code_examples'] = code_examples
+                research_results['sources_consulted'].append('content_scraping')
+                self.logger.info(f"Phase 4 (fallback): Extracted {len(code_examples)} code examples from {len(scraped_content)} pages")
         
         # Phase 5: Synthesize findings
         key_findings = self._synthesize_findings(research_results, query)
@@ -566,6 +613,36 @@ class ResearcherAgent(BaseAgent):
         research_results['confidence_score'] = confidence
         
         return research_results
+    
+    def _detect_platform_from_query(self, query: str) -> Optional[str]:
+        """
+        Detect platform name from research query.
+        
+        Args:
+            query: Research query
+            
+        Returns:
+            Platform name or None
+        """
+        query_lower = query.lower()
+        
+        platforms = {
+            'sage': 'SAGE',
+            'quickbooks': 'QuickBooks',
+            'qbo': 'QuickBooks',
+            'xero': 'Xero',
+            'netsuite': 'NetSuite',
+            'wave': 'Wave',
+            'stripe': 'Stripe',
+            'freshbooks': 'FreshBooks',
+            'zoho': 'Zoho Books'
+        }
+        
+        for keyword, platform_name in platforms.items():
+            if keyword in query_lower:
+                return platform_name
+        
+        return None
     
     def _determine_research_depth(self, task: Task) -> str:
         """
