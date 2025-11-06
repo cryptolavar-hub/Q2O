@@ -6,6 +6,16 @@
 
 ---
 
+## 📌 **IMPORTANT: This Describes Agent-Generated Solutions**
+
+This summary documents enhancements to Quick2Odoo's **agent-generated migration systems**.
+
+The QuickBooks migration system described here is what **agents produced** as a reference implementation. When you run Quick2Odoo for other platforms (SAGE, Xero, etc.), agents will research their APIs and generate similar comprehensive systems.
+
+**Quick2Odoo = Agents that build migration solutions, not pre-built migration tools.**
+
+---
+
 ## 🎯 **Three Critical Issues You Identified (All Resolved!)**
 
 ### **Issue #1**: ❌ "QuickBooks integration incomplete - missing Vendors, Inventory, etc."

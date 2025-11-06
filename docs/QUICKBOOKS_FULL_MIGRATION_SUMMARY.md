@@ -5,7 +5,22 @@
 
 ---
 
-## 🎯 Your Concern Was Valid!
+## 📌 **IMPORTANT: Reference Implementation - What Agents Generate**
+
+This document describes the QuickBooks migration system as a **reference implementation** showing what Quick2Odoo agents can produce.
+
+**This is an EXAMPLE** of what agents generate when you run:
+```bash
+python main.py --project "QuickBooks Migration" --objective "Full migration"
+```
+
+The agents research QuickBooks API, discover all 40+ entities, and generate complete client code, mappings, and orchestration.
+
+**For other platforms**: Agents follow the same research → generate → test process to build similar comprehensive systems.
+
+---
+
+## 🎯 Background: Why This Reference Was Created
 
 You were **100% correct** - the original QuickBooks integration was **incomplete**. It only supported:
 

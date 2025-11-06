@@ -7,6 +7,24 @@
 
 ---
 
+## 📌 **IMPORTANT: This Describes What Agents Build**
+
+This document explains the complete workflow of Quick2Odoo's **agent-driven system**:
+
+- **Phase 1**: Agents **BUILD** the SaaS application dynamically (described in this doc)
+- **Phase 2**: End users **USE** the agent-built SaaS to migrate their data
+
+**The configurations, clients, APIs, and components described here are what the AGENTS GENERATE based on your objectives - not pre-built solutions.**
+
+When you run:
+```bash
+python main.py --project "SAGE Migration" --objective "Full migration"
+```
+
+The agents research SAGE API, generate all necessary code, and produce a complete working system. This document explains that process.
+
+---
+
 ## 🎯 **CRITICAL DISTINCTION**
 
 Quick2Odoo operates in **TWO DISTINCT PHASES**:

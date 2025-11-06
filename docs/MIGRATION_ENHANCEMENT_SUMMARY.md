@@ -6,6 +6,25 @@
 
 ---
 
+## 📌 **IMPORTANT: Framework Components + Reference Implementation**
+
+This summary documents enhancements to Quick2Odoo's migration capabilities:
+
+**What was enhanced**:
+1. **Framework components** (tools agents use): MigrationOrchestrator, PlatformMapper
+2. **Template examples** (patterns agents follow): qbo_client_full.j2, sage_client.j2
+3. **Reference implementation** (QuickBooks): Shows what agents can generate
+
+**QuickBooks serves as a reference implementation** - when agents build migration systems for other platforms (SAGE, Xero, etc.), they research those platforms' APIs and generate similar comprehensive solutions.
+
+**The components described here are either**:
+- Reusable frameworks (agents use as tools), OR
+- Reference examples (agents learn from and adapt)
+
+**Quick2Odoo agents dynamically build migration systems - not using pre-built solutions.**
+
+---
+
 ## 🎯 Your Concern (You Were Right!)
 
 > "The QuickBooks API seems to only collect Customer, Invoices and Payments. I would like this expanded to all tables in QBO such as Vendors, Inventory etc. A FULL migration."

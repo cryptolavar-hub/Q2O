@@ -8,6 +8,26 @@
 
 ---
 
+## 📌 **IMPORTANT: Framework + Agent-Generated Components**
+
+This document describes Quick2Odoo's migration architecture, which consists of:
+
+**1. Framework Components** (Tools agents use):
+- `MigrationOrchestrator` - Reusable migration coordination framework
+- `PlatformMapper` - Universal data transformation framework
+- `OdooClient` - Base Odoo API client
+
+**2. Agent-Generated Components** (Built dynamically):
+- Platform-specific clients (QBOFullClient, SAGEClient, etc.) - **Agents generate these**
+- Platform mappings (quickbooks_to_odoo_mapping.json) - **Agents generate these**
+- Orchestration layer - **Agents assemble using framework**
+
+**The QuickBooks example shown here is what agents PRODUCED for QuickBooks. Agents will research and build similar systems for ANY platform (SAGE, Xero, NetSuite, etc.) based on their API documentation.**
+
+When you run `python main.py --project "SAGE Migration"`, the agents research SAGE API and generate a complete SAGE migration system following the patterns shown here.
+
+---
+
 ## 🎯 Architecture Overview
 
 ### **The 3-Layer Migration Stack**

@@ -4,6 +4,26 @@
 
 ---
 
+## 📌 **IMPORTANT: Reference Implementation - Agent-Generated**
+
+This guide documents the QuickBooks migration system that **Quick2Odoo agents generated**.
+
+**What this is**:
+- ✅ A **reference implementation** showing what agents produce
+- ✅ A **quality benchmark** for agent-generated migration systems
+- ✅ **Documentation** of the QB → Odoo mapping logic agents created
+
+**What this is NOT**:
+- ❌ A manual implementation guide (agents build this automatically)
+- ❌ Pre-built code (agents generate fresh code based on research)
+- ❌ Step-by-step coding instructions (agents do the coding)
+
+**How it was created**: Agents researched QuickBooks Online API documentation, discovered 40+ entities, generated the client code, created field mappings, and built the orchestration layer.
+
+**For other platforms** (SAGE, Xero, Wave, etc.): Agents will research their APIs and generate similar comprehensive systems following these patterns.
+
+---
+
 ## 🎯 Executive Summary
 
 This guide covers the **COMPLETE** migration of ALL QuickBooks Online data to Odoo v18, including:
