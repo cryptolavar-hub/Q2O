@@ -334,16 +334,27 @@ class OrchestratorAgent(BaseAgent):
         Returns:
             Complexity level (low, medium, high)
         """
-        # Simple heuristic based on keywords and length
-        keywords_high = ["api", "integration", "database", "authentication", "payment"]
-        keywords_medium = ["form", "component", "service", "module"]
+        # Expanded heuristic based on keywords and length
+        keywords_high = [
+            "api", "integration", "database", "authentication", "payment",
+            "migration", "full migration", "data migration",  # Migration keywords
+            "platform", "sage", "quickbooks", "xero", "netsuite",  # Platform keywords
+            "oauth", "webhook", "sync", "orchestration",  # Integration keywords
+            "billing", "stripe", "pricing"  # Complex business logic
+        ]
+        keywords_medium = ["form", "component", "service", "module", "crud", "endpoint"]
         
         objective_lower = objective.lower()
         
+        # Check for high complexity keywords
         if any(keyword in objective_lower for keyword in keywords_high):
             return "high"
+        # Check for medium complexity keywords
         elif any(keyword in objective_lower for keyword in keywords_medium):
             return "medium"
+        # Check for multiple objectives or long descriptions (likely complex)
+        elif len(objective) > 100 or "," in objective:
+            return "high"
         else:
             return "low"
 

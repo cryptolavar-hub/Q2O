@@ -515,32 +515,47 @@ class ResearcherAgent(BaseAgent):
         }
         
         # Phase 1: Quick search (top results)
-        quick_results = self.searcher.search(query, num_results=5)
+        # More results for high-depth research
+        initial_results = 10 if depth == 'comprehensive' else 5
+        quick_results = self.searcher.search(query, num_results=initial_results)
         research_results['search_results'].extend(quick_results)
         research_results['sources_consulted'].append('quick_search')
+        self.logger.info(f"Phase 1: Retrieved {len(quick_results)} initial results")
         
         # Phase 2: Deep search if needed
-        if depth in ['deep', 'adaptive']:
+        if depth in ['deep', 'adaptive', 'comprehensive']:
             # Search for specific aspects
             deep_queries = self._generate_deep_queries(query, task)
+            deep_results_per_query = 5 if depth == 'comprehensive' else 3
+            
+            self.logger.info(f"Phase 2: Conducting {len(deep_queries)} deep searches...")
             for deep_query in deep_queries:
-                results = self.searcher.search(deep_query, num_results=3)
+                results = self.searcher.search(deep_query, num_results=deep_results_per_query)
                 research_results['search_results'].extend(results)
+                self.logger.debug(f"  Deep query '{deep_query[:50]}...' returned {len(results)} results")
+            
             research_results['sources_consulted'].append('deep_search')
+            self.logger.info(f"Phase 2: Retrieved {len(research_results['search_results']) - len(quick_results)} additional results from deep search")
         
         # Phase 3: Extract documentation and code examples
+        self.logger.info(f"Phase 3: Extracting official documentation...")
         official_docs = self._find_official_documentation(research_results['search_results'], query)
         research_results['documentation_urls'] = official_docs
+        self.logger.info(f"Phase 3: Found {len(official_docs)} official documentation sources")
         
         # Phase 4: Scrape content from top results
         if depth in ['deep', 'comprehensive']:
-            scraped_content = self._scrape_top_results(research_results['search_results'][:5])
+            scrape_count = 10 if depth == 'comprehensive' else 5
+            self.logger.info(f"Phase 4: Scraping content from top {scrape_count} results...")
+            
+            scraped_content = self._scrape_top_results(research_results['search_results'][:scrape_count])
             research_results['scraped_content'] = scraped_content
             
             # Extract code examples
             code_examples = self._extract_code_examples(scraped_content)
             research_results['code_examples'] = code_examples
             research_results['sources_consulted'].append('content_scraping')
+            self.logger.info(f"Phase 4: Extracted {len(code_examples)} code examples from {len(scraped_content)} pages")
         
         # Phase 5: Synthesize findings
         key_findings = self._synthesize_findings(research_results, query)
@@ -589,10 +604,39 @@ class ResearcherAgent(BaseAgent):
         """
         queries = []
         tech_stack = task.tech_stack or []
+        query_lower = base_query.lower()
+        
+        # Detect if this is a migration/platform research
+        is_migration = any(kw in query_lower for kw in ['migration', 'platform', 'api', 'integration'])
+        is_platform_specific = any(kw in query_lower for kw in ['sage', 'quickbooks', 'xero', 'netsuite', 'wave'])
         
         # Add tech-stack specific queries
         for tech in tech_stack:
             queries.append(f"{base_query} {tech} tutorial")
+        
+        # Add migration-specific deep queries
+        if is_migration:
+            queries.extend([
+                f"{base_query} API documentation",
+                f"{base_query} authentication guide",
+                f"{base_query} code examples Python",
+                f"{base_query} best practices",
+                f"{base_query} entity types data model"
+            ])
+        
+        # Add platform-specific deep queries
+        if is_platform_specific:
+            # Extract platform name
+            for platform in ['sage', 'quickbooks', 'xero', 'netsuite', 'wave', 'stripe']:
+                if platform in query_lower:
+                    queries.extend([
+                        f"{platform} API reference",
+                        f"{platform} API entities",
+                        f"{platform} OAuth 2.0 setup",
+                        f"{platform} REST API examples",
+                        f"{platform} data export"
+                    ])
+                    break
             queries.append(f"{base_query} {tech} best practices")
         
         # Add specific aspect queries
