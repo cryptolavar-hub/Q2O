@@ -50,9 +50,22 @@ def sanitize_for_filename(text: str, max_length: int = 50) -> str:
     if sanitized and sanitized[0].isdigit():
         sanitized = 'module_' + sanitized
     
-    # Truncate if too long
+    # Truncate if too long (smart truncation - don't break words)
     if len(sanitized) > max_length:
-        sanitized = sanitized[:max_length].rstrip('_')
+        # Try to truncate at word boundary
+        words = sanitized.split('_')
+        truncated = []
+        current_length = 0
+        
+        for word in words:
+            if current_length + len(word) + 1 <= max_length:  # +1 for underscore
+                truncated.append(word)
+                current_length += len(word) + 1
+            else:
+                break
+        
+        sanitized = '_'.join(truncated) if truncated else sanitized[:max_length]
+        sanitized = sanitized.rstrip('_')
     
     # Ensure not empty
     if not sanitized:
