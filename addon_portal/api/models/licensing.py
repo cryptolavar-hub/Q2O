@@ -62,7 +62,7 @@ class UsageEvent(Base):
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
     kind = Column(String, nullable=False)
     at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    metadata = Column(String, nullable=True)
+    event_metadata = Column(String, nullable=True)
 
 class MonthlyUsageRollup(Base):
     __tablename__ = "monthly_usage_rollups"

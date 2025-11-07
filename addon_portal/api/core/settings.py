@@ -6,9 +6,13 @@ class Settings(BaseSettings):
     APP_NAME: str = "Quick2Odoo"
     ENV: str = "dev"
 
-    # Postgres
-    # Note: Changed to psycopg2 for compatibility with psycopg2-binary (simpler deployment)
-    DB_DSN: str = "postgresql+psycopg2://user:pass@localhost:5432/q2o"
+    # Database Configuration
+    # Default: SQLite for development (no server required, zero setup)
+    # Production: Set DB_DSN in .env to: postgresql+psycopg2://q2o_user:password@localhost:5432/q2o
+    # 
+    # SQLite pros: Zero setup, perfect for development/testing
+    # PostgreSQL pros: Production-grade, concurrent users, scalability, ACID compliance
+    DB_DSN: str = "sqlite:///./q2o_licensing.db"
 
     # JWT
     JWT_ISSUER: str = "q2o-auth"
