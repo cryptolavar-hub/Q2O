@@ -575,6 +575,8 @@ This project is part of the **Quick2Odoo** initiative - enabling seamless migrat
 | **Dark Mode & Tablet** | Mobile UI implementation | [`mobile/DARK_MODE_AND_TABLET_IMPLEMENTATION.md`](mobile/DARK_MODE_AND_TABLET_IMPLEMENTATION.md) |
 | **Feature Roadmap** | Mobile app future features | [`mobile/FEATURE_ROADMAP.md`](mobile/FEATURE_ROADMAP.md) |
 | **Mobile Alignment Review** | Mobile app assessment | [`docs/MOBILE_APP_ALIGNMENT_REVIEW.md`](docs/MOBILE_APP_ALIGNMENT_REVIEW.md) |
+| **UI/UX Modernization Plan** | Admin & Dashboard UI redesign ⭐ | [`docs/UI_UX_MODERNIZATION_PLAN.md`](docs/UI_UX_MODERNIZATION_PLAN.md) |
+| **UI/UX Summary** | Quick reference for UI improvements | [`docs/UI_UX_MODERNIZATION_SUMMARY.md`](docs/UI_UX_MODERNIZATION_SUMMARY.md) |
 
 ### **🌐 Website & Marketing**
 
