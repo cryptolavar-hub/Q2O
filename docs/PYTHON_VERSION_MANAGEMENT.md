@@ -1,8 +1,20 @@
 # Python Version Management - Best Practices
 
-## 🎯 The Problem
+## 🎉 **UPDATE: Python 3.13 Now Supported! (November 2025)**
 
-You wanted to include a Python 3.12.10 installer (.exe file) in the repository to ensure clients use the correct Python version, avoiding compatibility issues with Python 3.13+.
+**Great News**: Python 3.13 is now fully compatible with Quick2Odoo!
+
+**What Changed**: `pydantic-core 2.41.5+` now includes pre-built wheels for Python 3.13, eliminating the Rust compiler requirement.
+
+**Supported Versions**: Python 3.10, 3.11, 3.12, **3.13** ⭐
+
+**See**: `docs/PYTHON_313_COMPATIBILITY_CONFIRMED.md` for full test results.
+
+---
+
+## 🎯 The Original Problem (Historical Context)
+
+You wanted to include a Python 3.12.10 installer (.exe file) in the repository to ensure clients use the correct Python version, avoiding compatibility issues with Python 3.13+ (which were present at the time).
 
 **While this intention is good, including binary installers in the repository is NOT recommended.**
 
@@ -61,10 +73,10 @@ if sys.version_info < (3, 10):
     print("https://www.python.org/downloads/release/python-31210/")
     sys.exit(1)
 
-if sys.version_info >= (3, 13):
-    print("WARNING: Python 3.13+ detected!")
-    print("Quick2Odoo is tested with Python 3.10-3.12")
-    print("Recommended: Use Python 3.12.10")
+if sys.version_info >= (3, 14):
+    print("WARNING: Python 3.14+ detected!")
+    print("Quick2Odoo is tested with Python 3.10-3.13")
+    print("Recommended: Use Python 3.12 or 3.13")
     response = input("Continue anyway? (y/N): ")
     if response.lower() != 'y':
         sys.exit(1)
@@ -82,9 +94,10 @@ if sys.version_info >= (3, 13):
 
 ```python
 # ⚠️ Python Version Requirements:
-#    - Supported: Python 3.10, 3.11, 3.12
-#    - Recommended: Python 3.12.10
-#    - NOT Compatible: Python 3.13+ (dependency conflicts)
+#    - Supported: Python 3.10, 3.11, 3.12, 3.13
+#    - Recommended: Python 3.12.10 (most stable)
+#    - Python 3.13 now works! (pydantic-core 2.41.5+ has wheels)
+#    - NOT Compatible: Python 3.14+ (wait for ecosystem support)
 #
 # Download Python 3.12.10: https://www.python.org/downloads/release/python-31210/
 ```
@@ -112,9 +125,10 @@ Added a **highly visible Python Version Requirements** section at the top of REA
 | Status | Python Version | Notes |
 |--------|---------------|-------|
 | ✅ **Recommended** | **Python 3.12.10** | Fully tested |
+| ✅ Supported | Python 3.13.x ⭐ **NEW!** | Now compatible! (pydantic-core 2.41.5+ has wheels) |
 | ✅ Supported | Python 3.11.x | Fully compatible |
 | ✅ Supported | Python 3.10.x | Fully compatible |
-| ❌ **NOT Compatible** | Python 3.13+ | Dependency conflicts |
+| ❓ Unknown | Python 3.14+ | Wait for ecosystem support |
 ```
 
 ---

@@ -2,9 +2,10 @@
 # Pinned versions for reproducibility
 #
 # ⚠️ Python Version Requirements:
-#    - Supported: Python 3.10, 3.11, 3.12
-#    - Recommended: Python 3.12.10
-#    - NOT Compatible: Python 3.13+ (dependency conflicts)
+#    - Supported: Python 3.10, 3.11, 3.12, 3.13 ⭐ NEW!
+#    - Recommended: Python 3.12.10 (most stable)
+#    - Python 3.13 now works! (pydantic-core 2.41.5+ has wheels)
+#    - NOT Compatible: Python 3.14+ (wait for ecosystem support)
 #
 # Download Python 3.12.10: https://www.python.org/downloads/release/python-31210/
 
@@ -12,7 +13,7 @@
 fastapi==0.110.0
 uvicorn[standard]==0.29.0
 pydantic==2.7.1
-pydantic-settings==2.1.0
+pydantic-settings>=2.1.0
 
 # Database
 sqlalchemy==2.0.29

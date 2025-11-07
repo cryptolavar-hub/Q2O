@@ -28,16 +28,16 @@ if sys.version_info < (3, 10):
     print("=" * 70)
     sys.exit(1)
 
-if sys.version_info >= (3, 13):
+if sys.version_info >= (3, 14):
     print("=" * 70)
-    print("WARNING: Python 3.13+ detected!")
+    print("WARNING: Python 3.14+ detected!")
     print(f"Current version: Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
     print()
-    print("Quick2Odoo is tested with Python 3.10, 3.11, and 3.12.")
-    print("Python 3.13+ may have compatibility issues with some dependencies.")
+    print("Quick2Odoo is tested with Python 3.10, 3.11, 3.12, and 3.13.")
+    print("Python 3.14+ may have compatibility issues with some dependencies.")
     print()
-    print("Recommended: Use Python 3.12.10")
-    print("Download from: https://www.python.org/downloads/release/python-31210/")
+    print("Recommended: Use Python 3.12 or 3.13")
+    print("Download from: https://www.python.org/downloads/")
     print()
     print("Create virtual environment with Python 3.12:")
     print("  py -3.12 -m venv venv")

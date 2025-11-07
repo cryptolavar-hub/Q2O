@@ -10,10 +10,11 @@ A sophisticated multi-agent development system that automates the creation of co
 
 | Status | Python Version | Notes |
 |--------|---------------|-------|
-| ✅ **Recommended** | **Python 3.12.10** | Fully tested, all dependencies work perfectly |
+| ✅ **Recommended** | **Python 3.12.10** | Most stable, fully tested, all dependencies work perfectly |
+| ✅ Supported | Python 3.13.x ⭐ **NEW!** | Now compatible! (pydantic-core 2.41.5+ has wheels) |
 | ✅ Supported | Python 3.11.x | Fully compatible |
 | ✅ Supported | Python 3.10.x | Fully compatible |
-| ❌ **NOT Compatible** | Python 3.13+ | Dependency conflicts (pydantic-core requires Rust compilation) |
+| ❓ Unknown | Python 3.14+ | Wait for ecosystem support |
 | ❌ Not Supported | Python 3.9 or older | Missing required features |
 
 ### 📥 Download Python 3.12.10
