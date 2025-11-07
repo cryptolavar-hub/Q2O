@@ -336,16 +336,18 @@ import secrets, string
 
 ### **Verification**
 
-Test with Python 3.9:
+Test with any supported Python version:
 ```bash
 cd addon_portal
-python3.9 -c "from api.routers.admin_pages import router; print('✓ Imports successful')"
+python -c "from api.routers.admin_pages import router; print('✓ Imports successful')"
 ```
 
 **Expected Output**:
 ```
 ✓ Imports successful
 ```
+
+**Supported Python Versions**: 3.10, 3.11, 3.12, 3.13
 
 ---
 
@@ -410,26 +412,36 @@ This addon integrates with Quick2Odoo, which has specific Python version require
 | **3.10** | ✅ Yes | ✅ Yes | ✅ **Supported** |
 | **3.11** | ✅ Yes | ✅ Yes | ✅ **Supported** |
 | **3.12** | ✅ Yes | ✅ Yes | ✅ **Recommended** |
-| 3.13+ | ⚠️ Partial | ❌ No (pydantic-core issue) | ❌ **Not supported** |
+| **3.13** | ✅ Yes | ✅ Yes ⭐ **NEW!** | ✅ **Supported** |
+| 3.14+ | ❓ Unknown | ❓ Unknown | ⚠️ Wait for ecosystem |
 
 ### **Recommendation**
 
-**Use Python 3.12** for best compatibility with Quick2Odoo platform.
+**Use Python 3.12 or 3.13** for full compatibility with Quick2Odoo platform.
 
-**Why not Python 3.13?**
-- `pydantic-core` requires Rust compiler on Python 3.13+
-- Quick2Odoo has standardized on Python 3.10-3.12
-- All dependencies tested and working on these versions
+### **🎉 Python 3.13 Now Supported! (November 2025 Update)**
+
+**Great News**: Python 3.13 is now fully compatible!
+
+**What Changed**:
+- `pydantic-core 2.41.5+` now includes pre-built wheels for Python 3.13
+- No Rust compiler needed anymore
+- All dependencies work perfectly
 
 **Installation**:
 ```bash
-# Download Python 3.12.10
+# Option 1: Python 3.12.10 (Most Stable)
 https://www.python.org/downloads/release/python-31210/
+
+# Option 2: Python 3.13 (Latest, Now Supported!)
+https://www.python.org/downloads/
 
 # Verify version
 python --version
-# Should show: Python 3.12.x
+# Should show: Python 3.12.x or 3.13.x
 ```
+
+**See**: `docs/PYTHON_313_COMPATIBILITY_CONFIRMED.md` for full test results.
 
 ---
 
@@ -493,15 +505,17 @@ pip install --upgrade pydantic pydantic-settings
 
 ## 📝 NOTES
 
-- **Python Version**: All fixes work on Python 3.10, 3.11, and 3.12 (Quick2Odoo's supported versions)
+- **Python Version**: All fixes work on Python 3.10, 3.11, 3.12, and 3.13 (Quick2Odoo's supported versions)
 - **No Breaking Changes**: All fixes are backward-compatible with existing data
 - **Production Safe**: These changes are safe to deploy to production
 - **No Data Migration**: No database changes required
 - **Alignment**: Matches Quick2Odoo platform's Python version requirements
+- **Latest Update**: Python 3.13 now supported (pydantic-core 2.41.5+ has wheels)
 
 ---
 
-**Document Version**: 1.0  
+**Document Version**: 1.1 (Updated for Python 3.13 support)  
 **Last Updated**: November 6, 2025  
-**Applies To**: Q2O Licensing Addon v0.1.0
+**Applies To**: Q2O Licensing Addon v0.1.0  
+**Python Support**: 3.10, 3.11, 3.12, 3.13
 

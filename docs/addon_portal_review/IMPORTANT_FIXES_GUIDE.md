@@ -35,7 +35,7 @@ Create `addon_portal/requirements.txt`:
 
 ```txt
 # Q2O Licensing Addon - Python Dependencies
-# Compatible with Python 3.10-3.12
+# Compatible with Python 3.10-3.13
 
 # Core Framework
 fastapi>=0.110.0,<0.111.0
