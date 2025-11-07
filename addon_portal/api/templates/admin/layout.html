@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Q2O Admin</title>
+  <link rel="stylesheet" href="/static/admin.css" />
+</head>
+<body>
+  <header>
+    <h1>Q2O Admin</h1>
+    <nav>
+      <a href="/admin/codes">Codes</a>
+      <a href="/admin/devices">Devices</a>
+    </nav>
+    <div>
+      {% if request.session and request.session.get('user') %}
+        <span style="opacity:.7; margin-right:8px;">{{ request.session['user']['email'] }}</span>
+        <a href="/auth/logout">Logout</a>
+      {% else %}
+        <a href="/auth/login">Login</a>
+      {% endif %}
+    </div>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

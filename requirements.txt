@@ -41,6 +41,34 @@ python-dotenv==1.0.1
 # Stripe integration
 stripe==9.1.0
 
+# ============================================================================
+# LICENSING ADDON DEPENDENCIES (Optional Module)
+# ============================================================================
+# Only install these if you're using the Q2O Licensing Addon
+#
+# Quick Installation:
+#   pip install pyjwt cryptography psycopg2-binary python-multipart
+#
+# Optional (for admin SSO):
+#   pip install Authlib
+# ============================================================================
+
+# JWT Authentication (for licensing addon)
+pyjwt>=2.8.0,<3.0.0
+cryptography>=41.0.0,<42.0.0
+
+# PostgreSQL Database Driver (for licensing addon multi-tenancy)
+# Use psycopg2-binary for simplicity (requires changing addon connection string)
+psycopg2-binary>=2.9.9,<3.0.0
+# OR use psycopg v3 with binary extras:
+# psycopg[binary]>=3.1.0,<4.0.0
+
+# Form Data Handling (for licensing addon admin UI)
+python-multipart>=0.0.6,<0.1.0
+
+# OIDC/SSO (optional - uncomment if using admin SSO)
+# Authlib>=1.3.0,<2.0.0
+
 # Testing
 pytest==8.1.1
 pytest-asyncio==0.23.3

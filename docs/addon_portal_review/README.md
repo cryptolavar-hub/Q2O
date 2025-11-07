@@ -21,6 +21,9 @@ This folder contains comprehensive review documentation for the Q2O Licensing & 
 | **[ADDON_INTEGRATION_GUIDE.md](#integration-guide)** | Integrate with Quick2Odoo | 30 min | Developers |
 | **[AGENTS_BUILD_MODEL_COMPATIBILITY.md](#compatibility)** | Does it break agent-driven model? | 10 min | Decision makers |
 | **[TWO_TIER_PRICING_MODEL.md](#pricing)** | How both pricing models work | 15 min | Business owners |
+| **[COMPATIBILITY_ISSUES_SUMMARY.md](#compatibility-issues)** | 6 dependency conflicts found | 10 min | Developers |
+| **[COMPATIBILITY_ISSUES_DETAILED.md](#compatibility-detailed)** | Deep technical analysis | 20 min | DevOps/Developers |
+| **[ADDON_INTEGRATION_REQUIREMENTS.md](#integration-requirements)** | Exact dependency list | 15 min | Developers |
 
 ---
 
@@ -206,6 +209,76 @@ This folder contains comprehensive review documentation for the Q2O Licensing & 
 
 ---
 
+### **Compatibility Issues Summary**
+**File**: `COMPATIBILITY_ISSUES_SUMMARY.md`
+
+**Purpose**: Quick overview of 6 dependency conflicts discovered in deep review
+
+**Contains**:
+- ⚠️ 6 compatibility issues with Quick2Odoo
+- 🔴 Stripe version conflict (9.1.0 vs <8.0.0)
+- 🔴 4 missing dependencies (PyJWT, psycopg2, multipart, Authlib)
+- 🟡 1 version difference (Pydantic 2.7.1 vs 2.12.4)
+- ✅ Quick fix guide for each issue
+- 📊 Updated compatibility score (68/100)
+- 🎯 Resolution roadmap (4-6 hours)
+
+**Read this if**:
+- You need to know what's incompatible
+- You're planning integration timeline
+- You want quick reference for fixes
+
+**Time Required**: 10 minutes
+
+---
+
+### **Compatibility Issues Detailed**
+**File**: `COMPATIBILITY_ISSUES_DETAILED.md`
+
+**Purpose**: Deep technical analysis of all compatibility issues
+
+**Contains**:
+- 🔍 Detailed analysis of each issue
+- 📊 Dependency version matrix
+- 🏗️ 3 integration scenarios (integrated, microservices, optional)
+- 🔧 Step-by-step resolution for each issue
+- 💡 Code examples and solutions
+- 🎯 Recommended deployment strategies
+
+**Read this if**:
+- You're implementing the addon
+- You need to resolve dependency conflicts
+- You want to understand technical details
+- You're choosing deployment architecture
+
+**Time Required**: 20 minutes
+
+---
+
+### **Addon Integration Requirements**
+**File**: `ADDON_INTEGRATION_REQUIREMENTS.md`
+
+**Purpose**: Exact list of dependencies needed to integrate addon with Quick2Odoo
+
+**Contains**:
+- 📦 Complete dependency list
+- ✅ What Quick2Odoo already has (7 packages)
+- ⚠️ What needs to be added (5 packages)
+- 🔧 Updated requirements.txt with licensing section
+- 📋 Installation checklist
+- 🧪 Testing checklist
+- 💡 Minimal installation guide for quick testing
+
+**Read this if**:
+- You're ready to install the addon
+- You need exact package versions
+- You're updating requirements.txt
+- You want a checklist
+
+**Time Required**: 15 minutes
+
+---
+
 ## 🚀 RECOMMENDED READING ORDER
 
 ### **For Decision Makers** (15 minutes):
@@ -325,14 +398,26 @@ Follow the step-by-step instructions in `ADDON_SETUP_GUIDE.md`.
 docs/addon_portal_review/
 ├── README.md (this file)
 ├── REVIEW_COMPLETE_SUMMARY.md
-├── ADDON_REVIEW_EXECUTIVE_SUMMARY.md
-├── CRITICAL_FIXES_GUIDE.md
-├── IMPORTANT_FIXES_GUIDE.md
-├── QUICK_REFERENCE.md
-├── ADDON_SETUP_GUIDE.md (coming soon)
-├── ADDON_INTEGRATION_GUIDE.md (coming soon)
-├── AGENTS_BUILD_MODEL_COMPATIBILITY.md
-└── TWO_TIER_PRICING_MODEL.md
+├── ADDON_REVIEW_EXECUTIVE_SUMMARY.md (updated - score 68/100)
+│
+├── Code Fixes:
+│   ├── CRITICAL_FIXES_GUIDE.md (v1.1 - Python 3.13 support)
+│   ├── IMPORTANT_FIXES_GUIDE.md (updated)
+│   └── QUICK_REFERENCE.md
+│
+├── Compatibility Analysis (NEW):
+│   ├── COMPATIBILITY_ISSUES_SUMMARY.md (6 issues found)
+│   ├── COMPATIBILITY_ISSUES_DETAILED.md (deep analysis)
+│   └── ADDON_INTEGRATION_REQUIREMENTS.md (dependency list)
+│
+├── Strategic Analysis:
+│   ├── AGENTS_BUILD_MODEL_COMPATIBILITY.md (100% compatible)
+│   ├── TWO_TIER_PRICING_MODEL.md (subscription + usage)
+│   └── PYTHON_313_UPDATE_NOTES.md
+│
+└── Future:
+    ├── ADDON_SETUP_GUIDE.md (coming soon)
+    └── ADDON_INTEGRATION_GUIDE.md (coming soon)
 ```
 
 ### **Addon Source Code**:

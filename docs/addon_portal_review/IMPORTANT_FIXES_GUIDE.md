@@ -43,7 +43,7 @@ uvicorn[standard]>=0.27.0,<0.28.0
 
 # Database
 sqlalchemy>=2.0.25,<2.1.0
-psycopg2-binary>=2.9.9,<3.0.0
+psycopg>=3.1.0,<4.0.0  # PostgreSQL driver v3 (NOT psycopg2-binary!)
 alembic>=1.13.0,<1.14.0
 
 # Data Validation

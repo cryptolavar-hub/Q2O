@@ -1,0 +1,37 @@
+{% extends "admin/layout.html" %}
+{% block content %}
+  <h2>Devices</h2>
+  <form method="get" action="/admin/devices" class="row">
+    <label>Tenant:</label>
+    <input name="tenant" value="{{ selected.slug if selected else '' }}" placeholder="acme" />
+    <button type="submit">Load</button>
+  </form>
+
+  {% if selected %}
+  <section class="card">
+    <h3>Registered Devices for {{ selected.slug }}</h3>
+    <table>
+      <thead><tr><th>ID</th><th>Label</th><th>Last Seen</th><th>Revoked</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for d in devices %}
+        <tr>
+          <td>{{ d.id }}</td>
+          <td>{{ d.label or '—' }}</td>
+          <td>{{ d.last_seen }}</td>
+          <td>{{ 'yes' if d.is_revoked else 'no' }}</td>
+          <td>
+            {% if not d.is_revoked %}
+            <form method="post" action="/admin/devices/revoke" onsubmit="return confirm('Revoke this device?');">
+              <input type="hidden" name="tenant_slug" value="{{ selected.slug }}" />
+              <input type="hidden" name="device_id" value="{{ d.id }}" />
+              <button type="submit">Revoke</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+{% endblock %}

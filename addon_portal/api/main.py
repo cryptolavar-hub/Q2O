@@ -1,0 +1,27 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
+from .core.settings import settings
+from .routers import authz, licenses, billing_stripe, admin_pages, auth_sso, usage
+
+app = FastAPI(title=f"{settings.APP_NAME} Licensing Service")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
+
+app.include_router(authz.router)
+app.include_router(licenses.router)
+app.include_router(billing_stripe.router)
+app.include_router(auth_sso.router)
+app.include_router(usage.router)
+app.include_router(admin_pages.router)
+
+app.mount("/static", StaticFiles(directory="api/static"), name="static")

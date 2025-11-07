@@ -1,0 +1,55 @@
+{% extends "admin/layout.html" %}
+{% block content %}
+  <h2>Activation Codes</h2>
+  <form method="get" action="/admin/codes" class="row">
+    <label>Tenant:</label>
+    <input name="tenant" value="{{ selected.slug if selected else '' }}" placeholder="acme" />
+    <button type="submit">Load</button>
+  </form>
+
+  {% if request.query_params.get('created') %}
+    <section class="flash">
+      <strong>Codes created (copy now, shown only once):</strong>
+      <pre>{{ request.query_params.get('created') }}</pre>
+    </section>
+  {% endif %}
+
+  {% if selected %}
+  <section class="card">
+    <h3>Generate Codes for {{ selected.slug }}</h3>
+    <form method="post" action="/admin/codes/generate">
+      <input type="hidden" name="tenant_slug" value="{{ selected.slug }}" />
+      <label>Count <input type="number" name="count" value="5" min="1" max="100" /></label>
+      <label>TTL (days) <input type="number" name="ttl_days" placeholder="optional" /></label>
+      <label>Max Uses <input type="number" name="max_uses" value="1" min="1" /></label>
+      <label>Label <input type="text" name="label" placeholder="onboard" /></label>
+      <button type="submit">Generate</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h3>Existing Codes</h3>
+    <table>
+      <thead><tr><th>ID</th><th>Label</th><th>Status</th><th>Uses</th><th>Expires</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for c in codes %}
+        <tr>
+          <td>{{ c.id }}</td>
+          <td>{{ c.label or '-' }}</td>
+          <td>{% if c.revoked_at %}revoked{% elif c.use_count >= c.max_uses or c.used_at %}used{% else %}unused{% endif %}</td>
+          <td>{{ c.use_count }}/{{ c.max_uses }}</td>
+          <td>{{ c.expires_at or '—' }}</td>
+          <td>
+            <form method="post" action="/admin/codes/revoke" onsubmit="return confirm('Revoke this code? You must provide the plain code.');">
+              <input type="hidden" name="tenant_slug" value="{{ selected.slug }}" />
+              <input type="text" name="code_plain" placeholder="Paste plain code" required />
+              <button type="submit">Revoke</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+{% endblock %}

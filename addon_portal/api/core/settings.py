@@ -1,0 +1,43 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import AnyHttpUrl
+from typing import Optional, List
+
+class Settings(BaseSettings):
+    APP_NAME: str = "Quick2Odoo"
+    ENV: str = "dev"
+
+    # Postgres
+    # Note: Changed to psycopg2 for compatibility with psycopg2-binary (simpler deployment)
+    DB_DSN: str = "postgresql+psycopg2://user:pass@localhost:5432/q2o"
+
+    # JWT
+    JWT_ISSUER: str = "q2o-auth"
+    JWT_AUDIENCE: str = "q2o-clients"
+    JWT_PRIVATE_KEY: str = "CHANGE_ME_RSA_PRIV_PEM"
+    JWT_PUBLIC_KEY: str = "CHANGE_ME_RSA_PUB_PEM"
+    JWT_ACCESS_TTL_SECONDS: int = 900  # 15m
+    JWT_REFRESH_TTL_SECONDS: int = 60 * 60 * 24 * 14  # 14d
+
+    # Stripe
+    STRIPE_SECRET_KEY: str = "sk_test_xxx"
+    STRIPE_WEBHOOK_SECRET: str = "whsec_xxx"
+
+    # Activation codes
+    ACTIVATION_CODE_PEPPER: str = "CHANGE_ME_ACTIVATION_PEPPER"
+
+    # Branding CDN (optional)
+    BRANDING_CDN_BASE: Optional[AnyHttpUrl] = None
+
+    # CORS
+    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
+
+    # Sessions + OIDC SSO for admin
+    SESSION_SECRET: str = "CHANGE_ME_SESSION_SECRET"
+    OIDC_ISSUER: Optional[str] = None
+    OIDC_CLIENT_ID: Optional[str] = None
+    OIDC_CLIENT_SECRET: Optional[str] = None
+    OIDC_REDIRECT_URL: Optional[str] = None
+
+    model_config = SettingsConfigDict(env_file=".env")
+
+settings = Settings()

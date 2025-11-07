@@ -64,13 +64,30 @@
 - TypeScript config, health checks, error handling, tests, Docker, API docs
 - **Total**: 7-9 hours (optional)
 
+### **Compatibility Issues**: 6 (MUST RESOLVE) 🆕
+
+**Discovered in Deep Technical Review**:
+
+| # | Issue | Time | Impact |
+|---|-------|------|--------|
+| 1 | Stripe version conflict (9.1.0 vs <8.0.0) | 2-4 hours | Webhook API incompatible |
+| 2 | Missing PyJWT dependency | 5 min | Auth system won't work |
+| 3 | Missing Authlib (optional) | 5-30 min | Admin SSO unavailable |
+| 4 | Missing psycopg2-binary | 30-60 min | PostgreSQL won't connect |
+| 5 | Missing python-multipart | 2 min | Forms won't work |
+| 6 | Pydantic version difference | 5 min | Potential edge cases |
+
+**Total**: 4-6 hours to resolve
+
+**See**: `COMPATIBILITY_ISSUES_SUMMARY.md` and `COMPATIBILITY_ISSUES_DETAILED.md`
+
 ---
 
 ## 📚 DOCUMENTATION CREATED
 
 All documentation is in: `docs/addon_portal_review/`
 
-### **6 Documents Created**:
+### **12 Documents Created** (Updated from 6):
 
 1. **README.md** (Navigation & Index)
    - Overview of all documentation
@@ -113,38 +130,86 @@ All documentation is in: `docs/addon_portal_review/`
    - Next steps
    - **Read to understand deliverables**
 
+7. **AGENTS_BUILD_MODEL_COMPATIBILITY.md** (Philosophy Analysis)
+   - Does licensing break "Agents Build Everything"?
+   - Answer: No - 100% compatible
+   - Licensing is infrastructure, not migration logic
+   - **Read for strategic understanding**
+
+8. **TWO_TIER_PRICING_MODEL.md** (Business Model)
+   - Subscription pricing (Licensing Addon)
+   - Usage pricing (Quick2Odoo Billing)
+   - How both work together
+   - **Read for pricing strategy**
+
+9. **COMPATIBILITY_ISSUES_SUMMARY.md** (Quick Reference) 🆕
+   - 6 dependency conflicts found
+   - Quick fix guide
+   - Updated score: 68/100
+   - **Read for integration planning**
+
+10. **COMPATIBILITY_ISSUES_DETAILED.md** (Deep Analysis) 🆕
+    - Full technical analysis
+    - Dependency version matrix
+    - 3 integration scenarios
+    - **Read for implementation**
+
+11. **ADDON_INTEGRATION_REQUIREMENTS.md** (Dependency List) 🆕
+    - Exact packages needed
+    - Installation checklist
+    - Testing checklist
+    - **Read before installing**
+
+12. **PYTHON_313_UPDATE_NOTES.md** (Version Update)
+    - Python 3.13 support added
+    - All addon docs updated
+    - **Read for version info**
+
 ---
 
 ## ⏱️ TIME ESTIMATES
 
-### **To Get It Working** (30-60 min):
+### **Code Fixes Only** (30-60 min):
 ```
-Fix 3 critical issues → 30 min
+Fix 3 critical code issues → 30 min
 Create .env file → 10 min
 Create database tables → 10 min
-Test startup → 10 min
+Test addon in isolation → 10 min
 ─────────────────────────
 Total: ~60 minutes
+NOTE: Does NOT include dependency resolution
 ```
 
-### **To Production-Ready** (3-4 hours):
+### **To Get It Working with Quick2Odoo** (5-7 hours): 🆕
 ```
-Critical fixes → 30 min
-Important fixes → 2 hours
-Database migrations → 30 min
-Testing → 1 hour
+Code fixes → 30 min
+Dependency resolution → 4-6 hours
+  ├─ Install PyJWT, psycopg2, multipart → 37 min
+  ├─ Update Stripe code to v9 → 2-4 hours
+  ├─ Update pydantic → 5 min + test
+  └─ PostgreSQL setup → 30 min
+Testing integration → 30 min
 ─────────────────────────
-Total: ~4 hours
+Total: ~5-7 hours
 ```
 
-### **To Enterprise-Grade** (10-15 hours):
+### **To Production-Ready** (7-10 hours):
 ```
-Production-ready baseline → 4 hours
+Integration fixes → 5-7 hours
+Important fixes → 2 hours
+Security hardening → 1 hour
+─────────────────────────
+Total: ~7-10 hours
+```
+
+### **To Enterprise-Grade** (15-20 hours):
+```
+Production-ready baseline → 7-10 hours
 Minor improvements → 7 hours
 Comprehensive testing → 2 hours
 Documentation → 2 hours
 ─────────────────────────
-Total: ~15 hours
+Total: ~15-20 hours
 ```
 
 ---
