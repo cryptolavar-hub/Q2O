@@ -145,3 +145,7 @@ python-*.exe
 python*.exe
 *.msi
 *.pkg
+
+# Next.js build output
+.next/
+*.next
