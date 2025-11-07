@@ -308,8 +308,8 @@ from typing import Optional
 async def gen_codes_action(request: Request, user = Depends(require_admin),
     tenant_slug: str = Form(...), 
     count: int = Form(1), 
-    ttl_days: Optional[int] = Form(None),  # ✓ Works on Python 3.7+
-    label: Optional[str] = Form(None),     # ✓ Works on Python 3.7+
+    ttl_days: Optional[int] = Form(None),  # ✓ Works on Python 3.10+
+    label: Optional[str] = Form(None),     # ✓ Works on Python 3.10+
     max_uses: int = Form(1),
     db: Session = Depends(get_db)):
 ```
@@ -398,6 +398,41 @@ curl http://localhost:8080/docs
 
 ---
 
+## ⚠️ PYTHON VERSION COMPATIBILITY
+
+### **Quick2Odoo Platform Requirements**
+
+This addon integrates with Quick2Odoo, which has specific Python version requirements:
+
+| Python Version | Addon Compatible? | Quick2Odoo Compatible? | Status |
+|----------------|------------------|------------------------|--------|
+| 3.7-3.9 | ✅ Yes (technically) | ❌ Not tested | ⚠️ Not recommended |
+| **3.10** | ✅ Yes | ✅ Yes | ✅ **Supported** |
+| **3.11** | ✅ Yes | ✅ Yes | ✅ **Supported** |
+| **3.12** | ✅ Yes | ✅ Yes | ✅ **Recommended** |
+| 3.13+ | ⚠️ Partial | ❌ No (pydantic-core issue) | ❌ **Not supported** |
+
+### **Recommendation**
+
+**Use Python 3.12** for best compatibility with Quick2Odoo platform.
+
+**Why not Python 3.13?**
+- `pydantic-core` requires Rust compiler on Python 3.13+
+- Quick2Odoo has standardized on Python 3.10-3.12
+- All dependencies tested and working on these versions
+
+**Installation**:
+```bash
+# Download Python 3.12.10
+https://www.python.org/downloads/release/python-31210/
+
+# Verify version
+python --version
+# Should show: Python 3.12.x
+```
+
+---
+
 ## 📋 SUMMARY OF CHANGES
 
 ### **Files Modified**: 3
@@ -458,10 +493,11 @@ pip install --upgrade pydantic pydantic-settings
 
 ## 📝 NOTES
 
-- **Backward Compatibility**: All fixes maintain Python 3.7+ compatibility
+- **Python Version**: All fixes work on Python 3.10, 3.11, and 3.12 (Quick2Odoo's supported versions)
 - **No Breaking Changes**: All fixes are backward-compatible with existing data
 - **Production Safe**: These changes are safe to deploy to production
 - **No Data Migration**: No database changes required
+- **Alignment**: Matches Quick2Odoo platform's Python version requirements
 
 ---
 
