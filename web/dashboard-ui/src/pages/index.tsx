@@ -34,7 +34,7 @@ export default function Dashboard() {
 
   const displayState = state || mockState;
   
-  // Safe fallbacks for all state properties to prevent undefined errors
+  // Safe fallbacks - prevent errors when WebSocket sends unexpected data structure
   const agents = Array.isArray(displayState.agents) ? displayState.agents : [];
   const tasks = Array.isArray(displayState.tasks) ? displayState.tasks : [];
   const project = displayState.project || mockState.project;
@@ -48,12 +48,12 @@ export default function Dashboard() {
       <Header 
         connected={connected} 
         error={error} 
-        projectName={displayState.project?.name}
+        projectName={project?.name}
       />
 
       <main className="container mx-auto px-6 py-8">
         {/* Project Overview */}
-        <ProjectOverview project={displayState.project || mockState.project} />
+        <ProjectOverview project={project} />
 
         {/* Stats Cards Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -66,19 +66,19 @@ export default function Dashboard() {
           />
           <StatCard
             title="Completed Tasks"
-            value={(displayState.metrics || mockState.metrics).completedTasks}
-            subtitle={`${(displayState.metrics || mockState.metrics).totalTasks} total`}
+            value={metrics.completedTasks}
+            subtitle={`${metrics.totalTasks} total`}
             icon="✅"
           />
           <StatCard
             title="Success Rate"
-            value={`${(displayState.metrics || mockState.metrics).successRate}%`}
+            value={`${metrics.successRate}%`}
             subtitle="All time"
             icon="📊"
           />
           <StatCard
             title="Active Tasks"
-            value={(displayState.metrics || mockState.metrics).activeTasks}
+            value={metrics.activeTasks}
             subtitle="In progress"
             icon="⚡"
           />
@@ -117,7 +117,7 @@ export default function Dashboard() {
             <div className="bg-white rounded-2xl p-6 shadow-lg">
               <h2 className="text-xl font-bold text-gray-900 mb-4">📋 Task Timeline</h2>
               
-              {(displayState.tasks || []).length === 0 ? (
+              {tasks.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="text-6xl mb-4">📋</div>
                   <p className="text-gray-500">
@@ -126,7 +126,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {(displayState.tasks || []).map((task) => (
+                  {tasks.map((task) => (
                     <TaskCard key={task.id} task={task} />
                   ))}
                 </div>
@@ -136,7 +136,7 @@ export default function Dashboard() {
 
           {/* System Metrics Sidebar */}
           <div className="lg:col-span-1">
-            <MetricsPanel metrics={displayState.metrics || mockState.metrics} />
+            <MetricsPanel metrics={metrics} />
           </div>
         </div>
 
