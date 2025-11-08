@@ -367,6 +367,7 @@ function Test-ServiceListening {
 
 $servicesStarted = 0
 $servicesFailed = 0
+$newlyStartedPorts = @()  # Track which ports were just started (for opening URLs)
 
 # Service 0: PostgreSQL (Database - Verify it's running)
 Write-Host "[0/5] PostgreSQL 18 (Database Foundation)..." -ForegroundColor White
@@ -392,6 +393,7 @@ if (-not ($PortsInUse -contains 8080)) {
     if (Test-ServiceListening -Port 8080 -MaxAttempts 5 -WaitSeconds 3) {
         Write-Host "  [OK] Licensing API started and listening on port 8080" -ForegroundColor Green
         $servicesStarted++
+        $newlyStartedPorts += 8080
     } else {
         Write-Host "  [ERROR] Licensing API failed to start or not listening" -ForegroundColor Red
         $servicesFailed++
@@ -413,6 +415,7 @@ if (-not ($PortsInUse -contains 8000)) {
     if (Test-ServiceListening -Port 8000 -MaxAttempts 5 -WaitSeconds 3) {
         Write-Host "  [OK] Dashboard API started and listening on port 8000" -ForegroundColor Green
         $servicesStarted++
+        $newlyStartedPorts += 8000
     } else {
         Write-Host "  [ERROR] Dashboard API failed to start or not listening" -ForegroundColor Red
         $servicesFailed++
@@ -442,6 +445,7 @@ if (-not ($PortsInUse -contains 3000)) {
     if (Test-ServiceListening -Port 3000 -MaxAttempts 5 -WaitSeconds 3) {
         Write-Host "  [OK] Tenant Portal started and listening on port 3000" -ForegroundColor Green
         $servicesStarted++
+        $newlyStartedPorts += 3000
     } else {
         Write-Host "  [ERROR] Tenant Portal failed to start or not listening" -ForegroundColor Red
         $servicesFailed++
@@ -471,6 +475,7 @@ if (-not ($PortsInUse -contains 3001)) {
     if (Test-ServiceListening -Port 3001 -MaxAttempts 5 -WaitSeconds 3) {
         Write-Host "  [OK] Dashboard UI started and listening on port 3001" -ForegroundColor Green
         $servicesStarted++
+        $newlyStartedPorts += 3001
     } else {
         Write-Host "  [ERROR] Dashboard UI failed to start or not listening" -ForegroundColor Red
         $servicesFailed++
@@ -500,6 +505,7 @@ if (-not ($PortsInUse -contains 3002)) {
     if (Test-ServiceListening -Port 3002 -MaxAttempts 5 -WaitSeconds 3) {
         Write-Host "  [OK] Admin Portal started and listening on port 3002" -ForegroundColor Green
         $servicesStarted++
+        $newlyStartedPorts += 3002
     } else {
         Write-Host "  [ERROR] Admin Portal failed to start or not listening" -ForegroundColor Red
         $servicesFailed++
@@ -524,39 +530,39 @@ Write-Host ""
 # PHASE 3: OPEN SERVICE URLS
 # =========================================================================
 
-if ($servicesStarted -gt 0) {
+if ($newlyStartedPorts.Count -gt 0) {
     Write-Host ""
     Write-Host "==========================================================================" -ForegroundColor Cyan
-    Write-Host "  Opening Service URLs in Browser..." -ForegroundColor Cyan
+    Write-Host "  Opening Service URLs in Browser (Newly Started Services Only)..." -ForegroundColor Cyan
     Write-Host "==========================================================================" -ForegroundColor Cyan
     Write-Host ""
 
-    # Open URLs only for newly started services
-    if (-not ($PortsInUse -contains 8080)) {
+    # Open URLs ONLY for services that were just started (not already running)
+    if ($newlyStartedPorts -contains 8080) {
         Write-Host "Opening Licensing API documentation..." -ForegroundColor White
         Start-Process "http://localhost:8080/docs"
         Start-Sleep -Seconds 2
     }
 
-    if (-not ($PortsInUse -contains 8000)) {
+    if ($newlyStartedPorts -contains 8000) {
         Write-Host "Opening Dashboard API documentation..." -ForegroundColor White
         Start-Process "http://localhost:8000/docs"
         Start-Sleep -Seconds 2
     }
 
-    if (-not ($PortsInUse -contains 3000)) {
+    if ($newlyStartedPorts -contains 3000) {
         Write-Host "Opening Tenant Portal..." -ForegroundColor White
         Start-Process "http://localhost:3000"
         Start-Sleep -Seconds 2
     }
     
-    if (-not ($PortsInUse -contains 3001)) {
+    if ($newlyStartedPorts -contains 3001) {
         Write-Host "Opening Dashboard UI..." -ForegroundColor White
         Start-Process "http://localhost:3001"
         Start-Sleep -Seconds 2
     }
     
-    if (-not ($PortsInUse -contains 3002)) {
+    if ($newlyStartedPorts -contains 3002) {
         Write-Host "Opening Admin Portal..." -ForegroundColor White
         Start-Process "http://localhost:3002"
         Start-Sleep -Seconds 2
@@ -593,10 +599,28 @@ Write-Host "Demo Credentials:" -ForegroundColor White
 Write-Host "  Tenant Slug:           demo" -ForegroundColor Gray
 Write-Host "  Activation Code:       12RY-S55W-4MZR-KP2J" -ForegroundColor Gray
 Write-Host ""
-Write-Host "To stop services:" -ForegroundColor White
-Write-Host "  - Close each PowerShell window" -ForegroundColor Gray
-Write-Host "  - Or press Ctrl+C in each window" -ForegroundColor Gray
-Write-Host ""
 Write-Host "==========================================================================" -ForegroundColor Green
 Write-Host ""
-Read-Host "Press Enter to close this window (services will continue running)"
+Write-Host "What would you like to do?" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "  1 - Keep services running and exit" -ForegroundColor White
+Write-Host "  2 - Stop all services now" -ForegroundColor White
+Write-Host ""
+Write-Host -NoNewline "Enter choice (1-2): " -ForegroundColor Yellow
+$choice = Read-Host
+
+if ($choice -eq "2") {
+    Write-Host ""
+    Write-Host "Launching STOP_ALL_SERVICES.ps1..." -ForegroundColor Cyan
+    Write-Host ""
+    Start-Sleep -Seconds 1
+    & "$PSScriptRoot\STOP_ALL_SERVICES.ps1"
+} else {
+    Write-Host ""
+    Write-Host "Services will continue running." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "To stop services later:" -ForegroundColor White
+    Write-Host "  - Run: STOP_ALL.bat" -ForegroundColor Cyan
+    Write-Host "  - Or close each PowerShell window manually" -ForegroundColor Gray
+    Write-Host ""
+}
