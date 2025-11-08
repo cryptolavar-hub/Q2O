@@ -42,12 +42,12 @@ export default function Dashboard() {
       <Header 
         connected={connected} 
         error={error} 
-        projectName={displayState.project.name}
+        projectName={displayState.project?.name}
       />
 
       <main className="container mx-auto px-6 py-8">
         {/* Project Overview */}
-        <ProjectOverview project={displayState.project} />
+        <ProjectOverview project={displayState.project || mockState.project} />
 
         {/* Stats Cards Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -60,19 +60,19 @@ export default function Dashboard() {
           />
           <StatCard
             title="Completed Tasks"
-            value={displayState.metrics.completedTasks}
-            subtitle={`${displayState.metrics.totalTasks} total`}
+            value={(displayState.metrics || mockState.metrics).completedTasks}
+            subtitle={`${(displayState.metrics || mockState.metrics).totalTasks} total`}
             icon="✅"
           />
           <StatCard
             title="Success Rate"
-            value={`${displayState.metrics.successRate}%`}
+            value={`${(displayState.metrics || mockState.metrics).successRate}%`}
             subtitle="All time"
             icon="📊"
           />
           <StatCard
             title="Active Tasks"
-            value={displayState.metrics.activeTasks}
+            value={(displayState.metrics || mockState.metrics).activeTasks}
             subtitle="In progress"
             icon="⚡"
           />
@@ -130,7 +130,7 @@ export default function Dashboard() {
 
           {/* System Metrics Sidebar */}
           <div className="lg:col-span-1">
-            <MetricsPanel metrics={displayState.metrics} />
+            <MetricsPanel metrics={displayState.metrics || mockState.metrics} />
           </div>
         </div>
 
