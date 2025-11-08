@@ -33,7 +33,7 @@ export default function Dashboard() {
   };
 
   const displayState = state || mockState;
-  const agents = displayState.agents || [];
+  const agents = Array.isArray(displayState.agents) ? displayState.agents : [];
   const activeAgents = agents.filter(a => a.status === 'active' || a.status === 'busy').length;
   const idleAgents = agents.filter(a => a.status === 'idle').length;
 
