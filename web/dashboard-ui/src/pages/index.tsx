@@ -42,7 +42,7 @@ export default function Dashboard() {
       <Header 
         connected={connected} 
         error={error} 
-        projectName={displayState.project?.name}
+        projectName={(displayState.project || mockState.project)?.name}
       />
 
       <main className="container mx-auto px-6 py-8">
