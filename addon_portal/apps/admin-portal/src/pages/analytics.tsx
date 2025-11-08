@@ -6,6 +6,7 @@ import { AdminHeader } from '../components/AdminHeader';
 
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState('7d');
+  const [activityDateRange, setActivityDateRange] = useState('7d');
 
   // Mock chart data
   const activationTrend = [
@@ -38,15 +39,17 @@ export default function AnalyticsPage() {
         title="📊 Analytics"
         subtitle="Usage trends, revenue metrics, and insights"
         action={
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-            className="bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 px-4 py-2 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-white/50"
-          >
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="90d">Last 90 days</option>
-          </select>
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value)}
+              className="bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 px-4 py-2 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-white/50"
+            >
+              <option value="today">Today</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="90d">Last 90 days</option>
+              <option value="1y">Last Year (Annual)</option>
+            </select>
         }
       />
       <Navigation />

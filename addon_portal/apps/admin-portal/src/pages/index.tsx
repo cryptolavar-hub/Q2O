@@ -31,6 +31,7 @@ export default function AdminDashboard() {
   });
 
   const [loading, setLoading] = useState(true);
+  const [activityDateRange, setActivityDateRange] = useState('7d');
 
   useEffect(() => {
     // Fetch stats from API
@@ -172,10 +173,14 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-2xl p-6 shadow-lg">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">Recent Activity</h2>
-              <select className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
-                <option>Last 7 days</option>
-                <option>Last 30 days</option>
-                <option>Last 90 days</option>
+              <select 
+                value={activityDateRange}
+                onChange={(e) => setActivityDateRange(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+                <option value="90d">Last 90 days</option>
               </select>
             </div>
 

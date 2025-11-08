@@ -1,44 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Navigation } from '../components/Navigation';
 import { AdminHeader } from '../components/AdminHeader';
-
-interface Tenant {
-  id: number;
-  name: string;
-  slug: string;
-  logoUrl: string;
-  primaryColor: string;
-  domain: string | null;
-  subscriptionPlan: string;
-  subscriptionStatus: 'active' | 'trial' | 'expired' | 'cancelled';
-  usageQuota: number;
-  usageCurrent: number;
-  createdAt: string;
-}
+import { getTenants, type Tenant } from '../lib/api';
 
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
 
   useEffect(() => {
-    // Mock data
-    setTenants([
-      {
-        id: 1,
-        name: 'Demo Consulting Firm',
-        slug: 'demo',
-        logoUrl: 'https://via.placeholder.com/150?text=Demo',
-        primaryColor: '#875A7B',
-        domain: 'demo.quick2odoo.com',
-        subscriptionPlan: 'Pro',
-        subscriptionStatus: 'active',
-        usageQuota: 50,
-        usageCurrent: 12,
-        createdAt: '2025-11-01',
-      },
-    ]);
+    loadTenants();
   }, []);
+
+  const loadTenants = async () => {
+    try {
+      const data = await getTenants();
+      setTenants(data);
+    } catch (error) {
+      console.error('Error loading tenants:', error);
+    }
+  };
+
+  const handleAddTenant = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    // API call would go here
+    alert('Add Tenant functionality: Would create tenant with name: ' + formData.get('name'));
+    setShowAddModal(false);
+    // Reload tenants after adding
+  };
+
+  const handleEditTenant = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    alert('Edit Tenant functionality: Would update tenant ' + selectedTenant?.name);
+    setShowEditModal(false);
+    setSelectedTenant(null);
+  };
+
+  const openEditModal = (tenant: Tenant) => {
+    setSelectedTenant(tenant);
+    setShowEditModal(true);
+  };
 
   const getStatusBadge = (status: string) => {
     const colors = {
@@ -47,7 +52,7 @@ export default function TenantsPage() {
       expired: 'bg-red-100 text-red-700 border-red-200',
       cancelled: 'bg-gray-100 text-gray-700 border-gray-200',
     };
-    return colors[status] || colors.active;
+    return colors[status as keyof typeof colors] || colors.active;
   };
 
   return (
@@ -56,7 +61,10 @@ export default function TenantsPage() {
         title="👥 Tenants"
         subtitle="Manage tenant organizations and subscriptions"
         action={
-          <button className="bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+          >
             ➕ Add Tenant
           </button>
         }
@@ -131,18 +139,229 @@ export default function TenantsPage() {
 
               {/* Actions */}
               <div className="flex gap-3">
-                <button className="flex-1 py-2 bg-purple-50 text-purple-600 rounded-lg font-medium hover:bg-purple-100 transition-colors duration-200">
-                  Edit
+                <button
+                  onClick={() => openEditModal(tenant)}
+                  className="flex-1 py-2 bg-purple-50 text-purple-600 rounded-lg font-medium hover:bg-purple-100 transition-colors duration-200"
+                >
+                  ✏️ Edit
                 </button>
-                <button className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg font-medium hover:bg-blue-100 transition-colors duration-200">
-                  View Portal
+                <button
+                  className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg font-medium hover:bg-blue-100 transition-colors duration-200"
+                >
+                  👁️ View Portal
                 </button>
               </div>
             </motion.div>
           ))}
         </div>
       </main>
+
+      {/* Add Tenant Modal */}
+      {showAddModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowAddModal(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl p-8 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-2xl font-bold text-gray-900 mb-6">Add New Tenant</h3>
+            
+            <form onSubmit={handleAddTenant} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tenant Name *</label>
+                <input 
+                  name="name"
+                  type="text" 
+                  required
+                  placeholder="e.g., Acme Corporation"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Slug *</label>
+                  <input 
+                    name="slug"
+                    type="text" 
+                    required
+                    placeholder="e.g., acme"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Domain</label>
+                  <input 
+                    name="domain"
+                    type="text" 
+                    placeholder="e.g., acme.quick2odoo.com"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Subscription Plan *</label>
+                  <select 
+                    name="plan"
+                    required
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">Select plan...</option>
+                    <option value="starter">Starter (10 migrations/mo)</option>
+                    <option value="pro">Pro (50 migrations/mo)</option>
+                    <option value="enterprise">Enterprise (200 migrations/mo)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Primary Color *</label>
+                  <input 
+                    name="primary_color"
+                    type="color" 
+                    defaultValue="#875A7B"
+                    className="w-full h-10 px-2 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Logo URL</label>
+                <input 
+                  name="logo_url"
+                  type="url" 
+                  placeholder="https://example.com/logo.png"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-6 py-3 bg-gradient-success text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+                >
+                  Create Tenant
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Edit Tenant Modal */}
+      {showEditModal && selectedTenant && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => { setShowEditModal(false); setSelectedTenant(null); }}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl p-8 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-2xl font-bold text-gray-900 mb-6">Edit Tenant: {selectedTenant.name}</h3>
+            
+            <form onSubmit={handleEditTenant} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tenant Name *</label>
+                <input 
+                  name="name"
+                  type="text" 
+                  required
+                  defaultValue={selectedTenant.name}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Slug</label>
+                  <input 
+                    name="slug"
+                    type="text" 
+                    disabled
+                    defaultValue={selectedTenant.slug}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed" 
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Slug cannot be changed</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Domain</label>
+                  <input 
+                    name="domain"
+                    type="text" 
+                    defaultValue={selectedTenant.domain || ''}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Subscription Status</label>
+                  <select 
+                    name="status"
+                    defaultValue={selectedTenant.subscriptionStatus}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="active">Active</option>
+                    <option value="trial">Trial</option>
+                    <option value="expired">Expired</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Primary Color</label>
+                  <input 
+                    name="primary_color"
+                    type="color" 
+                    defaultValue={selectedTenant.primaryColor}
+                    className="w-full h-10 px-2 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Logo URL</label>
+                <input 
+                  name="logo_url"
+                  type="url" 
+                  defaultValue={selectedTenant.logoUrl}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditModal(false); setSelectedTenant(null); }}
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-6 py-3 bg-gradient-main text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
-
