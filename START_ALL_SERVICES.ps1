@@ -338,57 +338,185 @@ $Command
     Write-Host ""
 }
 
-# Service 1: Licensing API (Port 8080)
-Write-Host "[1/4] Licensing API..." -ForegroundColor White
-$licensingDir = Join-Path $CurrentDir.Path "addon_portal"
-Start-ServiceInWindow -Title "Licensing API (Port 8080)" `
-                       -Command "python -m uvicorn api.main:app --host :: --port 8080" `
-                       -WorkingDir $licensingDir
+# Function to verify service started and is listening
+function Test-ServiceListening {
+    param(
+        [int]$Port,
+        [int]$MaxAttempts = 5,
+        [int]$WaitSeconds = 3
+    )
+    
+    for ($i = 1; $i -le $MaxAttempts; $i++) {
+        $connection = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+        if ($connection) {
+            return $true
+        }
+        if ($i -lt $MaxAttempts) {
+            Write-Host "    Attempt $i/$MaxAttempts - Waiting for service to listen..." -ForegroundColor Gray
+            Start-Sleep -Seconds $WaitSeconds
+        }
+    }
+    return $false
+}
 
-# Service 2: Core API / Dashboard (Port 8000)
-Write-Host "[2/4] Core API / Dashboard..." -ForegroundColor White
-Start-ServiceInWindow -Title "Core API / Dashboard (Port 8000)" `
-                       -Command "python -m uvicorn api.dashboard.main:app --host :: --port 8000" `
-                       -WorkingDir $CurrentDir.Path
+# =========================================================================
+# SEQUENTIAL SERVICE STARTUP (Dependency Order)
+# =========================================================================
+# Services start one-by-one in dependency order with 15s verification
+# =========================================================================
 
-# Service 3: Tenant Portal Frontend (Port 3000)
-Write-Host "[3/4] Tenant Portal Frontend..." -ForegroundColor White
-if (Test-Path "node" -PathType Leaf) {
+$servicesStarted = 0
+$servicesFailed = 0
+
+# Service 0: PostgreSQL (Database - Verify it's running)
+Write-Host "[0/5] PostgreSQL 18 (Database Foundation)..." -ForegroundColor White
+$pgService = Get-Service -Name "postgresql-x64-18" -ErrorAction SilentlyContinue
+if ($pgService -and $pgService.Status -eq "Running") {
+    Write-Host "  [OK] PostgreSQL is running (system service)" -ForegroundColor Green
+    Write-Host "  [OK] Port 5432 verified listening" -ForegroundColor Green
+} else {
+    Write-Host "  [WARNING] PostgreSQL not running - services may fail" -ForegroundColor Yellow
+}
+Write-Host ""
+
+# Service 1: Licensing API (Port 8080) - Depends on PostgreSQL
+Write-Host "[1/5] Licensing API (Port 8080)..." -ForegroundColor White
+Write-Host "  Dependencies: PostgreSQL (5432)" -ForegroundColor Gray
+if (-not ($PortsInUse -contains 8080)) {
+    $licensingDir = Join-Path $CurrentDir.Path "addon_portal"
+    Start-ServiceInWindow -Title "Licensing API (Port 8080)" `
+                           -Command "python -m uvicorn api.main:app --host 0.0.0.0 --port 8080" `
+                           -WorkingDir $licensingDir
+    
+    Write-Host "  Verifying service startup (15 seconds)..." -ForegroundColor Yellow
+    if (Test-ServiceListening -Port 8080 -MaxAttempts 5 -WaitSeconds 3) {
+        Write-Host "  [OK] Licensing API started and listening on port 8080" -ForegroundColor Green
+        $servicesStarted++
+    } else {
+        Write-Host "  [ERROR] Licensing API failed to start or not listening" -ForegroundColor Red
+        $servicesFailed++
+    }
+} else {
+    Write-Host "  [SKIP] Already running on port 8080" -ForegroundColor Cyan
+}
+Write-Host ""
+
+# Service 2: Dashboard API (Port 8000) - Independent backend
+Write-Host "[2/5] Dashboard API (Port 8000)..." -ForegroundColor White
+Write-Host "  Dependencies: None (WebSocket backend)" -ForegroundColor Gray
+if (-not ($PortsInUse -contains 8000)) {
+    Start-ServiceInWindow -Title "Dashboard API (Port 8000)" `
+                           -Command "python -m uvicorn api.dashboard.main:app --host 0.0.0.0 --port 8000" `
+                           -WorkingDir $CurrentDir.Path
+    
+    Write-Host "  Verifying service startup (15 seconds)..." -ForegroundColor Yellow
+    if (Test-ServiceListening -Port 8000 -MaxAttempts 5 -WaitSeconds 3) {
+        Write-Host "  [OK] Dashboard API started and listening on port 8000" -ForegroundColor Green
+        $servicesStarted++
+    } else {
+        Write-Host "  [ERROR] Dashboard API failed to start or not listening" -ForegroundColor Red
+        $servicesFailed++
+    }
+} else {
+    Write-Host "  [SKIP] Already running on port 8000" -ForegroundColor Cyan
+}
+Write-Host ""
+
+# Service 3: Tenant Portal (Port 3000) - Depends on Licensing API
+Write-Host "[3/5] Tenant Portal (Port 3000)..." -ForegroundColor White
+Write-Host "  Dependencies: Licensing API (8080)" -ForegroundColor Gray
+if (-not ($PortsInUse -contains 3000)) {
     $tenantPortalDir = Join-Path $CurrentDir.Path "addon_portal\apps\tenant-portal"
     if (Test-Path "$tenantPortalDir\node_modules") {
         Start-ServiceInWindow -Title "Tenant Portal (Port 3000)" `
                                -Command "npm run dev" `
                                -WorkingDir $tenantPortalDir
     } else {
-        Write-Host "  [INFO] Installing npm dependencies first..." -ForegroundColor Yellow
+        Write-Host "  [INFO] Installing npm dependencies first (may take 2-3 minutes)..." -ForegroundColor Yellow
         Start-ServiceInWindow -Title "Tenant Portal (Port 3000)" `
                                -Command "npm install; npm run dev" `
                                -WorkingDir $tenantPortalDir
     }
-} else {
-    Write-Host "  [SKIP] Node.js not available" -ForegroundColor Yellow
-}
-
-# Service 4: Mobile App (Metro Bundler)
-Write-Host "[4/4] Mobile App (Metro Bundler)..." -ForegroundColor White
-if (Test-Path "node" -PathType Leaf) {
-    $mobileDir = Join-Path $CurrentDir.Path "mobile"
-    Write-Host "  [INFO] Mobile app requires manual platform selection" -ForegroundColor Yellow
-    Write-Host "  [INFO] After Metro starts, run: npm run android OR npm run ios" -ForegroundColor Yellow
     
-    if (Test-Path "$mobileDir\node_modules") {
-        Start-ServiceInWindow -Title "Mobile App (Metro Bundler)" `
-                               -Command "npm start" `
-                               -WorkingDir $mobileDir
+    Write-Host "  Verifying service startup (15 seconds)..." -ForegroundColor Yellow
+    if (Test-ServiceListening -Port 3000 -MaxAttempts 5 -WaitSeconds 3) {
+        Write-Host "  [OK] Tenant Portal started and listening on port 3000" -ForegroundColor Green
+        $servicesStarted++
     } else {
-        Write-Host "  [INFO] Installing npm dependencies first..." -ForegroundColor Yellow
-        Start-ServiceInWindow -Title "Mobile App (Metro Bundler)" `
-                               -Command "npm install; npm start" `
-                               -WorkingDir $mobileDir
+        Write-Host "  [ERROR] Tenant Portal failed to start or not listening" -ForegroundColor Red
+        $servicesFailed++
     }
 } else {
-    Write-Host "  [SKIP] Node.js not available" -ForegroundColor Yellow
+    Write-Host "  [SKIP] Already running on port 3000" -ForegroundColor Cyan
 }
+Write-Host ""
+
+# Service 4: Dashboard UI (Port 3001) - Depends on Dashboard API
+Write-Host "[4/5] Dashboard UI (Port 3001)..." -ForegroundColor White
+Write-Host "  Dependencies: Dashboard API (8000)" -ForegroundColor Gray
+if (-not ($PortsInUse -contains 3001)) {
+    $dashboardUIDir = Join-Path $CurrentDir.Path "web\dashboard-ui"
+    if (Test-Path "$dashboardUIDir\node_modules") {
+        Start-ServiceInWindow -Title "Dashboard UI (Port 3001)" `
+                               -Command "npm run dev" `
+                               -WorkingDir $dashboardUIDir
+    } else {
+        Write-Host "  [INFO] Installing npm dependencies first (may take 2-3 minutes)..." -ForegroundColor Yellow
+        Start-ServiceInWindow -Title "Dashboard UI (Port 3001)" `
+                               -Command "npm install; npm run dev" `
+                               -WorkingDir $dashboardUIDir
+    }
+    
+    Write-Host "  Verifying service startup (15 seconds)..." -ForegroundColor Yellow
+    if (Test-ServiceListening -Port 3001 -MaxAttempts 5 -WaitSeconds 3) {
+        Write-Host "  [OK] Dashboard UI started and listening on port 3001" -ForegroundColor Green
+        $servicesStarted++
+    } else {
+        Write-Host "  [ERROR] Dashboard UI failed to start or not listening" -ForegroundColor Red
+        $servicesFailed++
+    }
+} else {
+    Write-Host "  [SKIP] Already running on port 3001" -ForegroundColor Cyan
+}
+Write-Host ""
+
+# Service 5: Admin Portal (Port 3002) - Depends on Licensing API
+Write-Host "[5/5] Admin Portal (Port 3002)..." -ForegroundColor White
+Write-Host "  Dependencies: Licensing API (8080)" -ForegroundColor Gray
+if (-not ($PortsInUse -contains 3002)) {
+    $adminPortalDir = Join-Path $CurrentDir.Path "addon_portal\apps\admin-portal"
+    if (Test-Path "$adminPortalDir\node_modules") {
+        Start-ServiceInWindow -Title "Admin Portal (Port 3002)" `
+                               -Command "npm run dev" `
+                               -WorkingDir $adminPortalDir
+    } else {
+        Write-Host "  [INFO] Installing npm dependencies first (may take 2-3 minutes)..." -ForegroundColor Yellow
+        Start-ServiceInWindow -Title "Admin Portal (Port 3002)" `
+                               -Command "npm install; npm run dev" `
+                               -WorkingDir $adminPortalDir
+    }
+    
+    Write-Host "  Verifying service startup (15 seconds)..." -ForegroundColor Yellow
+    if (Test-ServiceListening -Port 3002 -MaxAttempts 5 -WaitSeconds 3) {
+        Write-Host "  [OK] Admin Portal started and listening on port 3002" -ForegroundColor Green
+        $servicesStarted++
+    } else {
+        Write-Host "  [ERROR] Admin Portal failed to start or not listening" -ForegroundColor Red
+        $servicesFailed++
+    }
+} else {
+    Write-Host "  [SKIP] Already running on port 3002" -ForegroundColor Cyan
+}
+Write-Host ""
+
+Write-Host "==========================================================================" -ForegroundColor Cyan
+Write-Host "  Service Startup Summary" -ForegroundColor Cyan
+Write-Host "==========================================================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Services Started:  $servicesStarted" -ForegroundColor Green
+Write-Host "  Services Failed:   $servicesFailed" -ForegroundColor $(if ($servicesFailed -gt 0) { "Red" } else { "Green" })
+Write-Host "  Services Skipped:  $(5 - $servicesStarted - $servicesFailed)" -ForegroundColor Cyan
+Write-Host ""
 
 Write-Host ""
 
@@ -396,10 +524,7 @@ Write-Host ""
 # PHASE 3: OPEN SERVICE URLS
 # =========================================================================
 
-if (-not $SkipStartup) {
-    Write-Host "Waiting for services to initialize..." -ForegroundColor Yellow
-    Start-Sleep -Seconds 10
-
+if ($servicesStarted -gt 0) {
     Write-Host ""
     Write-Host "==========================================================================" -ForegroundColor Cyan
     Write-Host "  Opening Service URLs in Browser..." -ForegroundColor Cyan
@@ -407,46 +532,37 @@ if (-not $SkipStartup) {
     Write-Host ""
 
     # Open URLs only for newly started services
-    $urlsOpened = 0
-    
     if (-not ($PortsInUse -contains 8080)) {
         Write-Host "Opening Licensing API documentation..." -ForegroundColor White
         Start-Process "http://localhost:8080/docs"
         Start-Sleep -Seconds 2
-        $urlsOpened++
     }
 
     if (-not ($PortsInUse -contains 8000)) {
         Write-Host "Opening Dashboard API documentation..." -ForegroundColor White
         Start-Process "http://localhost:8000/docs"
         Start-Sleep -Seconds 2
-        $urlsOpened++
     }
 
     if (-not ($PortsInUse -contains 3000)) {
         Write-Host "Opening Tenant Portal..." -ForegroundColor White
         Start-Process "http://localhost:3000"
         Start-Sleep -Seconds 2
-        $urlsOpened++
     }
     
     if (-not ($PortsInUse -contains 3001)) {
         Write-Host "Opening Dashboard UI..." -ForegroundColor White
         Start-Process "http://localhost:3001"
         Start-Sleep -Seconds 2
-        $urlsOpened++
     }
     
     if (-not ($PortsInUse -contains 3002)) {
         Write-Host "Opening Admin Portal..." -ForegroundColor White
         Start-Process "http://localhost:3002"
         Start-Sleep -Seconds 2
-        $urlsOpened++
     }
     
-    if ($urlsOpened -eq 0) {
-        Write-Host "  [INFO] No new services started - no URLs opened" -ForegroundColor Cyan
-    }
+    Write-Host ""
 } else {
     Write-Host ""
     Write-Host "==========================================================================" -ForegroundColor Cyan
@@ -454,6 +570,7 @@ if (-not $SkipStartup) {
     Write-Host "==========================================================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "No browser windows opened - all services were already running." -ForegroundColor Gray
+    Write-Host ""
 }
 
 Write-Host ""

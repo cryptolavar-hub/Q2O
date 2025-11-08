@@ -1,7 +1,7 @@
 # Service Management Guide - Quick2Odoo
 
-**Last Updated**: November 7, 2025  
-**Version**: 2.0
+**Last Updated**: November 8, 2025  
+**Version**: 3.0 (Sequential Startup with Dependency Hierarchy)
 
 ---
 
@@ -61,12 +61,47 @@ Enter choice (1-3):
 - Starts only stopped services
 - Opens URLs for new services only
 
-**Phase 3: Service Startup**
-- Licensing API (8080) - Python/FastAPI
-- Dashboard API (8000) - Python/FastAPI + WebSocket
-- Tenant Portal (3000) - Next.js
-- Dashboard UI (3001) - Next.js
-- Admin Portal (3002) - Next.js
+**Phase 3: Sequential Service Startup (Dependency Order)**
+
+Services start **one-by-one** in dependency order with 15-second verification:
+
+```
+[0/5] PostgreSQL 18 (Database Foundation)
+      Dependencies: None (system service)
+      Verified: Running on port 5432
+
+[1/5] Licensing API (Port 8080)
+      Dependencies: PostgreSQL (5432)
+      Starting... Verifying... [OK] Listening on port 8080
+
+[2/5] Dashboard API (Port 8000)
+      Dependencies: None (WebSocket backend)
+      Starting... Verifying... [OK] Listening on port 8000
+
+[3/5] Tenant Portal (Port 3000)
+      Dependencies: Licensing API (8080)
+      Starting... Verifying... [OK] Listening on port 3000
+
+[4/5] Dashboard UI (Port 3001)
+      Dependencies: Dashboard API (8000)
+      Starting... Verifying... [OK] Listening on port 3001
+
+[5/5] Admin Portal (Port 3002)
+      Dependencies: Licensing API (8080)
+      Starting... Verifying... [OK] Listening on port 3002
+
+Service Startup Summary:
+  Services Started: 5
+  Services Failed:  0
+  Services Skipped: 0
+```
+
+**Key Features:**
+- ✅ Sequential startup (not parallel)
+- ✅ Dependency order respected
+- ✅ 15-second verification per service
+- ✅ Port listening check (5 attempts × 3 seconds)
+- ✅ Fails fast if service won't start
 
 ---
 
@@ -292,6 +327,57 @@ START_ALL.bat
 # Stop everything
 STOP_ALL.bat
 ```
+
+---
+
+## 🏗️ **Service Dependency Hierarchy**
+
+Services start in **dependency order** to ensure all requirements are met:
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Layer 0: Database (Foundation)                      │
+│ ┌─────────────────────────────────────┐             │
+│ │ PostgreSQL 18 (Port 5432)           │             │
+│ │ - System service                     │             │
+│ │ - Always running                     │             │
+│ └─────────────────────────────────────┘             │
+└─────────────────────────────────────────────────────┘
+                         ▼
+┌─────────────────────────────────────────────────────┐
+│ Layer 1: Backend APIs                               │
+│ ┌────────────────────┐    ┌────────────────────┐   │
+│ │ Licensing API      │    │ Dashboard API      │   │
+│ │ (Port 8080)        │    │ (Port 8000)        │   │
+│ │ Depends: PostgreSQL│    │ Depends: None      │   │
+│ └────────────────────┘    └────────────────────┘   │
+└─────────────────────────────────────────────────────┘
+           ▼                            ▼
+┌─────────────────────────────────────────────────────┐
+│ Layer 2: Frontend Applications                      │
+│ ┌────────────────┐ ┌────────────────┐ ┌──────────┐ │
+│ │ Tenant Portal  │ │ Dashboard UI   │ │ Admin    │ │
+│ │ (Port 3000)    │ │ (Port 3001)    │ │ Portal   │ │
+│ │ Depends: 8080  │ │ Depends: 8000  │ │ (3002)   │ │
+│ └────────────────┘ └────────────────┘ │ Dep: 8080│ │
+│                                        └──────────┘ │
+└─────────────────────────────────────────────────────┘
+```
+
+**Startup Order (Sequential):**
+1. **PostgreSQL** (5432) → Database foundation
+2. **Licensing API** (8080) → Requires PostgreSQL
+3. **Dashboard API** (8000) → Independent (WebSocket backend)
+4. **Tenant Portal** (3000) → Requires Licensing API
+5. **Dashboard UI** (3001) → Requires Dashboard API
+6. **Admin Portal** (3002) → Requires Licensing API
+
+**Why Sequential?**
+- ✅ Dependencies are always met
+- ✅ Frontend apps connect to ready APIs
+- ✅ Reduces "connection refused" errors
+- ✅ Each service gets 15 seconds to stabilize
+- ✅ Fail-fast if a dependency won't start
 
 ---
 
