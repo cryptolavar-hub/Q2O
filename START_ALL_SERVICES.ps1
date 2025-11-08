@@ -348,13 +348,13 @@ $Command
 Write-Host "[1/4] Licensing API..." -ForegroundColor White
 $licensingDir = Join-Path $CurrentDir.Path "addon_portal"
 Start-ServiceInWindow -Title "Licensing API (Port 8080)" `
-                       -Command "python -m uvicorn api.main:app --host 0.0.0.0 --port 8080" `
+                       -Command "python -m uvicorn api.main:app --host :: --port 8080" `
                        -WorkingDir $licensingDir
 
 # Service 2: Core API / Dashboard (Port 8000)
 Write-Host "[2/4] Core API / Dashboard..." -ForegroundColor White
 Start-ServiceInWindow -Title "Core API / Dashboard (Port 8000)" `
-                       -Command "python -m uvicorn api.dashboard.main:app --host 0.0.0.0 --port 8000" `
+                       -Command "python -m uvicorn api.dashboard.main:app --host :: --port 8000" `
                        -WorkingDir $CurrentDir.Path
 
 # Service 3: Tenant Portal Frontend (Port 3000)
