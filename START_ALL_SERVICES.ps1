@@ -402,27 +402,65 @@ Write-Host ""
 # PHASE 3: OPEN SERVICE URLS
 # =========================================================================
 
-Write-Host "Waiting for services to initialize..." -ForegroundColor Yellow
-Start-Sleep -Seconds 10
+if (-not $SkipStartup) {
+    Write-Host "Waiting for services to initialize..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 10
 
-Write-Host ""
-Write-Host "==========================================================================" -ForegroundColor Cyan
-Write-Host "  Opening Service URLs in Browser..." -ForegroundColor Cyan
-Write-Host "==========================================================================" -ForegroundColor Cyan
-Write-Host ""
+    Write-Host ""
+    Write-Host "==========================================================================" -ForegroundColor Cyan
+    Write-Host "  Opening Service URLs in Browser..." -ForegroundColor Cyan
+    Write-Host "==========================================================================" -ForegroundColor Cyan
+    Write-Host ""
 
-# Open URLs
-Write-Host "Opening Licensing API documentation..." -ForegroundColor White
-Start-Process "http://localhost:8080/docs"
-Start-Sleep -Seconds 2
+    # Open URLs only for newly started services
+    $urlsOpened = 0
+    
+    if (-not ($PortsInUse -contains 8080)) {
+        Write-Host "Opening Licensing API documentation..." -ForegroundColor White
+        Start-Process "http://localhost:8080/docs"
+        Start-Sleep -Seconds 2
+        $urlsOpened++
+    }
 
-Write-Host "Opening Dashboard API documentation..." -ForegroundColor White
-Start-Process "http://localhost:8000/docs"
-Start-Sleep -Seconds 2
+    if (-not ($PortsInUse -contains 8000)) {
+        Write-Host "Opening Dashboard API documentation..." -ForegroundColor White
+        Start-Process "http://localhost:8000/docs"
+        Start-Sleep -Seconds 2
+        $urlsOpened++
+    }
 
-Write-Host "Opening Tenant Portal..." -ForegroundColor White
-Start-Process "http://localhost:3000"
-Start-Sleep -Seconds 2
+    if (-not ($PortsInUse -contains 3000)) {
+        Write-Host "Opening Tenant Portal..." -ForegroundColor White
+        Start-Process "http://localhost:3000"
+        Start-Sleep -Seconds 2
+        $urlsOpened++
+    }
+    
+    if (-not ($PortsInUse -contains 3001)) {
+        Write-Host "Opening Dashboard UI..." -ForegroundColor White
+        Start-Process "http://localhost:3001"
+        Start-Sleep -Seconds 2
+        $urlsOpened++
+    }
+    
+    if (-not ($PortsInUse -contains 3002)) {
+        Write-Host "Opening Admin Portal..." -ForegroundColor White
+        Start-Process "http://localhost:3002"
+        Start-Sleep -Seconds 2
+        $urlsOpened++
+    }
+    
+    if ($urlsOpened -eq 0) {
+        Write-Host "  [INFO] No new services started - no URLs opened" -ForegroundColor Cyan
+    }
+} else {
+    Write-Host ""
+    Write-Host "==========================================================================" -ForegroundColor Cyan
+    Write-Host "  Using Existing Services" -ForegroundColor Cyan
+    Write-Host "==========================================================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "No browser windows opened - all services were already running." -ForegroundColor Gray
+}
 
 Write-Host ""
 
