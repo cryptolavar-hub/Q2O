@@ -33,7 +33,13 @@ export default function Dashboard() {
   };
 
   const displayState = state || mockState;
+  
+  // Safe fallbacks for all state properties to prevent undefined errors
   const agents = Array.isArray(displayState.agents) ? displayState.agents : [];
+  const tasks = Array.isArray(displayState.tasks) ? displayState.tasks : [];
+  const project = displayState.project || mockState.project;
+  const metrics = displayState.metrics || mockState.metrics;
+  
   const activeAgents = agents.filter(a => a.status === 'active' || a.status === 'busy').length;
   const idleAgents = agents.filter(a => a.status === 'idle').length;
 
@@ -42,7 +48,7 @@ export default function Dashboard() {
       <Header 
         connected={connected} 
         error={error} 
-        projectName={(displayState.project || mockState.project)?.name}
+        projectName={displayState.project?.name}
       />
 
       <main className="container mx-auto px-6 py-8">
@@ -151,4 +157,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
