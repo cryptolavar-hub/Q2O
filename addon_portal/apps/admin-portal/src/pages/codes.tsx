@@ -377,9 +377,9 @@ export default function CodesPage() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
                   <option value="">Select tenant...</option>
-                  {uniqueTenants.map(tenant => (
-                    <option key={tenant} value={tenant.toLowerCase().replace(/\s+/g, '')}>{tenant}</option>
-                  ))}
+                  <option value="demo">Demo Consulting</option>
+                  <option value="acme">Acme Corp</option>
+                  <option value="techsolutions">Tech Solutions</option>
                 </select>
               </div>
               

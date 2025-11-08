@@ -32,8 +32,15 @@ class Settings(BaseSettings):
     # Branding CDN (optional)
     BRANDING_CDN_BASE: Optional[AnyHttpUrl] = None
 
-    # CORS
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
+    # CORS - Allow all local development ports
+    ALLOWED_ORIGINS: List[str] = [
+        "http://localhost:3000",  # Tenant Portal
+        "http://localhost:3001",  # Dashboard UI
+        "http://localhost:3002",  # Admin Portal
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3002",
+    ]
 
     # Sessions + OIDC SSO for admin
     SESSION_SECRET: str = "CHANGE_ME_SESSION_SECRET"
