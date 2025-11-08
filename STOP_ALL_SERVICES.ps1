@@ -100,6 +100,64 @@ if ($confirmation -ne "y" -and $confirmation -ne "Y") {
 Write-Host ""
 
 # =========================================================================
+# HELPER FUNCTION: STOP PROCESS BY PORT
+# =========================================================================
+
+function Stop-ProcessByPort {
+    param(
+        [int]$Port,
+        [string]$ServiceName
+    )
+    
+    try {
+        # Find the connection and get the Process ID
+        $connection = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+        
+        if (-not $connection) {
+            Write-Host "  [INFO] Port $Port not in use (already stopped)" -ForegroundColor Gray
+            return $true
+        }
+        
+        $processId = $connection.OwningProcess
+        
+        if (-not $processId -or $processId -eq 0) {
+            Write-Host "  [ERROR] Could not find process ID for port $Port" -ForegroundColor Red
+            return $false
+        }
+        
+        # Get process details
+        $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+        
+        if (-not $process) {
+            Write-Host "  [ERROR] Process ID $processId not found" -ForegroundColor Red
+            return $false
+        }
+        
+        Write-Host "  Found process: $($process.ProcessName) (PID: $processId)" -ForegroundColor Gray
+        
+        # Kill the process
+        Stop-Process -Id $processId -Force -ErrorAction Stop
+        Write-Host "  Sent SIGKILL to PID $processId" -ForegroundColor Gray
+        
+        # Wait and verify
+        Start-Sleep -Seconds 2
+        
+        $stillRunning = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+        if (-not $stillRunning) {
+            Write-Host "  [OK] $ServiceName stopped successfully" -ForegroundColor Green
+            return $true
+        } else {
+            Write-Host "  [WARNING] Port $Port still in use after kill attempt" -ForegroundColor Yellow
+            return $false
+        }
+        
+    } catch {
+        Write-Host "  [ERROR] Failed to stop: $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
+}
+
+# =========================================================================
 # PHASE 2: GRACEFUL SHUTDOWN (ONE BY ONE)
 # =========================================================================
 
@@ -107,105 +165,56 @@ Write-Host "PHASE 2: Stopping Services (Gracefully, One-by-One)..." -ForegroundC
 Write-Host "==========================================================================" -ForegroundColor Gray
 Write-Host ""
 
+$serviceIndex = 1
+
 # Service 1: Licensing API (Port 8080)
 if ($RunningServices.ContainsKey(8080)) {
-    Write-Host "[1/$($RunningServices.Count)] Stopping Licensing API (port 8080)..." -ForegroundColor White
-    try {
-        Get-Process | Where-Object {$_.MainWindowTitle -like "*Port 8080*" -or $_.MainWindowTitle -like "*Licensing API*"} | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-        
-        # Verify stopped
-        $stillRunning = Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue
-        if (-not $stillRunning) {
-            Write-Host "  [OK] Licensing API stopped successfully" -ForegroundColor Green
-            $ServicesStopped++
-        } else {
-            Write-Host "  [WARNING] Port still in use (may need manual intervention)" -ForegroundColor Yellow
-        }
-    } catch {
-        Write-Host "  [WARNING] Could not stop service: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "[$serviceIndex/$($RunningServices.Count)] Stopping Licensing API (port 8080)..." -ForegroundColor White
+    if (Stop-ProcessByPort -Port 8080 -ServiceName "Licensing API") {
+        $ServicesStopped++
     }
     Write-Host ""
+    $serviceIndex++
 }
 
 # Service 2: Dashboard API (Port 8000)
 if ($RunningServices.ContainsKey(8000)) {
-    Write-Host "[2/$($RunningServices.Count)] Stopping Dashboard API (port 8000)..." -ForegroundColor White
-    try {
-        Get-Process | Where-Object {$_.MainWindowTitle -like "*Port 8000*" -or $_.MainWindowTitle -like "*Dashboard*"} | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-        
-        $stillRunning = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue
-        if (-not $stillRunning) {
-            Write-Host "  [OK] Dashboard API stopped successfully" -ForegroundColor Green
-            $ServicesStopped++
-        } else {
-            Write-Host "  [WARNING] Port still in use" -ForegroundColor Yellow
-        }
-    } catch {
-        Write-Host "  [WARNING] Could not stop service: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "[$serviceIndex/$($RunningServices.Count)] Stopping Dashboard API (port 8000)..." -ForegroundColor White
+    if (Stop-ProcessByPort -Port 8000 -ServiceName "Dashboard API") {
+        $ServicesStopped++
     }
     Write-Host ""
+    $serviceIndex++
 }
 
 # Service 3: Tenant Portal (Port 3000)
 if ($RunningServices.ContainsKey(3000)) {
-    Write-Host "[3/$($RunningServices.Count)] Stopping Tenant Portal (port 3000)..." -ForegroundColor White
-    try {
-        Get-Process | Where-Object {$_.MainWindowTitle -like "*Port 3000*" -or $_.MainWindowTitle -like "*Tenant Portal*"} | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-        
-        $stillRunning = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue
-        if (-not $stillRunning) {
-            Write-Host "  [OK] Tenant Portal stopped successfully" -ForegroundColor Green
-            $ServicesStopped++
-        } else {
-            Write-Host "  [WARNING] Port still in use" -ForegroundColor Yellow
-        }
-    } catch {
-        Write-Host "  [WARNING] Could not stop service: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "[$serviceIndex/$($RunningServices.Count)] Stopping Tenant Portal (port 3000)..." -ForegroundColor White
+    if (Stop-ProcessByPort -Port 3000 -ServiceName "Tenant Portal") {
+        $ServicesStopped++
     }
     Write-Host ""
+    $serviceIndex++
 }
 
 # Service 4: Dashboard UI (Port 3001)
 if ($RunningServices.ContainsKey(3001)) {
-    Write-Host "[4/$($RunningServices.Count)] Stopping Dashboard UI (port 3001)..." -ForegroundColor White
-    try {
-        Get-Process | Where-Object {$_.MainWindowTitle -like "*Port 3001*" -or $_.MainWindowTitle -like "*Dashboard UI*"} | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-        
-        $stillRunning = Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue
-        if (-not $stillRunning) {
-            Write-Host "  [OK] Dashboard UI stopped successfully" -ForegroundColor Green
-            $ServicesStopped++
-        } else {
-            Write-Host "  [WARNING] Port still in use" -ForegroundColor Yellow
-        }
-    } catch {
-        Write-Host "  [WARNING] Could not stop service: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "[$serviceIndex/$($RunningServices.Count)] Stopping Dashboard UI (port 3001)..." -ForegroundColor White
+    if (Stop-ProcessByPort -Port 3001 -ServiceName "Dashboard UI") {
+        $ServicesStopped++
     }
     Write-Host ""
+    $serviceIndex++
 }
 
 # Service 5: Admin Portal (Port 3002)
 if ($RunningServices.ContainsKey(3002)) {
-    Write-Host "[5/$($RunningServices.Count)] Stopping Admin Portal (port 3002)..." -ForegroundColor White
-    try {
-        Get-Process | Where-Object {$_.MainWindowTitle -like "*Port 3002*" -or $_.MainWindowTitle -like "*Admin Portal*"} | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-        
-        $stillRunning = Get-NetTCPConnection -LocalPort 3002 -ErrorAction SilentlyContinue
-        if (-not $stillRunning) {
-            Write-Host "  [OK] Admin Portal stopped successfully" -ForegroundColor Green
-            $ServicesStopped++
-        } else {
-            Write-Host "  [WARNING] Port still in use" -ForegroundColor Yellow
-        }
-    } catch {
-        Write-Host "  [WARNING] Could not stop service: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "[$serviceIndex/$($RunningServices.Count)] Stopping Admin Portal (port 3002)..." -ForegroundColor White
+    if (Stop-ProcessByPort -Port 3002 -ServiceName "Admin Portal") {
+        $ServicesStopped++
     }
     Write-Host ""
+    $serviceIndex++
 }
 
 # =========================================================================
