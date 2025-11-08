@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Line, Bar, Pie } from 'recharts';
+import { Navigation } from '../components/Navigation';
+import { AdminHeader } from '../components/AdminHeader';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
@@ -86,50 +88,17 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header with Gradient */}
-      <header className="bg-gradient-main text-white shadow-lg">
-        <div className="container mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold drop-shadow-md">
-                🎯 Quick2Odoo Licensing Admin
-              </h1>
-              <p className="text-sm opacity-90 mt-2">
-                Multi-tenant subscription & licensing management
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2">
-                <p className="text-xs opacity-75">Admin User</p>
-                <p className="font-semibold">cryptolavar@gmail.com</p>
-              </div>
-            </div>
+      <AdminHeader
+        title="🎯 Quick2Odoo Licensing Admin"
+        subtitle="Multi-tenant subscription & licensing management"
+        action={
+          <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2">
+            <p className="text-xs opacity-75">Admin User</p>
+            <p className="font-semibold">cryptolavar@gmail.com</p>
           </div>
-        </div>
-      </header>
-
-      {/* Navigation */}
-      <nav className="bg-white shadow-sm border-b border-gray-200">
-        <div className="container mx-auto px-6">
-          <div className="flex gap-6 text-sm font-medium">
-            <Link href="/" className="py-4 px-2 border-b-2 border-purple-600 text-purple-600">
-              Dashboard
-            </Link>
-            <Link href="/codes" className="py-4 px-2 border-b-2 border-transparent text-gray-600 hover:text-purple-600 hover:border-gray-300 transition-colors">
-              Activation Codes
-            </Link>
-            <Link href="/devices" className="py-4 px-2 border-b-2 border-transparent text-gray-600 hover:text-purple-600 hover:border-gray-300 transition-colors">
-              Devices
-            </Link>
-            <Link href="/tenants" className="py-4 px-2 border-b-2 border-transparent text-gray-600 hover:text-purple-600 hover:border-gray-300 transition-colors">
-              Tenants
-            </Link>
-            <Link href="/analytics" className="py-4 px-2 border-b-2 border-transparent text-gray-600 hover:text-purple-600 hover:border-gray-300 transition-colors">
-              Analytics
-            </Link>
-          </div>
-        </div>
-      </nav>
+        }
+      />
+      <Navigation />
 
       <main className="container mx-auto px-6 py-8">
         {/* Stats Cards Grid */}

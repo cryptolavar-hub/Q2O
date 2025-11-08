@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { Navigation } from '../components/Navigation';
+import { AdminHeader } from '../components/AdminHeader';
 
 interface Tenant {
   id: number;
@@ -50,19 +52,16 @@ export default function TenantsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-gradient-main text-white shadow-lg">
-        <div className="container mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="text-white hover:opacity-80 transition-opacity">
-              <h1 className="text-3xl font-bold drop-shadow-md">👥 Tenants</h1>
-            </Link>
-            <button className="bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
-              ➕ Add Tenant
-            </button>
-          </div>
-        </div>
-      </header>
+      <AdminHeader
+        title="👥 Tenants"
+        subtitle="Manage tenant organizations and subscriptions"
+        action={
+          <button className="bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+            ➕ Add Tenant
+          </button>
+        }
+      />
+      <Navigation />
 
       <main className="container mx-auto px-6 py-8">
         {/* Tenant Cards */}

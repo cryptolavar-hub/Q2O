@@ -33,8 +33,9 @@ export default function Dashboard() {
   };
 
   const displayState = state || mockState;
-  const activeAgents = displayState.agents.filter(a => a.status === 'active' || a.status === 'busy').length;
-  const idleAgents = displayState.agents.filter(a => a.status === 'idle').length;
+  const agents = displayState.agents || [];
+  const activeAgents = agents.filter(a => a.status === 'active' || a.status === 'busy').length;
+  const idleAgents = agents.filter(a => a.status === 'idle').length;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -90,7 +91,7 @@ export default function Dashboard() {
                 )}
               </h2>
               
-              {displayState.agents.length === 0 ? (
+              {agents.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="text-6xl mb-4">🤖</div>
                   <p className="text-gray-500">
@@ -99,7 +100,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {displayState.agents.map((agent) => (
+                  {agents.map((agent) => (
                     <AgentCard key={agent.name} agent={agent} />
                   ))}
                 </div>
@@ -110,7 +111,7 @@ export default function Dashboard() {
             <div className="bg-white rounded-2xl p-6 shadow-lg">
               <h2 className="text-xl font-bold text-gray-900 mb-4">📋 Task Timeline</h2>
               
-              {displayState.tasks.length === 0 ? (
+              {(displayState.tasks || []).length === 0 ? (
                 <div className="text-center py-12">
                   <div className="text-6xl mb-4">📋</div>
                   <p className="text-gray-500">
@@ -119,7 +120,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {displayState.tasks.map((task) => (
+                  {(displayState.tasks || []).map((task) => (
                     <TaskCard key={task.id} task={task} />
                   ))}
                 </div>

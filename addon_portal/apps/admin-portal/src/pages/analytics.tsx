@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Navigation } from '../components/Navigation';
+import { AdminHeader } from '../components/AdminHeader';
 
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState('7d');
@@ -32,25 +34,22 @@ export default function AnalyticsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-gradient-main text-white shadow-lg">
-        <div className="container mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="text-white hover:opacity-80 transition-opacity">
-              <h1 className="text-3xl font-bold drop-shadow-md">📊 Analytics</h1>
-            </Link>
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-              className="bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 px-4 py-2 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-white/50"
-            >
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-              <option value="90d">Last 90 days</option>
-            </select>
-          </div>
-        </div>
-      </header>
+      <AdminHeader
+        title="📊 Analytics"
+        subtitle="Usage trends, revenue metrics, and insights"
+        action={
+          <select
+            value={dateRange}
+            onChange={(e) => setDateRange(e.target.value)}
+            className="bg-white/20 backdrop-blur-sm text-white border-2 border-white/30 px-4 py-2 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-white/50"
+          >
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="90d">Last 90 days</option>
+          </select>
+        }
+      />
+      <Navigation />
 
       <main className="container mx-auto px-6 py-8">
         {/* Charts Grid */}

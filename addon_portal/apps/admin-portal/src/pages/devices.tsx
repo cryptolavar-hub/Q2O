@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
+import { Navigation } from '../components/Navigation';
+import { AdminHeader } from '../components/AdminHeader';
 
 interface Device {
   id: number;
@@ -40,15 +42,11 @@ export default function DevicesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-gradient-main text-white shadow-lg">
-        <div className="container mx-auto px-6 py-6">
-          <Link href="/" className="text-white hover:opacity-80 transition-opacity">
-            <h1 className="text-3xl font-bold drop-shadow-md">📱 Authorized Devices</h1>
-          </Link>
-          <p className="text-sm opacity-90 mt-2">Manage device authorizations and track activity</p>
-        </div>
-      </header>
+      <AdminHeader
+        title="📱 Authorized Devices"
+        subtitle="Manage device authorizations and track activity"
+      />
+      <Navigation />
 
       <main className="container mx-auto px-6 py-8">
         {/* Filters */}

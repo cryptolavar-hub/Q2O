@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import QRCode from 'qrcode.react';
+import { Navigation } from '../components/Navigation';
+import { AdminHeader } from '../components/AdminHeader';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
@@ -52,24 +54,19 @@ export default function CodesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-gradient-main text-white shadow-lg">
-        <div className="container mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <Link href="/" className="text-white hover:opacity-80 transition-opacity">
-                <h1 className="text-3xl font-bold drop-shadow-md">🔑 Activation Codes</h1>
-              </Link>
-            </div>
-            <button
-              onClick={() => setShowGenerateModal(true)}
-              className="bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
-            >
-              ➕ Generate Codes
-            </button>
-          </div>
-        </div>
-      </header>
+      <AdminHeader
+        title="🔑 Activation Codes"
+        subtitle="Manage and generate activation codes for tenants"
+        action={
+          <button
+            onClick={() => setShowGenerateModal(true)}
+            className="bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+          >
+            ➕ Generate Codes
+          </button>
+        }
+      />
+      <Navigation />
 
       <main className="container mx-auto px-6 py-8">
         {/* Filters */}
