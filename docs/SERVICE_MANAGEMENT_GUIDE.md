@@ -102,6 +102,46 @@ Service Startup Summary:
 - ✅ 15-second verification per service
 - ✅ Port listening check (5 attempts × 3 seconds)
 - ✅ Fails fast if service won't start
+- ✅ **No duplicate browser windows** (tracks newly started services)
+- ✅ **Interactive stop menu** at end (option to stop all services immediately)
+
+**Phase 4: Opening Browser Windows (Newly Started Services Only)**
+```
+Opening Service URLs in Browser (Newly Started Services Only)...
+
+Opening Licensing API documentation...
+Opening Dashboard API documentation...
+Opening Tenant Portal...
+Opening Dashboard UI...
+Opening Admin Portal...
+```
+- ✅ **Smart URL opening** - Only services that just started
+- ✅ **No duplicates** - Already running services are skipped
+- ✅ Each URL opens once
+
+**Phase 5: Interactive Service Management Menu**
+```
+ALL SERVICES STARTED SUCCESSFULLY!
+
+What would you like to do?
+
+  1 - Keep services running and exit
+  2 - Stop all services now
+
+Enter choice (1-2): _
+```
+
+**Option 1** - Keep Running:
+- Services continue in background
+- Script exits
+- Reminder shown: "To stop later: Run STOP_ALL.bat"
+
+**Option 2** - Stop Now:
+- Immediately launches `STOP_ALL_SERVICES.ps1`
+- Detects all running services
+- Stops them by PID
+- Verifies shutdown
+- One-stop management!
 
 ---
 
@@ -139,28 +179,40 @@ Services to stop:
 Stop all running services? (y/n):
 ```
 
-**Phase 2: Graceful Shutdown (One-by-One)**
+**Phase 2: Graceful Shutdown (One-by-One, PID-Based)**
 ```
 [1/5] Stopping Licensing API (port 8080)...
-  (waits 2 seconds)
+  Found process: python (PID: 12345)
+  Sent SIGKILL to PID 12345
   [OK] Licensing API stopped successfully
 
 [2/5] Stopping Dashboard API (port 8000)...
-  (waits 2 seconds)
+  Found process: python (PID: 12346)
+  Sent SIGKILL to PID 12346
   [OK] Dashboard API stopped successfully
 
 [3/5] Stopping Tenant Portal (port 3000)...
-  (waits 2 seconds)
+  Found process: node (PID: 12347)
+  Sent SIGKILL to PID 12347
   [OK] Tenant Portal stopped successfully
 
 [4/5] Stopping Dashboard UI (port 3001)...
-  (waits 2 seconds)
+  Found process: node (PID: 12348)
+  Sent SIGKILL to PID 12348
   [OK] Dashboard UI stopped successfully
 
 [5/5] Stopping Admin Portal (port 3002)...
-  (waits 2 seconds)
+  Found process: node (PID: 12349)
+  Sent SIGKILL to PID 12349
   [OK] Admin Portal stopped successfully
 ```
+
+**How It Works:**
+1. Uses `Get-NetTCPConnection` to find process listening on port
+2. Gets `OwningProcess` (PID) from the connection
+3. Stops process using `Stop-Process -Id $PID -Force`
+4. Waits 2 seconds for graceful shutdown
+5. Verifies port is released
 
 **Phase 3: Verification**
 ```
@@ -180,12 +232,14 @@ ALL SERVICES STOPPED SUCCESSFULLY!
 ```
 
 **Safety Features:**
+- ✅ **PID-based termination** (finds exact process by port)
 - ✅ Only stops services that are running
 - ✅ Confirms before stopping
 - ✅ Stops one-by-one with 2-second delays
 - ✅ Verifies each service stopped
 - ✅ Never stops PostgreSQL (system service)
 - ✅ Shows warnings if ports still in use
+- ✅ Works for any process type (Python, Node.js, etc.)
 
 ---
 
@@ -443,19 +497,25 @@ netstat -an | findstr "LISTENING" | findstr ":8080 :8000 :3000 :3001 :3002"
 
 ## 🎯 **Service Management Features**
 
+✅ **Sequential Startup** - Services start one-by-one in dependency order  
+✅ **15-Second Verification** - Each service proven listening before proceeding  
 ✅ **Intelligent Detection** - Knows what's running  
 ✅ **No Duplicates** - Won't start if already running  
-✅ **Graceful Shutdown** - One-by-one with delays  
+✅ **Smart URL Opening** - Browser windows only for newly started services  
+✅ **PID-Based Stopping** - Finds exact process by port and terminates  
+✅ **Graceful Shutdown** - One-by-one with 2-second delays  
 ✅ **Verification** - Confirms each service stopped  
-✅ **User Control** - Interactive options  
+✅ **Interactive Stop Menu** - Option to stop all services from startup script  
+✅ **User Control** - Interactive options throughout  
 ✅ **Safety** - Never stops PostgreSQL automatically  
 ✅ **Dual-Stack** - IPv4 + IPv6 on all services  
 
 ---
 
-**Document Version**: 1.0  
+**Document Version**: 3.1  
 **Created**: November 7, 2025  
-**Status**: Complete ✅
+**Updated**: November 8, 2025  
+**Status**: Complete ✅ (Reflects latest improvements)
 
 ---
 
