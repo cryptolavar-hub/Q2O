@@ -7,6 +7,11 @@ import { AdminHeader } from '../components/AdminHeader';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
+interface Trend {
+  value: number;
+  direction: 'up' | 'down';
+}
+
 interface DashboardStats {
   totalCodes: number;
   activeCodes: number;
@@ -17,6 +22,12 @@ interface DashboardStats {
   totalTenants: number;
   activeTenants: number;
   successRate: number;
+  trends: {
+    codes: Trend;
+    devices: Trend;
+    tenants: Trend;
+    successRate: Trend;
+  };
 }
 
 export default function AdminDashboard() {
@@ -30,6 +41,12 @@ export default function AdminDashboard() {
     totalTenants: 0,
     activeTenants: 0,
     successRate: 0,
+    trends: {
+      codes: { value: 0, direction: 'up' },
+      devices: { value: 0, direction: 'up' },
+      tenants: { value: 0, direction: 'up' },
+      successRate: { value: 0, direction: 'up' }
+    }
   });
 
   const [loading, setLoading] = useState(true);
@@ -54,6 +71,12 @@ export default function AdminDashboard() {
           totalTenants: data.totalTenants || 0,
           activeTenants: data.activeTenants || 0,
           successRate: data.successRate || 0,
+          trends: data.trends || {
+            codes: { value: 0, direction: 'up' },
+            devices: { value: 0, direction: 'up' },
+            tenants: { value: 0, direction: 'up' },
+            successRate: { value: 0, direction: 'up' }
+          }
         });
       }
     } catch (error) {
@@ -121,26 +144,28 @@ export default function AdminDashboard() {
             value={stats.totalCodes}
             subtitle={`${stats.activeCodes} active`}
             icon="🔑"
-            trend={{ value: 12, direction: 'up' }}
+            trend={stats.trends.codes}
           />
           <StatCard
             title="Authorized Devices"
             value={stats.totalDevices}
             subtitle={`${stats.activeDevices} active`}
             icon="📱"
-            trend={{ value: 8, direction: 'up' }}
+            trend={stats.trends.devices}
           />
           <StatCard
             title="Tenants"
             value={stats.totalTenants}
             subtitle={`${stats.activeTenants} with active subscriptions`}
             icon="👥"
+            trend={stats.trends.tenants}
           />
           <StatCard
             title="Success Rate"
             value={`${stats.successRate.toFixed(1)}%`}
             subtitle="Activation success"
             icon="📊"
+            trend={stats.trends.successRate}
           />
         </div>
 

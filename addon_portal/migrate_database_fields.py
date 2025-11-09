@@ -11,7 +11,7 @@ parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
 from sqlalchemy import text
-from addon_portal.api.core.db import engine
+from api.core.db import engine
 
 def run_migration():
     """Add missing fields to database."""

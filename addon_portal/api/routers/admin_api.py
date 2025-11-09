@@ -52,6 +52,33 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     used_codes = sum(1 for c in all_codes if c.used_at is not None)
     success_rate = (used_codes / total_codes * 100) if total_codes > 0 else 0
     
+    # Calculate trends (this week vs last week)
+    now = datetime.now()
+    week_ago = now - timedelta(days=7)
+    two_weeks_ago = now - timedelta(days=14)
+    
+    # Codes created this week vs last week
+    codes_this_week = sum(1 for c in all_codes if c.created_at >= week_ago)
+    codes_last_week = sum(1 for c in all_codes if two_weeks_ago <= c.created_at < week_ago)
+    codes_trend = ((codes_this_week - codes_last_week) / codes_last_week * 100) if codes_last_week > 0 else (100 if codes_this_week > 0 else 0)
+    
+    # Devices activated this week vs last week
+    devices_this_week = sum(1 for d in all_devices if d.created_at >= week_ago)
+    devices_last_week = sum(1 for d in all_devices if two_weeks_ago <= d.created_at < week_ago)
+    devices_trend = ((devices_this_week - devices_last_week) / devices_last_week * 100) if devices_last_week > 0 else (100 if devices_this_week > 0 else 0)
+    
+    # Tenants created this week vs last week
+    tenants_this_week = sum(1 for t in all_tenants if t.created_at >= week_ago)
+    tenants_last_week = sum(1 for t in all_tenants if two_weeks_ago <= t.created_at < week_ago)
+    tenants_trend = ((tenants_this_week - tenants_last_week) / tenants_last_week * 100) if tenants_last_week > 0 else (100 if tenants_this_week > 0 else 0)
+    
+    # Success rate trend (this week vs last week)
+    codes_used_this_week = sum(1 for c in all_codes if c.used_at and c.used_at >= week_ago)
+    codes_used_last_week = sum(1 for c in all_codes if c.used_at and two_weeks_ago <= c.used_at < week_ago)
+    success_this_week = (codes_used_this_week / codes_this_week * 100) if codes_this_week > 0 else 0
+    success_last_week = (codes_used_last_week / codes_last_week * 100) if codes_last_week > 0 else 0
+    success_trend = success_this_week - success_last_week
+    
     return {
         "totalCodes": total_codes,
         "activeCodes": active_codes,
@@ -62,7 +89,25 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         "revokedDevices": revoked_devices,
         "totalTenants": total_tenants,
         "activeTenants": active_tenants,
-        "successRate": round(success_rate, 1)
+        "successRate": round(success_rate, 1),
+        "trends": {
+            "codes": {
+                "value": round(abs(codes_trend), 1),
+                "direction": "up" if codes_trend >= 0 else "down"
+            },
+            "devices": {
+                "value": round(abs(devices_trend), 1),
+                "direction": "up" if devices_trend >= 0 else "down"
+            },
+            "tenants": {
+                "value": round(abs(tenants_trend), 1),
+                "direction": "up" if tenants_trend >= 0 else "down"
+            },
+            "successRate": {
+                "value": round(abs(success_trend), 1),
+                "direction": "up" if success_trend >= 0 else "down"
+            }
+        }
     }
 
 
