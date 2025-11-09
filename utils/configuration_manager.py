@@ -151,7 +151,17 @@ class ConfigurationManager:
         )
     
     def _get_default_system_prompt(self) -> str:
-        """Get default system prompt for code generation."""
+        """
+        Get default system prompt for code generation.
+        
+        Reads from .env (Q2O_LLM_SYSTEM_PROMPT) or uses fallback.
+        """
+        # Try to load from .env first
+        env_prompt = os.getenv("Q2O_LLM_SYSTEM_PROMPT")
+        if env_prompt:
+            return env_prompt
+        
+        # Fallback to hardcoded prompt
         return """You are an expert software developer.
 
 Generate production-quality code with:
@@ -251,7 +261,8 @@ Output ONLY the code - no explanations, no markdown."""
         """
         Get system and user prompts for a task using cascading logic.
         
-        Merges prompts from all levels: System + Project + Agent
+        Merges prompts from all levels: System + Agent + Project
+        Priority: Agent-specific (.env) → Project-specific → System
         
         Args:
             project_id: Project identifier
@@ -266,18 +277,33 @@ Output ONLY the code - no explanations, no markdown."""
         system_prompt = self.system_config.system_prompt or self._get_default_system_prompt()
         custom_instructions = []
         
+        # Check for agent-specific prompt in .env (HIGHEST PRIORITY for agent)
+        agent_env_key = f"Q2O_LLM_PROMPT_{agent_type.value.upper()}"
+        agent_prompt_from_env = os.getenv(agent_env_key)
+        if agent_prompt_from_env:
+            # Replace system prompt with agent-specific one from .env
+            system_prompt = agent_prompt_from_env
+            logging.debug(f"Using agent-specific prompt from .env: {agent_env_key}")
+        
         # Add system-level custom instructions
         if self.system_config.custom_instructions:
             custom_instructions.append(self.system_config.custom_instructions)
         
-        # Add project-level customizations
+        # Add project-level customizations from .env
+        if project_id:
+            project_env_key = f"Q2O_LLM_PROMPT_PROJECT_{project_id.upper()}"
+            project_prompt_from_env = os.getenv(project_env_key)
+            if project_prompt_from_env:
+                custom_instructions.append(f"\n📋 Project-Specific Requirements:\n{project_prompt_from_env}")
+        
+        # Add project-level customizations from config file
         if project_id and project_id in self.projects:
             project = self.projects[project_id]
             
             if project.llm_config.custom_instructions:
                 custom_instructions.append(f"\n📋 {project.client_name} Requirements:\n{project.llm_config.custom_instructions}")
             
-            # Add agent-level customizations
+            # Add agent-level customizations from project config
             agent_key = agent_type.value
             if agent_key in project.agent_overrides:
                 agent_config = project.agent_overrides[agent_key]

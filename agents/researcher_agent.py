@@ -70,7 +70,10 @@ class ResearchCache:
     
     def get(self, query: str) -> Optional[Dict]:
         """
-        Get cached research results.
+        Get cached research results from PostgreSQL (or file cache as fallback).
+        
+        NEW: Checks PostgreSQL database first for scalability.
+        Falls back to file cache for backward compatibility.
         
         Args:
             query: Research query
@@ -78,6 +81,19 @@ class ResearchCache:
         Returns:
             Cached results or None if not found/expired
         """
+        # FIRST: Check PostgreSQL database (SCALABLE!)
+        try:
+            from utils.research_database import get_research_database
+            db = get_research_database()
+            
+            similar_research = db.find_similar_research(query, limit=1)
+            if similar_research:
+                logging.info(f"✅ Found research in PostgreSQL for: {query}")
+                return similar_research[0]
+        except Exception as e:
+            logging.debug(f"PostgreSQL check failed, trying file cache: {e}")
+        
+        # FALLBACK: Check file cache
         cache_key = self._get_cache_key(query)
         
         if cache_key not in self.cache_index:
@@ -454,28 +470,20 @@ class ResearcherAgent(BaseAgent):
                 self.cache.set(query, research_results)
                 research_results['cached'] = False
             
-            # Save research to file
-            research_file = self._save_research_results(query, research_results, task)
-            
-            # Store in global research database for cross-project reuse
-            try:
-                from utils.research_database import store_research
-                project_name = task.metadata.get("project_name", "unknown")
-                research_id = store_research(research_results, project_name=project_name)
-                task.metadata["global_research_id"] = research_id
-                self.logger.info(f"Stored research in global database with ID {research_id}")
-            except Exception as e:
-                self.logger.warning(f"Could not store in global research database: {e}")
+            # Save research (PostgreSQL + files for backup)
+            # Returns research_id (UUID) - already stored in PostgreSQL by _save_research_results
+            research_id = self._save_research_results(query, research_results, task)
             
             # Prepare results for other agents
             task.metadata["research_results"] = research_results
-            task.metadata["research_file"] = research_file
+            task.metadata["research_id"] = research_id  # Database ID (primary)
+            task.metadata["global_research_id"] = research_id  # Backward compatibility
             task.metadata["research_query"] = query
             
             task.result = {
                 "query": query,
+                "research_id": research_id,  # Database ID
                 "results_count": len(research_results.get('search_results', [])),
-                "research_file": research_file,
                 "confidence_score": research_results.get('confidence_score', 0),
                 "key_findings": research_results.get('key_findings', []),
                 "status": "completed",
@@ -1119,7 +1127,10 @@ Please synthesize these findings into 5-10 actionable insights."""
     
     def _save_research_results(self, query: str, results: Dict, task: Task) -> str:
         """
-        Save research results to file.
+        Save research results to PostgreSQL database (and files as backup).
+        
+        NEW: Stores in PostgreSQL for scalability and fast querying.
+        Also saves files for backward compatibility and reference.
         
         Args:
             query: Research query
@@ -1127,9 +1138,41 @@ Please synthesize these findings into 5-10 actionable insights."""
             task: The research task
             
         Returns:
-            Path to saved research file
+            research_id (unique identifier)
         """
-        # Generate filename
+        import uuid
+        
+        # Generate research ID
+        research_id = str(uuid.uuid4())
+        
+        # Get project info
+        project_name = task.metadata.get("project_name", "unknown")
+        project_id = self.project_id
+        
+        # Store in PostgreSQL (PRIMARY storage)
+        try:
+            from utils.research_database import get_research_database
+            db = get_research_database()
+            
+            # Add metadata to results
+            results['research_id'] = research_id
+            results['query'] = query
+            
+            # Store in database
+            db.store_research(
+                research_id=research_id,
+                query=query,
+                research_results=results,
+                project_name=project_name,
+                project_id=project_id
+            )
+            
+            self.logger.info(f"✅ Stored research in PostgreSQL: {research_id}")
+            
+        except Exception as e:
+            self.logger.warning(f"Could not store in PostgreSQL, using files only: {e}")
+        
+        # Also save files (BACKUP storage for reference)
         safe_query = re.sub(r'[^\w\s-]', '', query).strip().replace(' ', '_')
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
@@ -1151,7 +1194,9 @@ Please synthesize these findings into 5-10 actionable insights."""
         self.research_files.append(json_path)
         self.research_files.append(md_path)
         
-        return json_path
+        self.logger.info(f"📁 Backup files: {json_filename}, {md_filename}")
+        
+        return research_id
     
     def _generate_markdown_report(self, query: str, results: Dict, task: Task) -> str:
         """

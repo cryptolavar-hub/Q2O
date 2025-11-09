@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from .core.settings import settings
-from .routers import authz, licenses, billing_stripe, admin_pages, auth_sso, usage
+from .routers import authz, licenses, billing_stripe, admin_pages, auth_sso, usage, llm_management
 
 app = FastAPI(title=f"{settings.APP_NAME} Licensing Service")
 
@@ -23,5 +23,6 @@ app.include_router(billing_stripe.router)
 app.include_router(auth_sso.router)
 app.include_router(usage.router)
 app.include_router(admin_pages.router)
+app.include_router(llm_management.router)  # LLM Management Dashboard API
 
 app.mount("/static", StaticFiles(directory="api/static"), name="static")

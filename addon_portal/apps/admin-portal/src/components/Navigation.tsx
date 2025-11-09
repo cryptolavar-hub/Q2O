@@ -15,6 +15,7 @@ const navItems: NavItem[] = [
   { href: '/devices', label: 'Devices', icon: '📱' },
   { href: '/tenants', label: 'Tenants', icon: '👥' },
   { href: '/analytics', label: 'Analytics', icon: '📊' },
+  { href: '/llm', label: 'LLM Management', icon: '🤖' },
 ];
 
 export function Navigation() {

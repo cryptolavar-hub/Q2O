@@ -1,377 +1,512 @@
 """
-Global Research Database
-Persistent storage and querying of research results across all projects
+Research Database - PostgreSQL storage for research results.
+Replaces file system storage with scalable database queries.
 """
 
-import os
-import json
-import sqlite3
 import hashlib
+import json
 import logging
 from typing import Dict, List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+# Database imports
+try:
+    from sqlalchemy.orm import Session
+    from addon_portal.api.core.db import get_db
+    from addon_portal.api.models.research import ResearchResult, ResearchAnalytics
+    DB_AVAILABLE = True
+except ImportError:
+    logging.warning("Database not available for research storage, using file system")
+    DB_AVAILABLE = False
 
 
 class ResearchDatabase:
     """
-    SQLite-based database for storing and querying research results.
+    PostgreSQL-based research storage with intelligent querying.
     
-    Features:
-    - Persistent storage across projects
-    - Full-text search on queries and findings
-    - Deduplication based on query hash
-    - Automatic indexing
+    Replaces file system with scalable database storage.
     """
     
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self):
+        self.enabled = DB_AVAILABLE
+        self.ttl_days = 90  # Research expires after 90 days
+    
+    def store_research(
+        self,
+        research_id: str,
+        query: str,
+        research_results: Dict[str, Any],
+        project_name: str = None,
+        project_id: str = None
+    ) -> str:
         """
-        Initialize research database.
+        Store research results in PostgreSQL.
         
         Args:
-            db_path: Path to SQLite database file (default: ~/.quickodoo/research.db)
-        """
-        if db_path is None:
-            db_dir = os.path.expanduser("~/.quickodoo")
-            os.makedirs(db_dir, exist_ok=True)
-            db_path = os.path.join(db_dir, "research.db")
+            research_id: Unique research identifier
+            query: Original research query
+            research_results: Complete research results dictionary
+            project_name: Project name (optional)
+            project_id: Project ID (optional)
         
-        self.db_path = db_path
-        self._init_database()
-        logger.info(f"Research database initialized at {self.db_path}")
-    
-    def _init_database(self):
-        """Create database tables if they don't exist."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Main research table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS research (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                query TEXT NOT NULL,
-                query_hash TEXT UNIQUE NOT NULL,
-                timestamp TEXT NOT NULL,
-                depth TEXT,
-                confidence_score REAL,
-                cached INTEGER DEFAULT 0,
-                project_name TEXT,
-                data_json TEXT NOT NULL,
-                UNIQUE(query_hash)
-            )
-        ''')
-        
-        # Documentation URLs table (for easier querying)
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS documentation_urls (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                research_id INTEGER NOT NULL,
-                url TEXT NOT NULL,
-                FOREIGN KEY (research_id) REFERENCES research(id)
-            )
-        ''')
-        
-        # Key findings table (for full-text search)
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS key_findings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                research_id INTEGER NOT NULL,
-                finding TEXT NOT NULL,
-                FOREIGN KEY (research_id) REFERENCES research(id)
-            )
-        ''')
-        
-        # Create indexes
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_query ON research(query)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_query_hash ON research(query_hash)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON research(timestamp)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_confidence ON research(confidence_score)')
-        
-        conn.commit()
-        conn.close()
-    
-    def _hash_query(self, query: str) -> str:
-        """Generate hash for query deduplication."""
-        normalized = query.lower().strip()
-        return hashlib.md5(normalized.encode()).hexdigest()
-    
-    def store_research(self, research_results: Dict, project_name: Optional[str] = None) -> int:
-        """
-        Store research results in database.
-        
-        Args:
-            research_results: Research results dictionary
-            project_name: Optional project name for tracking
-            
         Returns:
-            Research ID (database row ID)
+            research_id
         """
-        query = research_results.get('query', '')
-        query_hash = self._hash_query(query)
-        
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        if not self.enabled:
+            logging.warning("Database not available, research not stored")
+            return research_id
         
         try:
-            # Insert main research record
-            cursor.execute('''
-                INSERT OR REPLACE INTO research 
-                (query, query_hash, timestamp, depth, confidence_score, cached, project_name, data_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                query,
-                query_hash,
-                research_results.get('timestamp', datetime.now().isoformat()),
-                research_results.get('depth', 'adaptive'),
-                research_results.get('confidence_score', 0),
-                1 if research_results.get('cached') else 0,
-                project_name,
-                json.dumps(research_results)
-            ))
+            db = next(get_db())
             
-            research_id = cursor.lastrowid
+            # Create query hash for deduplication
+            query_hash = hashlib.md5(query.lower().strip().encode()).hexdigest()
             
-            # Store documentation URLs
-            for url in research_results.get('documentation_urls', []):
-                cursor.execute('''
-                    INSERT INTO documentation_urls (research_id, url)
-                    VALUES (?, ?)
-                ''', (research_id, url))
+            # Check if research already exists
+            existing = db.query(ResearchResult).filter(
+                ResearchResult.query_hash == query_hash
+            ).first()
             
-            # Store key findings
-            for finding in research_results.get('key_findings', []):
-                cursor.execute('''
-                    INSERT INTO key_findings (research_id, finding)
-                    VALUES (?, ?)
-                ''', (research_id, finding))
+            if existing:
+                # Update access count and last accessed
+                existing.access_count += 1
+                existing.last_accessed = datetime.now()
+                db.commit()
+                logging.info(f"Research already exists: {existing.research_id}, incrementing access count")
+                return existing.research_id
             
-            conn.commit()
-            logger.info(f"Stored research for query '{query}' with ID {research_id}")
+            # Create full content for search
+            full_content = self._create_searchable_content(query, research_results)
+            
+            # Create new research record
+            research = ResearchResult(
+                research_id=research_id,
+                query=query,
+                query_hash=query_hash,
+                project_name=project_name,
+                project_id=project_id,
+                search_results=research_results.get('search_results', []),
+                documentation_urls=research_results.get('documentation_urls', []),
+                code_examples=research_results.get('code_examples', []),
+                key_findings=research_results.get('key_findings', []),
+                confidence_score=research_results.get('confidence_score', 0.0),
+                results_count=len(research_results.get('search_results', [])),
+                research_depth=research_results.get('depth', 'adaptive'),
+                cached=research_results.get('cached', False),
+                llm_synthesized=bool(research_results.get('llm_synthesized', False)),
+                expires_at=datetime.now() + timedelta(days=self.ttl_days),
+                access_count=1,
+                full_content=full_content
+            )
+            
+            db.add(research)
+            db.commit()
+            db.refresh(research)
+            
+            logging.info(f"✅ Stored research in PostgreSQL: {research_id}")
+            
             return research_id
             
-        except sqlite3.IntegrityError:
-            # Research already exists (same query_hash)
-            cursor.execute('SELECT id FROM research WHERE query_hash = ?', (query_hash,))
-            row = cursor.fetchone()
-            if row:
-                logger.info(f"Research for query '{query}' already exists with ID {row[0]}")
-                return row[0]
-            raise
-        finally:
-            conn.close()
+        except Exception as e:
+            logging.error(f"Failed to store research in database: {e}")
+            return research_id
     
-    def query_research(self, search_query: str, limit: int = 10) -> List[Dict]:
+    def find_similar_research(
+        self,
+        query: str,
+        limit: int = 5,
+        min_confidence: float = 30.0
+    ) -> List[Dict]:
         """
-        Query research database for matching results.
+        Find similar research results from PostgreSQL.
+        
+        Queries by:
+        - Exact query hash match (best)
+        - Similar queries (keyword overlap)
+        - Full-text search
         
         Args:
-            search_query: Search string (matches query, findings, URLs)
-            limit: Maximum number of results
+            query: Search query
+            limit: Maximum results to return
+            min_confidence: Minimum confidence score threshold
+        
+        Returns:
+            List of matching research results
+        """
+        if not self.enabled:
+            return []
+        
+        try:
+            db = next(get_db())
             
-        Returns:
-            List of research results
-        """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Search in queries and findings
-        search_pattern = f"%{search_query}%"
-        
-        cursor.execute('''
-            SELECT DISTINCT r.id, r.data_json, r.confidence_score, r.timestamp
-            FROM research r
-            LEFT JOIN key_findings kf ON r.id = kf.research_id
-            WHERE r.query LIKE ? OR kf.finding LIKE ?
-            ORDER BY r.confidence_score DESC, r.timestamp DESC
-            LIMIT ?
-        ''', (search_pattern, search_pattern, limit))
-        
-        results = []
-        for row in cursor.fetchall():
-            try:
-                data = json.loads(row[1])
-                results.append(data)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Could not decode research data for ID {row[0]}: {e}")
-        
-        conn.close()
-        logger.info(f"Query '{search_query}' returned {len(results)} results")
-        return results
-    
-    def get_recent_research(self, limit: int = 20) -> List[Dict]:
-        """
-        Get most recent research results.
-        
-        Args:
-            limit: Number of results to return
+            # Strategy 1: Exact query hash match
+            query_hash = hashlib.md5(query.lower().strip().encode()).hexdigest()
+            exact_match = db.query(ResearchResult).filter(
+                ResearchResult.query_hash == query_hash,
+                ResearchResult.expires_at > datetime.now()
+            ).first()
             
-        Returns:
-            List of recent research results
-        """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT data_json FROM research
-            ORDER BY timestamp DESC
-            LIMIT ?
-        ''', (limit,))
-        
-        results = []
-        for row in cursor.fetchall():
-            try:
-                data = json.loads(row[0])
-                results.append(data)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Could not decode research data: {e}")
-        
-        conn.close()
-        return results
-    
-    def get_research_by_platform(self, platform: str, limit: int = 10) -> List[Dict]:
-        """
-        Get research results related to a specific platform.
-        
-        Args:
-            platform: Platform name (e.g., "QuickBooks", "SAGE", "Stripe")
-            limit: Maximum number of results
+            if exact_match:
+                # Increment access count
+                exact_match.access_count += 1
+                exact_match.last_accessed = datetime.now()
+                db.commit()
+                
+                logging.info(f"✅ Found EXACT match for: {query}")
+                return [self._result_to_dict(exact_match)]
             
-        Returns:
-            List of research results
-        """
-        return self.query_research(platform, limit=limit)
+            # Strategy 2: Similar queries (keyword-based)
+            query_keywords = set(query.lower().split())
+            
+            candidates = db.query(ResearchResult).filter(
+                ResearchResult.confidence_score >= min_confidence,
+                ResearchResult.expires_at > datetime.now()
+            ).order_by(
+                ResearchResult.confidence_score.desc(),
+                ResearchResult.created_at.desc()
+            ).limit(limit * 3).all()  # Get more for filtering
+            
+            # Score by keyword overlap
+            scored_results = []
+            for candidate in candidates:
+                candidate_keywords = set(candidate.query.lower().split())
+                overlap = len(query_keywords & candidate_keywords)
+                similarity = overlap / max(len(query_keywords), len(candidate_keywords))
+                
+                if similarity > 0.3:  # 30% keyword overlap threshold
+                    scored_results.append((similarity, candidate))
+            
+            # Sort by similarity and return top matches
+            scored_results.sort(reverse=True, key=lambda x: x[0])
+            results = [self._result_to_dict(r[1]) for r in scored_results[:limit]]
+            
+            if results:
+                logging.info(f"✅ Found {len(results)} similar research results for: {query}")
+            else:
+                logging.info(f"ℹ️ No similar research found for: {query}")
+            
+            return results
+            
+        except Exception as e:
+            logging.error(f"Failed to query research database: {e}")
+            return []
     
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_research_by_id(self, research_id: str) -> Optional[Dict]:
         """
-        Get database statistics.
-        
-        Returns:
-            Dictionary with statistics
-        """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        stats = {}
-        
-        # Total research records
-        cursor.execute('SELECT COUNT(*) FROM research')
-        stats['total_research_records'] = cursor.fetchone()[0]
-        
-        # Total documentation URLs
-        cursor.execute('SELECT COUNT(*) FROM documentation_urls')
-        stats['total_documentation_urls'] = cursor.fetchone()[0]
-        
-        # Total key findings
-        cursor.execute('SELECT COUNT(*) FROM key_findings')
-        stats['total_key_findings'] = cursor.fetchone()[0]
-        
-        # Average confidence score
-        cursor.execute('SELECT AVG(confidence_score) FROM research')
-        stats['average_confidence_score'] = round(cursor.fetchone()[0] or 0, 2)
-        
-        # Most recent research
-        cursor.execute('SELECT query, timestamp FROM research ORDER BY timestamp DESC LIMIT 1')
-        row = cursor.fetchone()
-        if row:
-            stats['most_recent_query'] = row[0]
-            stats['most_recent_timestamp'] = row[1]
-        
-        # Top platforms (by query frequency)
-        cursor.execute('''
-            SELECT query, COUNT(*) as count 
-            FROM research 
-            GROUP BY query 
-            ORDER BY count DESC 
-            LIMIT 5
-        ''')
-        stats['top_queries'] = [{"query": row[0], "count": row[1]} for row in cursor.fetchall()]
-        
-        conn.close()
-        return stats
-    
-    def export_research(self, output_path: str):
-        """
-        Export all research to JSON file for backup.
+        Get specific research by ID.
         
         Args:
-            output_path: Path to output JSON file
+            research_id: Research identifier
+        
+        Returns:
+            Research results dictionary or None
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        if not self.enabled:
+            return None
         
-        cursor.execute('SELECT data_json FROM research ORDER BY timestamp DESC')
-        
-        all_research = []
-        for row in cursor.fetchall():
-            try:
-                data = json.loads(row[0])
-                all_research.append(data)
-            except json.JSONDecodeError:
-                continue
-        
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(all_research, f, indent=2)
-        
-        conn.close()
-        logger.info(f"Exported {len(all_research)} research records to {output_path}")
+        try:
+            db = next(get_db())
+            
+            research = db.query(ResearchResult).filter(
+                ResearchResult.research_id == research_id
+            ).first()
+            
+            if research:
+                # Increment access count
+                research.access_count += 1
+                research.last_accessed = datetime.now()
+                db.commit()
+                
+                return self._result_to_dict(research)
+            
+            return None
+            
+        except Exception as e:
+            logging.error(f"Failed to get research by ID: {e}")
+            return None
     
-    def import_research(self, input_path: str, project_name: Optional[str] = None):
+    def track_usage(
+        self,
+        research_id: str,
+        agent_type: str,
+        agent_id: str,
+        task_id: str = None,
+        was_helpful: bool = True,
+        helpfulness_score: float = 80.0
+    ):
         """
-        Import research from JSON file.
+        Track research usage and effectiveness.
         
         Args:
-            input_path: Path to input JSON file
-            project_name: Optional project name for imported research
+            research_id: Research identifier
+            agent_type: Type of agent using the research
+            agent_id: Agent identifier
+            task_id: Task identifier (optional)
+            was_helpful: Whether research helped complete task
+            helpfulness_score: How helpful (0-100)
         """
-        with open(input_path, 'r', encoding='utf-8') as f:
-            research_list = json.load(f)
+        if not self.enabled:
+            return
         
-        imported = 0
-        for research in research_list:
-            try:
-                self.store_research(research, project_name=project_name)
-                imported += 1
-            except Exception as e:
-                logger.warning(f"Could not import research: {e}")
+        try:
+            db = next(get_db())
+            
+            analytics = ResearchAnalytics(
+                research_id=research_id,
+                used_by_agent_type=agent_type,
+                used_by_agent_id=agent_id,
+                used_for_task_id=task_id,
+                was_helpful=was_helpful,
+                helpfulness_score=helpfulness_score
+            )
+            
+            db.add(analytics)
+            db.commit()
+            
+            logging.info(f"Tracked research usage: {research_id} by {agent_type}")
+            
+        except Exception as e:
+            logging.error(f"Failed to track research usage: {e}")
+    
+    def search_research(
+        self,
+        search_term: str,
+        project_id: Optional[str] = None,
+        limit: int = 10
+    ) -> List[Dict]:
+        """
+        Search research results by content.
         
-        logger.info(f"Imported {imported}/{len(research_list)} research records")
+        Searches in:
+        - Query text
+        - Key findings
+        - Full content
+        
+        Args:
+            search_term: Text to search for
+            project_id: Filter by project (optional)
+            limit: Maximum results
+        
+        Returns:
+            List of matching research results
+        """
+        if not self.enabled:
+            return []
+        
+        try:
+            db = next(get_db())
+            
+            search_lower = f"%{search_term.lower()}%"
+            
+            query = db.query(ResearchResult).filter(
+                ResearchResult.expires_at > datetime.now()
+            )
+            
+            # Filter by project if specified
+            if project_id:
+                query = query.filter(ResearchResult.project_id == project_id)
+            
+            # Search in query and full_content
+            query = query.filter(
+                (ResearchResult.query.ilike(search_lower)) |
+                (ResearchResult.full_content.ilike(search_lower))
+            )
+            
+            # Order by relevance (confidence, recent, access count)
+            results = query.order_by(
+                ResearchResult.confidence_score.desc(),
+                ResearchResult.access_count.desc(),
+                ResearchResult.created_at.desc()
+            ).limit(limit).all()
+            
+            logging.info(f"Search for '{search_term}': {len(results)} results")
+            
+            return [self._result_to_dict(r) for r in results]
+            
+        except Exception as e:
+            logging.error(f"Failed to search research: {e}")
+            return []
+    
+    def get_research_stats(self, project_id: Optional[str] = None) -> Dict:
+        """
+        Get research statistics.
+        
+        Args:
+            project_id: Filter by project (optional)
+        
+        Returns:
+            Statistics dictionary
+        """
+        if not self.enabled:
+            return {}
+        
+        try:
+            db = next(get_db())
+            
+            query = db.query(ResearchResult)
+            
+            if project_id:
+                query = query.filter(ResearchResult.project_id == project_id)
+            
+            total = query.count()
+            llm_synthesized = query.filter(ResearchResult.llm_synthesized == True).count()
+            
+            # Average confidence
+            avg_confidence = db.query(func.avg(ResearchResult.confidence_score)).scalar() or 0.0
+            
+            # Total access count
+            total_accesses = db.query(func.sum(ResearchResult.access_count)).scalar() or 0
+            
+            return {
+                "total_research": total,
+                "llm_synthesized_count": llm_synthesized,
+                "llm_synthesized_percent": (llm_synthesized / total * 100) if total > 0 else 0.0,
+                "avg_confidence": float(avg_confidence),
+                "total_accesses": total_accesses,
+                "avg_reuse": (total_accesses / total) if total > 0 else 0.0
+            }
+            
+        except Exception as e:
+            logging.error(f"Failed to get research stats: {e}")
+            return {}
+    
+    def cleanup_expired(self) -> int:
+        """
+        Remove expired research results.
+        
+        Returns:
+            Number of records deleted
+        """
+        if not self.enabled:
+            return 0
+        
+        try:
+            db = next(get_db())
+            
+            deleted = db.query(ResearchResult).filter(
+                ResearchResult.expires_at < datetime.now()
+            ).delete()
+            
+            db.commit()
+            
+            logging.info(f"Cleaned up {deleted} expired research records")
+            return deleted
+            
+        except Exception as e:
+            logging.error(f"Failed to cleanup expired research: {e}")
+            return 0
+    
+    def _result_to_dict(self, research: ResearchResult) -> Dict:
+        """Convert SQLAlchemy model to dictionary."""
+        return {
+            "research_id": research.research_id,
+            "query": research.query,
+            "project_name": research.project_name,
+            "project_id": research.project_id,
+            "search_results": research.search_results or [],
+            "documentation_urls": research.documentation_urls or [],
+            "code_examples": research.code_examples or [],
+            "key_findings": research.key_findings or [],
+            "confidence_score": research.confidence_score,
+            "results_count": research.results_count,
+            "research_depth": research.research_depth,
+            "cached": research.cached,
+            "llm_synthesized": research.llm_synthesized,
+            "created_at": research.created_at.isoformat() if research.created_at else None,
+            "last_accessed": research.last_accessed.isoformat() if research.last_accessed else None,
+            "access_count": research.access_count
+        }
+    
+    def _create_searchable_content(self, query: str, research_results: Dict) -> str:
+        """
+        Create searchable full-text content from research results.
+        
+        Args:
+            query: Research query
+            research_results: Research results dictionary
+        
+        Returns:
+            Concatenated searchable text
+        """
+        parts = [query]
+        
+        # Add key findings
+        parts.extend(research_results.get('key_findings', []))
+        
+        # Add snippets from search results
+        for result in research_results.get('search_results', [])[:10]:
+            parts.append(result.get('title', ''))
+            parts.append(result.get('snippet', ''))
+        
+        # Add documentation URLs (domains are searchable)
+        parts.extend(research_results.get('documentation_urls', []))
+        
+        return " ".join(parts)
 
 
-# Global database instance
-_global_db = None
-
+# Singleton instance
+_research_db = None
 
 def get_research_database() -> ResearchDatabase:
-    """Get or create global research database instance."""
-    global _global_db
-    if _global_db is None:
-        _global_db = ResearchDatabase()
-    return _global_db
+    """Get singleton research database instance."""
+    global _research_db
+    if _research_db is None:
+        _research_db = ResearchDatabase()
+    return _research_db
 
 
-# Convenience functions
-def store_research(research_results: Dict, project_name: Optional[str] = None) -> int:
-    """Store research results in global database."""
+# Convenience functions (backward compatible with old file-based system)
+
+def store_research(
+    research_results: Dict,
+    project_name: str = None,
+    project_id: str = None
+) -> str:
+    """
+    Store research results in database.
+    
+    Args:
+        research_results: Research results dictionary
+        project_name: Project name
+        project_id: Project ID
+    
+    Returns:
+        research_id
+    """
+    import uuid
+    
+    research_id = str(uuid.uuid4())
+    query = research_results.get('query', 'unknown')
+    
     db = get_research_database()
-    return db.store_research(research_results, project_name)
+    return db.store_research(research_id, query, research_results, project_name, project_id)
 
 
-def query_research(search_query: str, limit: int = 10) -> List[Dict]:
-    """Query global research database."""
+def query_research(query: str, limit: int = 5) -> List[Dict]:
+    """
+    Query research database for similar past research.
+    
+    Args:
+        query: Search query
+        limit: Maximum results
+    
+    Returns:
+        List of matching research results
+    """
     db = get_research_database()
-    return db.query_research(search_query, limit)
+    return db.find_similar_research(query, limit=limit)
 
 
-def get_research_by_platform(platform: str, limit: int = 10) -> List[Dict]:
-    """Get research for specific platform."""
+def get_research_by_id(research_id: str) -> Optional[Dict]:
+    """
+    Get research by ID.
+    
+    Args:
+        research_id: Research identifier
+    
+    Returns:
+        Research results or None
+    """
     db = get_research_database()
-    return db.get_research_by_platform(platform, limit)
-
-
-def get_research_statistics() -> Dict:
-    """Get research database statistics."""
-    db = get_research_database()
-    return db.get_statistics()
-
+    return db.get_research_by_id(research_id)

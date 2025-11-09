@@ -182,12 +182,18 @@ export default function LLMOverview() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Quick Actions */}
-        <div className="mb-6 flex gap-3">
+        <div className="mb-6 flex gap-3 flex-wrap">
           <button
             onClick={() => router.push('/llm/configuration')}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             Configuration
+          </button>
+          <button
+            onClick={() => router.push('/llm/prompts')}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Prompt Editor
           </button>
           <button
             onClick={() => router.push('/llm/templates')}
