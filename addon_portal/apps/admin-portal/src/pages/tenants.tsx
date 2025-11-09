@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Navigation } from '../components/Navigation';
 import { AdminHeader } from '../components/AdminHeader';
-import { getTenants, type Tenant } from '../lib/api';
+import { getTenants, addTenant, editTenant, type Tenant, type AddTenantRequest, type EditTenantRequest } from '../lib/api';
 
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -23,21 +23,54 @@ export default function TenantsPage() {
     }
   };
 
-  const handleAddTenant = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddTenant = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    // API call would go here
-    alert('Add Tenant functionality: Would create tenant with name: ' + formData.get('name'));
-    setShowAddModal(false);
-    // Reload tenants after adding
+    
+    try {
+      const tenantData: AddTenantRequest = {
+        name: formData.get('name') as string,
+        slug: formData.get('slug') as string,
+        logo_url: formData.get('logo_url') as string || undefined,
+        primary_color: formData.get('primary_color') as string || '#875A7B',
+        domain: formData.get('domain') as string || undefined,
+        subscription_plan: formData.get('subscription_plan') as string || 'Starter',
+        usage_quota: parseInt(formData.get('usage_quota') as string) || 10,
+      };
+      
+      await addTenant(tenantData);
+      setShowAddModal(false);
+      await loadTenants(); // Reload to show new tenant
+      alert('✅ Tenant created successfully!');
+    } catch (error) {
+      alert(`❌ Failed to create tenant: ${error}`);
+    }
   };
 
-  const handleEditTenant = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleEditTenant = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    alert('Edit Tenant functionality: Would update tenant ' + selectedTenant?.name);
-    setShowEditModal(false);
-    setSelectedTenant(null);
+    
+    if (!selectedTenant) return;
+    
+    try {
+      const updateData: EditTenantRequest = {
+        name: formData.get('name') as string || undefined,
+        logo_url: formData.get('logo_url') as string || undefined,
+        primary_color: formData.get('primary_color') as string || undefined,
+        domain: formData.get('domain') as string || undefined,
+        subscription_plan: formData.get('subscription_plan') as string || undefined,
+        usage_quota: parseInt(formData.get('usage_quota') as string) || undefined,
+      };
+      
+      await editTenant(selectedTenant.slug, updateData);
+      setShowEditModal(false);
+      setSelectedTenant(null);
+      await loadTenants(); // Reload to show updates
+      alert('✅ Tenant updated successfully!');
+    } catch (error) {
+      alert(`❌ Failed to update tenant: ${error}`);
+    }
   };
 
   const openEditModal = (tenant: Tenant) => {
