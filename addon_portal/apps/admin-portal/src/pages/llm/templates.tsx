@@ -134,7 +134,8 @@ export default function LearnedTemplates() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <AdminHeader title="Learned Templates" />
+        <AdminHeader title="Learned Templates" subtitle="View and manage AI-learned code templates" />
+        <Navigation />
         <div className="flex items-center justify-center h-96">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>

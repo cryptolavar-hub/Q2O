@@ -3,7 +3,7 @@ from pydantic import AnyHttpUrl
 from typing import Optional, List
 
 class Settings(BaseSettings):
-    APP_NAME: str = "Quick2Odoo"
+    APP_NAME: str = "Q2O"
     ENV: str = "dev"
 
     # Database Configuration

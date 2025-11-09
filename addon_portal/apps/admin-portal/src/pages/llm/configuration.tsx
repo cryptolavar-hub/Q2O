@@ -94,7 +94,8 @@ export default function LLMConfiguration() {
   if (loading || !config) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <AdminHeader title="LLM Configuration" />
+        <AdminHeader title="LLM Configuration" subtitle="Manage providers, API keys, and settings" />
+        <Navigation />
         <div className="flex items-center justify-center h-96">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>

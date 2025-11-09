@@ -79,7 +79,8 @@ export default function LLMOverview() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <AdminHeader title="LLM Overview" />
+        <AdminHeader title="LLM Overview" subtitle="Monitor LLM usage, costs, and performance" />
+        <Navigation />
         <div className="flex items-center justify-center h-96">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -93,7 +94,8 @@ export default function LLMOverview() {
   if (!stats) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <AdminHeader title="LLM Overview" />
+        <AdminHeader title="LLM Overview" subtitle="Monitor LLM usage, costs, and performance" />
+        <Navigation />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-yellow-800 mb-2">LLM Not Configured</h3>

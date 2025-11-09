@@ -1,6 +1,6 @@
 # =========================================================================
 # START_ALL_SERVICES.ps1
-# Q2O Platform - Automated Startup Script with Pre-flight Checks
+# Quick2Odoo Combined - Automated Startup Script with Pre-flight Checks
 # =========================================================================
 # This script:
 # 1. Runs comprehensive verification checks
@@ -9,7 +9,7 @@
 # =========================================================================
 
 Write-Host "==========================================================================" -ForegroundColor Cyan
-Write-Host "  Q2O Platform - Automated Startup Script" -ForegroundColor Cyan
+Write-Host "  Quick2Odoo Combined - Automated Startup Script" -ForegroundColor Cyan
 Write-Host "==========================================================================" -ForegroundColor Cyan
 Write-Host ""
 
