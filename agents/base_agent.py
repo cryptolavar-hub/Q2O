@@ -38,6 +38,7 @@ class AgentType(Enum):
     WORKFLOW = "workflow"
     SECURITY = "security"
     RESEARCHER = "researcher"  # Web research agent
+    MOBILE = "mobile"  # React Native mobile development agent (12th agent!)
 
 
 @dataclass
