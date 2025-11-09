@@ -81,31 +81,26 @@ export default function ConfigureLLM() {
         });
       }
 
-      // Fetch project prompts (mocked for now - will integrate with DB later)
-      const mockProjectPrompts: ProjectPrompt[] = [
-        {
-          id: '1',
-          projectName: 'SAGE NetSuite Migration',
-          tenantName: 'Acme Corp',
-          label: 'accounting-migration',
-          projectPrompt: 'You are an expert in accounting system migrations. Focus on data integrity and Odoo v18 best practices.',
-          agentPrompts: [
-            { agentType: 'coder', prompt: 'Generate production-ready Python code for Odoo v18 with type hints and error handling.' },
-            { agentType: 'researcher', prompt: 'Research SAGE NetSuite API documentation and Odoo v18 accounting modules.' }
-          ]
-        },
-        {
-          id: '2',
-          projectName: 'Mobile E-Commerce App',
-          tenantName: 'TechStart Inc',
-          label: 'mobile-ecommerce',
-          projectPrompt: 'You are a React Native specialist. Build modern, performant mobile apps with excellent UX.',
-          agentPrompts: [
-            { agentType: 'mobile', prompt: 'Create clean React Native screens with TypeScript, native navigation, and state management.' }
-          ]
-        }
-      ];
-      setProjectPrompts(mockProjectPrompts);
+      // Fetch project prompts from database
+      const promptsRes = await fetch('/api/llm/project-prompts');
+      if (promptsRes.ok) {
+        const promptsData = await promptsRes.json();
+        const formattedPrompts: ProjectPrompt[] = promptsData.projects.map((p: any) => ({
+          id: p.id.toString(),
+          projectName: p.projectName,
+          tenantName: p.tenantName,
+          label: p.label,
+          projectPrompt: p.projectPrompt,
+          agentPrompts: p.agentPrompts.map((a: any) => ({
+            agentType: a.agentType,
+            prompt: a.prompt
+          }))
+        }));
+        setProjectPrompts(formattedPrompts);
+      } else {
+        console.error('Failed to fetch project prompts');
+        setProjectPrompts([]);
+      }
 
       setLoading(false);
     } catch (error) {
