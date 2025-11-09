@@ -77,71 +77,45 @@ export async function generateCodes(data: GenerateCodesRequest): Promise<string[
   }
 }
 
-// Get activation codes (mock implementation - replace with real API)
+// Get activation codes (database-backed)
 export async function getCodes(tenantSlug?: string): Promise<ActivationCode[]> {
-  // Mock data for now
-  return [
-    { id: 1, code: '8PL4-M5HA-QP3E-MPCT', tenant: 'Demo Consulting', label: 'Onboarding', status: 'active', expiresAt: '2025-12-07', usedAt: null, createdAt: '2025-11-07', useCount: 0, maxUses: 1 },
-    { id: 2, code: 'ND7V-A9B5-ACP7-85KW', tenant: 'Demo Consulting', label: 'Trial', status: 'active', expiresAt: '2025-12-07', usedAt: null, createdAt: '2025-11-07', useCount: 0, maxUses: 1 },
-    { id: 3, code: '5EFZ-7CHR-QLKS-JQMJ', tenant: 'Demo Consulting', label: null, status: 'active', expiresAt: '2025-12-07', usedAt: null, createdAt: '2025-11-07', useCount: 0, maxUses: 1 },
-    { id: 4, code: 'XXXX-XXXX-XXXX-XXXX', tenant: 'Acme Corp', label: 'Production', status: 'used', expiresAt: '2025-12-01', usedAt: '2025-11-05', createdAt: '2025-10-15', useCount: 1, maxUses: 1 },
-    { id: 5, code: 'YYYY-YYYY-YYYY-YYYY', tenant: 'Tech Solutions', label: null, status: 'expired', expiresAt: '2025-11-01', usedAt: null, createdAt: '2025-10-01', useCount: 0, maxUses: 1 },
-  ];
+  const url = tenantSlug 
+    ? `${API_BASE}/admin/api/codes?tenant_slug=${tenantSlug}`
+    : `${API_BASE}/admin/api/codes`;
+  
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Failed to fetch codes');
+  }
+  
+  const data = await response.json();
+  return data.codes || [];
 }
 
-// Get devices (mock implementation)
+// Get devices (database-backed)
 export async function getDevices(tenantSlug?: string): Promise<Device[]> {
-  return [
-    { id: 1, tenant: 'Demo Consulting', label: 'Main Desktop', hwFingerprint: 'fp_abc123xyz', deviceType: 'desktop', lastSeen: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), createdAt: '2025-11-01', isRevoked: false },
-    { id: 2, tenant: 'Demo Consulting', label: 'iPhone 14', hwFingerprint: 'fp_xyz789abc', deviceType: 'mobile', lastSeen: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(), createdAt: '2025-11-03', isRevoked: false },
-    { id: 3, tenant: 'Acme Corp', label: 'MacBook Pro', hwFingerprint: 'fp_def456ghi', deviceType: 'desktop', lastSeen: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), createdAt: '2025-10-15', isRevoked: false },
-    { id: 4, tenant: 'Tech Solutions', label: null, hwFingerprint: 'fp_ghi789def', deviceType: 'tablet', lastSeen: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(), createdAt: '2025-09-20', isRevoked: true },
-  ];
+  const url = tenantSlug 
+    ? `${API_BASE}/admin/api/devices?tenant_slug=${tenantSlug}`
+    : `${API_BASE}/admin/api/devices`;
+  
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Failed to fetch devices');
+  }
+  
+  const data = await response.json();
+  return data.devices || [];
 }
 
-// Get tenants (mock implementation)
+// Get tenants (database-backed)
 export async function getTenants(): Promise<Tenant[]> {
-  return [
-    {
-      id: 1,
-      name: 'Demo Consulting Firm',
-      slug: 'demo',
-      logoUrl: 'https://via.placeholder.com/150?text=Demo',
-      primaryColor: '#875A7B',
-      domain: 'demo.quick2odoo.com',
-      subscriptionPlan: 'Pro',
-      subscriptionStatus: 'active',
-      usageQuota: 50,
-      usageCurrent: 12,
-      createdAt: '2025-11-01',
-    },
-    {
-      id: 2,
-      name: 'Acme Corporation',
-      slug: 'acme',
-      logoUrl: 'https://via.placeholder.com/150?text=Acme',
-      primaryColor: '#4CAF50',
-      domain: 'acme.quick2odoo.com',
-      subscriptionPlan: 'Enterprise',
-      subscriptionStatus: 'active',
-      usageQuota: 200,
-      usageCurrent: 45,
-      createdAt: '2025-10-15',
-    },
-    {
-      id: 3,
-      name: 'Tech Solutions Ltd',
-      slug: 'techsolutions',
-      logoUrl: 'https://via.placeholder.com/150?text=Tech',
-      primaryColor: '#2196F3',
-      domain: null,
-      subscriptionPlan: 'Starter',
-      subscriptionStatus: 'trial',
-      usageQuota: 10,
-      usageCurrent: 8,
-      createdAt: '2025-11-05',
-    },
-  ];
+  const response = await fetch(`${API_BASE}/admin/api/tenants`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch tenants');
+  }
+  
+  const data = await response.json();
+  return data.tenants || [];
 }
 
 // Revoke activation code
@@ -161,16 +135,63 @@ export async function revokeCode(tenantSlug: string, code: string): Promise<void
 
 // Revoke device
 export async function revokeDevice(tenantSlug: string, deviceId: number): Promise<void> {
-  const formData = new URLSearchParams();
-  formData.append('tenant_slug', tenantSlug);
-  formData.append('device_id', deviceId.toString());
+  const response = await fetch(`${API_BASE}/admin/api/devices/${deviceId}`, {
+    method: 'DELETE',
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to revoke device');
+  }
+}
 
-  await fetch(`${API_BASE}/admin/devices/revoke`, {
+// Add tenant
+export interface AddTenantRequest {
+  name: string;
+  slug: string;
+  logo_url?: string;
+  primary_color?: string;
+  domain?: string;
+  subscription_plan?: string;
+  usage_quota?: number;
+}
+
+export async function addTenant(data: AddTenantRequest): Promise<void> {
+  const response = await fetch(`${API_BASE}/admin/api/tenants`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/json',
     },
-    body: formData.toString(),
+    body: JSON.stringify(data),
   });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to create tenant');
+  }
+}
+
+// Edit tenant
+export interface EditTenantRequest {
+  name?: string;
+  logo_url?: string;
+  primary_color?: string;
+  domain?: string;
+  subscription_plan?: string;
+  usage_quota?: number;
+}
+
+export async function editTenant(slug: string, data: EditTenantRequest): Promise<void> {
+  const response = await fetch(`${API_BASE}/admin/api/tenants/${slug}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to update tenant');
+  }
 }
 

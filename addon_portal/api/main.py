@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from .core.settings import settings
-from .routers import authz, licenses, billing_stripe, admin_pages, auth_sso, usage, llm_management
+from .routers import authz, licenses, billing_stripe, admin_pages, auth_sso, usage, llm_management, admin_api
 
 app = FastAPI(title=f"{settings.APP_NAME} Licensing Service")
 
@@ -24,5 +24,6 @@ app.include_router(auth_sso.router)
 app.include_router(usage.router)
 app.include_router(admin_pages.router)
 app.include_router(llm_management.router)  # LLM Management Dashboard API
+app.include_router(admin_api.router)  # Admin Portal JSON API (Tenants, Codes, Devices)
 
 app.mount("/static", StaticFiles(directory="api/static"), name="static")
