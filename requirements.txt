@@ -38,7 +38,7 @@ PyPDF2==3.0.1
 # Environment management
 python-dotenv==1.0.1
 
-# Stripe integration
+# Stripe integration (for billing)
 stripe==9.1.0
 
 # ============================================================================
@@ -99,8 +99,8 @@ websockets==12.0
 # Web Research & Scraping (ResearcherAgent)
 duckduckgo-search==4.1.1  # Free web search
 beautifulsoup4==4.12.3  # HTML parsing
-requests==2.31.0  # Already included above, but needed for research
 lxml==5.1.0  # XML/HTML parser (faster than html.parser)
+# Note: requests==2.31.0 already included above (line 24)
 
 # ============================================================================
 # LLM INTEGRATION DEPENDENCIES (Phase 1 - November 2025)
@@ -121,8 +121,7 @@ openai>=1.0.0,<2.0.0
 # Anthropic Claude API (Tertiary - Optional)
 anthropic>=0.8.0,<1.0.0
 
-# Python dotenv for .env file loading
-python-dotenv>=1.0.0,<2.0.0
+# Note: python-dotenv already included above (line 39)
 
 # Cost & benefits:
 # - Gemini 1.5 Pro: ~$0.52-1.03 per project (20 code generations)
