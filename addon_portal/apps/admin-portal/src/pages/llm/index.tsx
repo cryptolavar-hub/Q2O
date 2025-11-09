@@ -122,37 +122,82 @@ export default function LLMOverview() {
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Project & Agent Prompts Management */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              📝 Project & Agent Prompts
+            </h2>
+            <button
+              onClick={() => router.push('/llm/prompts')}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              + Add New Project Prompt
+            </button>
+          </div>
+          
+          {/* Quick Search */}
+          <div className="bg-white rounded-lg shadow-sm p-4 mb-4 border border-gray-200">
+            <div className="flex gap-4">
+              <input
+                type="text"
+                placeholder="Search project, tenant, or label..."
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <select className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <option>All Tenants</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Prompts Table Preview */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Project</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tenant</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Label</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agents</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                <tr className="text-center">
+                  <td colSpan={5} className="px-6 py-8 text-gray-500">
+                    No project prompts configured. Click "Add New Project Prompt" to create one.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         {/* Quick Actions */}
         <div className="mb-6 flex gap-3 flex-wrap">
           <button
             onClick={() => router.push('/llm/configuration')}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Configuration
-          </button>
-          <button
-            onClick={() => router.push('/llm/prompts')}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            Prompt Editor
+            ⚙️ Configuration
           </button>
           <button
             onClick={() => router.push('/llm/templates')}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
           >
-            Learned Templates
+            📚 Learned Templates
           </button>
           <button
             onClick={() => router.push('/llm/logs')}
             className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
           >
-            Usage Logs
+            📋 Usage Logs
           </button>
           <button
             onClick={() => router.push('/llm/alerts')}
             className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
           >
-            Alerts ({stats.alerts.length})
+            🚨 Alerts ({stats.alerts.length})
           </button>
         </div>
 
