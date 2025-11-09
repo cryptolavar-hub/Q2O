@@ -91,30 +91,10 @@ export default function LLMOverview() {
     );
   }
 
-  if (!stats) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <AdminHeader title="LLM Overview" subtitle="Monitor LLM usage, costs, and performance" />
-        <Navigation />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-yellow-800 mb-2">LLM Not Configured</h3>
-            <p className="text-yellow-700">
-              LLM integration is not configured. Please add API keys and enable LLM in settings.
-            </p>
-            <button
-              onClick={() => router.push('/llm/configuration')}
-              className="mt-4 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
-            >
-              Configure LLM
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Don't block the entire page if stats fail - show what we can
+  const hasStats = !!stats;
 
-  const budgetPercent = (stats.budgetUsed / stats.monthlyBudget) * 100;
+  const budgetPercent = stats ? (stats.budgetUsed / stats.monthlyBudget) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -122,6 +102,22 @@ export default function LLMOverview() {
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* LLM Not Configured Warning */}
+        {!hasStats && (
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-yellow-800 mb-2">LLM Not Configured</h3>
+            <p className="text-yellow-700 mb-4">
+              LLM integration is not configured. Please add API keys and enable LLM in settings.
+            </p>
+            <button
+              onClick={() => router.push('/llm/configuration')}
+              className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+            >
+              Configure LLM
+            </button>
+          </div>
+        )}
+
         {/* Project & Agent Prompts Management */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
@@ -197,12 +193,12 @@ export default function LLMOverview() {
             onClick={() => router.push('/llm/alerts')}
             className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
           >
-            Alerts ({stats.alerts.length})
+            Alerts ({hasStats ? stats.alerts.length : 0})
           </button>
         </div>
 
         {/* Critical Alerts */}
-        {stats.alerts.length > 0 && (
+        {hasStats && stats.alerts.length > 0 && (
           <div className="mb-6">
             {stats.alerts.slice(0, 3).map((alert) => (
               <div
@@ -222,6 +218,7 @@ export default function LLMOverview() {
         )}
 
         {/* Key Metrics */}
+        {hasStats && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Budget Usage */}
           <div className="bg-white rounded-lg shadow p-6">
@@ -271,8 +268,10 @@ export default function LLMOverview() {
             </p>
           </div>
         </div>
+        )}
 
         {/* Provider Cost Breakdown */}
+        {hasStats && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {/* Gemini */}
           <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
@@ -340,8 +339,10 @@ export default function LLMOverview() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Provider Details */}
+        {hasStats && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">Provider Usage Details</h3>
@@ -429,6 +430,7 @@ export default function LLMOverview() {
             </table>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
