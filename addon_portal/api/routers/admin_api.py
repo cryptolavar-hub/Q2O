@@ -9,8 +9,8 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
 
-from addon_portal.api.core.database import get_db
-from addon_portal.api.models.licensing import Tenant, ActivationCode, Device
+from ..deps import get_db
+from ..models.licensing import Tenant, ActivationCode, Device
 
 router = APIRouter(prefix="/admin/api", tags=["admin_api"])
 

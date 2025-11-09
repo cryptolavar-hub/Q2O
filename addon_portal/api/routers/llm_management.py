@@ -600,9 +600,8 @@ async def update_project_prompt(project_id: str, update: ProjectPromptUpdate):
 # ============================================================================
 
 from sqlalchemy.orm import Session
-from fastapi import Depends
-from addon_portal.api.models.llm_config import LLMProjectConfig, LLMAgentConfig
-from addon_portal.api.core.database import get_db
+from ..deps import get_db
+from ..models.llm_config import LLMProjectConfig, LLMAgentConfig
 
 
 # Pydantic models for request/response
