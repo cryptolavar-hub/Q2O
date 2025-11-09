@@ -105,22 +105,10 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
             
             # Generate mobile app components (handles async if LLM enabled)
             if self.llm_enabled:
-                try:
-                    # Check if we're already in async context
-                    loop = asyncio.get_running_loop()
-                    # Already in async - fall back to template mode
-                    self.logger.warning("Already in async context, using template-only mode")
-                    generated_files = self._generate_mobile_app(description, platforms, features, tech_stack, task)
-                except RuntimeError:
-                    # No running loop - safe to create new one
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        generated_files = loop.run_until_complete(
-                            self._generate_mobile_app_async(description, platforms, features, tech_stack, task)
-                        )
-                    finally:
-                        loop.close()
+                loop = asyncio.get_event_loop()
+                generated_files = loop.run_until_complete(
+                    self._generate_mobile_app_async(description, platforms, features, tech_stack, task)
+                )
             else:
                 generated_files = self._generate_mobile_app(description, platforms, features, tech_stack, task)
             
@@ -450,8 +438,79 @@ export default function App() {
     
     def _generate_app_structure_sync(self) -> List[str]:
         """Sync version of app structure generation."""
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self._generate_app_structure())
+        try:
+            # Check if already in async context
+            loop = asyncio.get_running_loop()
+            # Already async - just generate directly without async features
+            return self._generate_app_structure_basic()
+        except RuntimeError:
+            # No running loop - safe to use async
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(self._generate_app_structure())
+            finally:
+                loop.close()
+    
+    def _generate_app_structure_basic(self) -> List[str]:
+        """Generate app structure synchronously (no async)."""
+        files = []
+        
+        # App.tsx
+        app_content = '''import React from 'react';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
+import {NavigationContainer} from '@react-navigation/native';
+import RootNavigator from './src/navigation/RootNavigator';
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <RootNavigator />
+      </NavigationContainer>
+    </SafeAreaProvider>
+  );
+}
+'''
+        files.append(self._write_file("App.tsx", app_content))
+        
+        # package.json
+        package_json = '''{
+  "name": "mobile-app",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-native": "0.72.0",
+    "@react-navigation/native": "^6.1.0",
+    "@react-navigation/stack": "^6.3.0",
+    "react-native-safe-area-context": "4.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "~18.2.0",
+    "typescript": "^5.0.0"
+  }
+}
+'''
+        files.append(self._write_file("package.json", package_json))
+        
+        # tsconfig.json
+        tsconfig = '''{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true
+  }
+}
+'''
+        files.append(self._write_file("tsconfig.json", tsconfig))
+        
+        return files
     
     async def _generate_navigation(self, features: List[str], tech_stack: List[str]) -> List[str]:
         """Generate navigation setup."""

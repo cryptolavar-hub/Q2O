@@ -51,7 +51,7 @@ async def main():
         print()
     
     # Create output directory
-    project_name = f"mobile_app_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+    project_name = f"mobile_app_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     output_dir = Path(__file__).parent / "output" / project_name
     output_dir.mkdir(parents=True, exist_ok=True)
     
