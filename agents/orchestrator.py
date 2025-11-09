@@ -1,23 +1,65 @@
 """
 Orchestrator Agent - Manages project breakdown and task distribution.
 Breaks down projects into manageable tasks and assigns them to appropriate agents.
+
+Enhanced with LLM task breakdown (Phase 2 - November 2025):
+- Intelligently analyzes objectives using LLM
+- Creates optimal task breakdown for ANY project type
+- Determines agent assignments and dependencies
+- Falls back to rules-based logic if LLM unavailable
 """
 
 from typing import Dict, List, Optional, Any
 from agents.base_agent import BaseAgent, AgentType, Task, TaskStatus
 import uuid
 import logging
+import asyncio
+import os
+
+# LLM Integration (Phase 2 - with graceful fallback)
+try:
+    from utils.llm_service import get_llm_service, LLMService
+    from utils.configuration_manager import get_configuration_manager, ConfigurationManager
+    LLM_INTEGRATION_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"LLM integration not available for OrchestratorAgent: {e}")
+    LLM_INTEGRATION_AVAILABLE = False
 
 
 class OrchestratorAgent(BaseAgent):
-    """Orchestrator agent that manages project breakdown and task distribution."""
+    """
+    Orchestrator agent that manages project breakdown and task distribution.
+    
+    Enhanced with LLM task breakdown (Phase 2):
+    - Uses LLM to intelligently analyze objectives
+    - Creates optimal task sequences
+    - Determines proper agent assignments
+    """
 
-    def __init__(self, agent_id: str = "orchestrator_main"):
+    def __init__(self, agent_id: str = "orchestrator_main", project_id: Optional[str] = None):
         super().__init__(agent_id, AgentType.ORCHESTRATOR)
         self.project_tasks: Dict[str, Task] = {}
         self.agents: Dict[AgentType, List[BaseAgent]] = {}
         self.task_queue: List[Task] = []
         self.max_task_size: int = 100  # Maximum size/complexity for a single task
+        self.project_id = project_id
+        
+        # LLM Integration (Phase 2 - November 2025)
+        self.use_llm = os.getenv("Q2O_USE_LLM", "true").lower() == "true"
+        
+        if LLM_INTEGRATION_AVAILABLE and self.use_llm:
+            self.llm_service = get_llm_service()
+            self.config_manager = get_configuration_manager()
+            self.llm_enabled = True
+            logging.info("✅ OrchestratorAgent: LLM task breakdown enabled")
+        else:
+            self.llm_service = None
+            self.config_manager = None
+            self.llm_enabled = False
+            if self.use_llm:
+                logging.warning("⚠️  OrchestratorAgent: LLM requested but not available, using rules only")
+            else:
+                logging.info("ℹ️  OrchestratorAgent: LLM disabled, using rules only")
 
     def register_agent(self, agent: BaseAgent):
         """
@@ -63,8 +105,194 @@ class OrchestratorAgent(BaseAgent):
 
     def _analyze_objective(self, objective: str, context: str, start_counter: int) -> List[Task]:
         """
-        Analyze an objective and break it into tasks by agent type.
-        Domain-aware breakdown for QuickBooks-to-Odoo project.
+        Analyze an objective and break it into tasks (ENHANCED with LLM).
+        
+        Uses LLM to intelligently break down objectives into optimal task sequences.
+        Falls back to rules-based logic if LLM unavailable.
+        
+        Args:
+            objective: The objective to analyze
+            context: Project context
+            start_counter: Starting task counter
+            
+        Returns:
+            List of tasks for this objective
+        """
+        # Try LLM breakdown first (if enabled)
+        if self.llm_enabled:
+            try:
+                loop = asyncio.get_event_loop()
+                llm_tasks = loop.run_until_complete(
+                    self._analyze_objective_with_llm(objective, context, start_counter)
+                )
+                if llm_tasks:
+                    self.logger.info(f"🤖 LLM breakdown: {len(llm_tasks)} tasks created for '{objective}'")
+                    return llm_tasks
+            except Exception as e:
+                self.logger.warning(f"LLM breakdown failed, using rules: {e}")
+        
+        # Fallback to rules-based breakdown
+        return self._analyze_objective_basic(objective, context, start_counter)
+    
+    async def _analyze_objective_with_llm(self, objective: str, context: str, start_counter: int) -> List[Task]:
+        """
+        Use LLM to intelligently break down objective into tasks.
+        
+        This is WHERE THE MAGIC HAPPENS - LLM analyzes the objective and determines
+        the optimal sequence of tasks, agent assignments, and dependencies.
+        
+        Args:
+            objective: The objective to implement
+            context: Project context
+            start_counter: Starting task counter
+        
+        Returns:
+            List of tasks with proper sequencing and dependencies
+        """
+        if not self.llm_service:
+            return []
+        
+        # Build comprehensive prompt
+        system_prompt = """You are a senior project manager and software architect.
+
+Your task: Break down a development objective into a sequence of implementation tasks.
+
+Available Agent Types:
+- RESEARCHER: Web research for documentation, best practices, code examples
+- INFRASTRUCTURE: Cloud infrastructure, Terraform, Kubernetes, Azure/AWS resources
+- INTEGRATION: API integrations, OAuth flows, webhooks, external services  
+- WORKFLOW: Business workflows, orchestration, Temporal workflows
+- FRONTEND: React/Next.js UI components, pages, dashboards
+- CODER: Backend services, APIs, data models, business logic
+- TESTING: Unit tests, integration tests, test automation
+- QA: Quality assurance, code review, validation
+- SECURITY: Security scanning, vulnerability checks, compliance
+
+Create a task breakdown with:
+1. Proper sequencing (dependencies)
+2. Appropriate agent assignments
+3. Tech stack identification
+4. Complexity estimates (low/medium/high)
+
+Return JSON:
+{
+  "tasks": [
+    {
+      "agent_type": "RESEARCHER",
+      "title": "Research Stripe API integration patterns",
+      "description": "Research Stripe payment API, webhook handling, and security best practices",
+      "tech_stack": ["Stripe API", "FastAPI", "Webhooks"],
+      "complexity": "medium",
+      "dependencies": []
+    },
+    {
+      "agent_type": "CODER",
+      "title": "Implement Stripe API client",
+      "description": "Create Stripe API client with payment methods and webhook handlers",
+      "tech_stack": ["Python", "Stripe API", "FastAPI"],
+      "complexity": "high",
+      "dependencies": [0]
+    },
+    ...
+  ]
+}
+
+Rules:
+- Research tasks FIRST if needed for new/unfamiliar tech
+- Infrastructure tasks before dependent services
+- Implementation tasks after research/infrastructure
+- Testing tasks after implementation
+- QA tasks at the end
+- Use dependency indices (0-based) to reference prior tasks"""
+        
+        user_prompt = f"""Objective: {objective}
+
+Project Context: {context}
+
+Break this objective into a sequence of tasks with proper agent assignments and dependencies."""
+        
+        # Generate breakdown with LLM
+        response = await self.llm_service.complete(
+            system_prompt,
+            user_prompt,
+            temperature=0.4,  # Moderate creativity for task planning
+            max_tokens=2048
+        )
+        
+        if not response.success:
+            self.logger.warning(f"LLM task breakdown failed: {response.error}")
+            return []
+        
+        # Parse JSON response
+        try:
+            import json
+            content = response.content
+            
+            # Extract JSON if wrapped in markdown
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0]
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0]
+            
+            result = json.loads(content.strip())
+            task_specs = result.get('tasks', [])
+            
+            # Convert LLM task specs to actual Task objects
+            tasks = []
+            task_id_map = {}  # Map index to task ID
+            
+            for idx, spec in enumerate(task_specs):
+                # Parse agent type
+                agent_type_str = spec.get('agent_type', 'CODER').upper()
+                try:
+                    agent_type = AgentType[agent_type_str]
+                except KeyError:
+                    self.logger.warning(f"Unknown agent type: {agent_type_str}, using CODER")
+                    agent_type = AgentType.CODER
+                
+                # Create task ID
+                task_id = f"task_{start_counter + idx:04d}_{agent_type.value}"
+                task_id_map[idx] = task_id
+                
+                # Parse dependencies (convert indices to task IDs)
+                dep_indices = spec.get('dependencies', [])
+                dependencies = [task_id_map[dep_idx] for dep_idx in dep_indices if dep_idx in task_id_map]
+                
+                # Create task
+                task = Task(
+                    id=task_id,
+                    title=spec.get('title', f"{agent_type.value}: {objective}"),
+                    description=spec.get('description', objective),
+                    agent_type=agent_type,
+                    tech_stack=spec.get('tech_stack', []),
+                    dependencies=dependencies,
+                    metadata={
+                        "objective": objective,
+                        "complexity": spec.get('complexity', 'medium'),
+                        "llm_generated": True
+                    }
+                )
+                
+                tasks.append(task)
+            
+            # Log LLM usage
+            if response.usage:
+                self.logger.info(
+                    f"💰 LLM breakdown cost: ${response.usage.total_cost:.4f} "
+                    f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens)"
+                )
+            
+            return tasks
+            
+        except Exception as e:
+            self.logger.error(f"Failed to parse LLM task breakdown: {e}")
+            return []
+    
+    def _analyze_objective_basic(self, objective: str, context: str, start_counter: int) -> List[Task]:
+        """
+        Rules-based objective analysis (fallback when LLM unavailable).
+        
+        Uses if/else rules to determine task breakdown.
         
         Args:
             objective: The objective to analyze
