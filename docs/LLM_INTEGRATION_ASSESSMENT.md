@@ -598,15 +598,22 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
 - Limited to 6 platforms
 - Manual template maintenance: 10 hours/month = **$1,000/month**
 
-**With LLM**:
-- API costs: **~$20/month**
+**With LLM** (Gemini 1.5 Pro):
+- API costs: **$5-10/month** (10 projects)
 - Implementation: **$10,000** (one-time, 2-3 weeks)
 - Unlimited platforms
 - No template maintenance
 
-**Payback Period**: **1.25 months** (after adding 1 new platform)  
-**Year 1 Savings**: **$50,000+** (eliminate template development)  
-**Year 2+ Savings**: **$60,000+/year** (ongoing efficiency)
+**With LLM** (OpenAI GPT-4):
+- API costs: **$42-82/month** (10 projects)
+- Higher quality for complex tasks
+- Premium option
+
+**Payback Period**: **1.5-2 months** (after adding 1 new platform)  
+**Year 1 Savings**: **$40,000+** (eliminate template development)  
+**Year 2+ Savings**: **$55,000+/year** (ongoing efficiency)
+
+**Key Insight**: Even with corrected costs (including output tokens), ROI remains **excellent** at 10-20x
 
 ---
 
@@ -635,4 +642,3 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
 **Date**: November 8, 2025  
 **Status**: ✅ Ready for Implementation  
 **Next Step**: Review and approve Phase 1 implementation plan
-
