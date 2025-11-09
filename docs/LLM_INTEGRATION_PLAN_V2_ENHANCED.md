@@ -2,8 +2,66 @@
 
 **Date**: November 8, 2025  
 **Version**: 2.0 (Enhanced with Template Learning)  
-**Status**: Planning Phase - Requirements Finalized  
+**Status**: Requirements Finalized ✅ - Ready for POC Demo  
 **Timeline**: 14-21 days (3 comprehensive phases)
+
+---
+
+## ✅ **FINALIZED REQUIREMENTS**
+
+### **User Decisions (Confirmed November 8, 2025)**
+
+| Decision Area | Choice | Rationale |
+|---------------|--------|-----------|
+| **LLM Selection** | All 3 levels (System + Project + Agent) | Maximum flexibility for IT consultants |
+| **Prompt Customization** | All 3 levels (System + Project + Agent) | Granular control per client needs |
+| **Budget Allocation** | Auto-allocate dynamically | System optimizes based on actual usage |
+| **Template Learning** | Semi-auto (LLM suggests → Consultant edits) | Balance automation with control |
+
+### **Configuration Hierarchy**
+
+**3-Level Cascading Configuration**:
+```
+┌─────────────────────────────────────────┐
+│ SYSTEM LEVEL (Global Defaults)         │
+│ - LLM: Gemini 1.5 Pro                   │
+│ - Prompt: Standard production quality   │
+│ - Budget: $1000/month (auto-allocate)   │
+└─────────────────────────────────────────┘
+              ↓ (can override)
+┌─────────────────────────────────────────┐
+│ PROJECT LEVEL (Per Client)              │
+│ - ACME Corp: GPT-4 (premium)            │
+│ - Beta Inc: Gemini Pro (standard)       │
+│ - Custom prompts per client             │
+└─────────────────────────────────────────┘
+              ↓ (can override)
+┌─────────────────────────────────────────┐
+│ AGENT LEVEL (Fine-grained)              │
+│ - ACME CoderAgent: GPT-4 (inherited)    │
+│ - ACME ResearcherAgent: Gemini (cheaper)│
+│ - Per-agent prompt variations           │
+└─────────────────────────────────────────┘
+```
+
+**Example Scenario**:
+```
+System Default:
+  LLM: Gemini Pro
+  Budget: $1000/month
+  Prompt: "Generate production-quality code..."
+
+ACME Corp Project (Security-critical):
+  LLM: GPT-4 (override - premium quality)
+  Budget: Auto-allocated
+  Prompt: "Follow ACME security standards, use ACME logger..."
+  
+  ACME CoderAgent: GPT-4 (inherited from project)
+  ACME ResearcherAgent: Gemini Pro (override - research OK with cheaper)
+  ACME TestingAgent: GPT-4 (inherited from project)
+```
+
+This provides **ultimate flexibility** while maintaining sensible defaults.
 
 ---
 
