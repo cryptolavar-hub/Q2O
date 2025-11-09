@@ -20,9 +20,12 @@ class Tenant(Base):
     logo_url = Column(String, nullable=True)
     primary_color = Column(String, nullable=True)
     domain = Column(String, nullable=True)
+    usage_quota = Column(Integer, default=10, nullable=False)  # For usage-based billing
+    usage_current = Column(Integer, default=0, nullable=False)  # Current usage count
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     subscription = relationship("Subscription", back_populates="tenant", uselist=False)
+    subscriptions = relationship("Subscription", back_populates="tenant")  # For admin API
 
 class Plan(Base):
     __tablename__ = "plans"
@@ -77,7 +80,8 @@ class ActivationCode(Base):
     __tablename__ = "activation_codes"
     id = Column(Integer, primary_key=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
-    code_hash = Column(String, nullable=False)
+    code_plain = Column(String, nullable=False)  # Plain text code for admin display
+    code_hash = Column(String, nullable=False)  # Hashed for verification
     label = Column(String, nullable=True)
     expires_at = Column(DateTime, nullable=True)
     used_at = Column(DateTime, nullable=True)

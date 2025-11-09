@@ -236,7 +236,7 @@ async def get_all_codes(
     for code in codes:
         # Determine status
         status_value = 'active'
-        if code.revoked:
+        if code.revoked_at is not None:
             status_value = 'revoked'
         elif code.expires_at and code.expires_at < datetime.now():
             status_value = 'expired'
@@ -319,7 +319,7 @@ async def delete_code(code_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Code not found")
     
     # Mark as revoked instead of deleting
-    code.revoked = True
+    code.revoked_at = datetime.now()
     db.commit()
     
     return {
@@ -363,10 +363,10 @@ async def get_all_devices(
             "tenantSlug": device.tenant.slug,
             "label": device.label,
             "hwFingerprint": device.hw_fingerprint,
-            "deviceType": device.device_type,
+            "deviceType": "desktop",  # Field doesn't exist in model - default value
             "lastSeen": device.last_seen.isoformat() if device.last_seen else None,
             "createdAt": device.created_at.isoformat() if device.created_at else None,
-            "isRevoked": device.revoked
+            "isRevoked": device.is_revoked
         })
     
     return {"devices": result, "total": len(result)}
@@ -382,7 +382,7 @@ async def revoke_device(device_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Device not found")
     
     # Mark as revoked
-    device.revoked = True
+    device.is_revoked = True
     db.commit()
     
     return {
