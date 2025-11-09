@@ -594,3 +594,329 @@ async def update_project_prompt(project_id: str, update: ProjectPromptUpdate):
     
     return {"success": True, "message": f"Project prompt saved for {update.clientName}"}
 
+
+# ============================================================================
+# DATABASE-BACKED CRUD ENDPOINTS FOR PROJECT & AGENT PROMPTS
+# ============================================================================
+
+from sqlalchemy.orm import Session
+from fastapi import Depends
+from addon_portal.api.models.llm_config import LLMProjectConfig, LLMAgentConfig
+from addon_portal.api.core.database import get_db
+
+
+# Pydantic models for request/response
+class ProjectPromptCreate(BaseModel):
+    project_id: str
+    client_name: str
+    tenant_name: Optional[str] = None
+    label: Optional[str] = None
+    description: Optional[str] = None
+    custom_instructions: str
+    provider_override: Optional[str] = None
+    is_active: bool = True
+
+
+class ProjectPromptUpdate(BaseModel):
+    client_name: Optional[str] = None
+    tenant_name: Optional[str] = None
+    label: Optional[str] = None
+    description: Optional[str] = None
+    custom_instructions: Optional[str] = None
+    provider_override: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class AgentPromptCreate(BaseModel):
+    project_id: str
+    agent_type: str
+    custom_instructions: str
+    provider_override: Optional[str] = None
+    is_enabled: bool = True
+
+
+class AgentPromptUpdate(BaseModel):
+    custom_instructions: Optional[str] = None
+    provider_override: Optional[str] = None
+    is_enabled: Optional[bool] = None
+
+
+# GET /api/llm/project-prompts - Get all project prompts
+@router.get("/project-prompts")
+async def get_all_project_prompts(
+    db: Session = Depends(get_db),
+    tenant: Optional[str] = None,
+    search: Optional[str] = None
+):
+    """Get all project prompts with optional filtering."""
+    
+    query = db.query(LLMProjectConfig)
+    
+    if tenant:
+        query = query.filter(LLMProjectConfig.client_name == tenant)
+    
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            (LLMProjectConfig.project_id.ilike(search_pattern)) |
+            (LLMProjectConfig.client_name.ilike(search_pattern)) |
+            (LLMProjectConfig.description.ilike(search_pattern))
+        )
+    
+    projects = query.all()
+    
+    # Format response
+    result = []
+    for project in projects:
+        # Get agent prompts for this project
+        agent_prompts = db.query(LLMAgentConfig).filter(
+            LLMAgentConfig.project_id == project.project_id
+        ).all()
+        
+        result.append({
+            "id": project.id,
+            "projectId": project.project_id,
+            "projectName": project.project_id,  # Or use description
+            "tenantName": project.client_name,
+            "label": project.description or "no-label",
+            "projectPrompt": project.custom_instructions or "",
+            "agentPrompts": [
+                {
+                    "id": agent.id,
+                    "agentType": agent.agent_type,
+                    "prompt": agent.custom_instructions or ""
+                }
+                for agent in agent_prompts
+            ],
+            "isActive": project.is_active,
+            "createdAt": project.created_at.isoformat() if project.created_at else None
+        })
+    
+    return {"projects": result, "total": len(result)}
+
+
+# GET /api/llm/project-prompts/{project_id} - Get single project prompt
+@router.get("/project-prompts/{project_id}")
+async def get_project_prompt(project_id: str, db: Session = Depends(get_db)):
+    """Get a single project prompt by project_id."""
+    
+    project = db.query(LLMProjectConfig).filter(
+        LLMProjectConfig.project_id == project_id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get agent prompts
+    agent_prompts = db.query(LLMAgentConfig).filter(
+        LLMAgentConfig.project_id == project_id
+    ).all()
+    
+    return {
+        "id": project.id,
+        "projectId": project.project_id,
+        "clientName": project.client_name,
+        "description": project.description,
+        "customInstructions": project.custom_instructions,
+        "providerOverride": project.provider_override,
+        "isActive": project.is_active,
+        "agentPrompts": [
+            {
+                "id": agent.id,
+                "agentType": agent.agent_type,
+                "prompt": agent.custom_instructions
+            }
+            for agent in agent_prompts
+        ]
+    }
+
+
+# POST /api/llm/project-prompts - Create new project prompt
+@router.post("/project-prompts")
+async def create_project_prompt(
+    data: ProjectPromptCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new project prompt."""
+    
+    # Check if project already exists
+    existing = db.query(LLMProjectConfig).filter(
+        LLMProjectConfig.project_id == data.project_id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Project already exists")
+    
+    # Create new project
+    new_project = LLMProjectConfig(
+        project_id=data.project_id,
+        client_name=data.client_name,
+        description=data.description,
+        custom_instructions=data.custom_instructions,
+        provider_override=data.provider_override,
+        is_active=data.is_active
+    )
+    
+    db.add(new_project)
+    db.commit()
+    db.refresh(new_project)
+    
+    return {
+        "success": True,
+        "message": "Project prompt created successfully",
+        "projectId": new_project.project_id,
+        "id": new_project.id
+    }
+
+
+# PUT /api/llm/project-prompts/{project_id_param} - Update project prompt
+@router.put("/project-prompts/{project_id_param}")
+async def update_project_prompt_db(
+    project_id_param: str,
+    data: ProjectPromptUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update an existing project prompt."""
+    
+    project = db.query(LLMProjectConfig).filter(
+        LLMProjectConfig.project_id == project_id_param
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Update fields
+    if data.client_name is not None:
+        project.client_name = data.client_name
+    if data.description is not None:
+        project.description = data.description
+    if data.custom_instructions is not None:
+        project.custom_instructions = data.custom_instructions
+    if data.provider_override is not None:
+        project.provider_override = data.provider_override
+    if data.is_active is not None:
+        project.is_active = data.is_active
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": "Project prompt updated successfully"
+    }
+
+
+# DELETE /api/llm/project-prompts/{project_id} - Delete project prompt
+@router.delete("/project-prompts/{project_id}")
+async def delete_project_prompt(project_id: str, db: Session = Depends(get_db)):
+    """Delete a project prompt and all its agent prompts."""
+    
+    project = db.query(LLMProjectConfig).filter(
+        LLMProjectConfig.project_id == project_id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Delete will cascade to agent prompts
+    db.delete(project)
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": "Project prompt deleted successfully"
+    }
+
+
+# POST /api/llm/agent-prompts - Create agent prompt
+@router.post("/agent-prompts")
+async def create_agent_prompt(
+    data: AgentPromptCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new agent prompt for a project."""
+    
+    # Verify project exists
+    project = db.query(LLMProjectConfig).filter(
+        LLMProjectConfig.project_id == data.project_id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check if agent prompt already exists
+    existing = db.query(LLMAgentConfig).filter(
+        LLMAgentConfig.project_id == data.project_id,
+        LLMAgentConfig.agent_type == data.agent_type
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Agent prompt for {data.agent_type} already exists")
+    
+    # Create agent prompt
+    new_agent = LLMAgentConfig(
+        project_id=data.project_id,
+        agent_type=data.agent_type,
+        custom_instructions=data.custom_instructions,
+        provider_override=data.provider_override,
+        is_enabled=data.is_enabled
+    )
+    
+    db.add(new_agent)
+    db.commit()
+    db.refresh(new_agent)
+    
+    return {
+        "success": True,
+        "message": f"Agent prompt for {data.agent_type} created successfully",
+        "id": new_agent.id
+    }
+
+
+# PUT /api/llm/agent-prompts/{agent_id} - Update agent prompt
+@router.put("/agent-prompts/{agent_id}")
+async def update_agent_prompt(
+    agent_id: int,
+    data: AgentPromptUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update an existing agent prompt."""
+    
+    agent = db.query(LLMAgentConfig).filter(LLMAgentConfig.id == agent_id).first()
+    
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent prompt not found")
+    
+    # Update fields
+    if data.custom_instructions is not None:
+        agent.custom_instructions = data.custom_instructions
+    if data.provider_override is not None:
+        agent.provider_override = data.provider_override
+    if data.is_enabled is not None:
+        agent.is_enabled = data.is_enabled
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": "Agent prompt updated successfully"
+    }
+
+
+# DELETE /api/llm/agent-prompts/{agent_id} - Delete agent prompt
+@router.delete("/agent-prompts/{agent_id}")
+async def delete_agent_prompt(agent_id: int, db: Session = Depends(get_db)):
+    """Delete an agent prompt."""
+    
+    agent = db.query(LLMAgentConfig).filter(LLMAgentConfig.id == agent_id).first()
+    
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent prompt not found")
+    
+    db.delete(agent)
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": "Agent prompt deleted successfully"
+    }
+
