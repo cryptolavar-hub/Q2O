@@ -772,7 +772,7 @@ async def create_project_prompt(
 @router.put("/project-prompts/{project_id_param}")
 async def update_project_prompt_db(
     project_id_param: str,
-    data: ProjectPromptUpdateDB,
+    data: ProjectPromptUpdate,
     db: Session = Depends(get_db)
 ):
     """Update an existing project prompt."""
