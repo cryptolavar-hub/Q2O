@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import AdminHeader from '@/components/AdminHeader';
+import { AdminHeader } from '@/components/AdminHeader';
 
 interface LLMConfig {
   providers: {
