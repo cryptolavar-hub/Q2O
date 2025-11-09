@@ -1,0 +1,140 @@
+{
+  "query": "Research NetSuite SuiteTalk API and Odoo v18 data models",
+  "timestamp": "2025-11-09T03:57:41.908501",
+  "depth": "adaptive",
+  "search_results": [
+    {
+      "title": "NetSuite SuiteTalk REST Web Services - Invalid Login Attempt ...",
+      "url": "https://stackoverflow.com/questions/59447622/netsuite-suitetalk-rest-web-services-invalid-login-attempt",
+      "snippet": "Dec 22, 2019 ... 1) Started by verifying that REST API testing in production still works. 2) The sandbox was refreshed by a CRM admin. The application was still\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "NetSuite is the worst product I have ever used : r/Netsuite",
+      "url": "https://www.reddit.com/r/Netsuite/comments/1o1ic76/netsuite_is_the_worst_product_i_have_ever_used/",
+      "snippet": "Oct 8, 2025 ... A restlet is just suitescript underneath and the REST apis are meant to replace SOAP web services eventually. ... The data model is much more\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "netsuite - SuiteTalk Advanced Search Examples - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/47534845/suitetalk-advanced-search-examples",
+      "snippet": "Nov 28, 2017 ... SuiteTalk searching is the worst API I have ever encountered. Ronnie Overby \u00b7 This post was from 6 years ago. Now that I've worked with NetSuite\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Migration Away From NetSuite - Inventory Management Solutions : r ...",
+      "url": "https://www.reddit.com/r/Netsuite/comments/1n7jafy/migration_away_from_netsuite_inventory_management/",
+      "snippet": "Sep 3, 2025 ... Would it be silly to look into a new ERP (Odoo, Sage) or should we try and piece QB and a Fishbowl together?",
+      "source": "google"
+    },
+    {
+      "title": "wsdl - NetSuite sandbox suitetalk access - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/46908678/netsuite-sandbox-suitetalk-access",
+      "snippet": "Oct 24, 2017 ... The error occurs on any call made to the API. So far, I haven't seen anyone else online with a similar issue. Any help will be appreciated,\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "postman - Getting 401 from Netsuite REST API - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/71472902/getting-401-from-netsuite-rest-api",
+      "snippet": "Mar 14, 2022 ... This should work fine assuming you have created an integration and an access token. Configure Oauth 1.0 in postman with the following fields\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "How to Connect With Odoo 17 Using API Key",
+      "url": "https://www.cybrosys.com/blog/how-to-connect-with-odoo-17-using-api-key",
+      "snippet": "Jan 15, 2024 ... This blog post is here to guide you step by step, explaining how to prove your identity and get data using simple Python code.",
+      "source": "google"
+    },
+    {
+      "title": "python - Max retries exceeded with URL in requests - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/23013220/max-retries-exceeded-with-url-in-requests",
+      "snippet": "Apr 11, 2014 ... Just use requests features: python. Copy. import requests from requests.adapters import HTTPAdapter from urllib3.util.retry import Retry\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "NetSuite SuiteTalk REST Web Services - Invalid Login Attempt ...",
+      "url": "https://stackoverflow.com/questions/59447622/netsuite-suitetalk-rest-web-services-invalid-login-attempt",
+      "snippet": "Dec 22, 2019 ... 1) Started by verifying that REST API testing in production still works. 2) The sandbox was refreshed by a CRM admin. The application was still\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "NetSuite is the worst product I have ever used : r/Netsuite",
+      "url": "https://www.reddit.com/r/Netsuite/comments/1o1ic76/netsuite_is_the_worst_product_i_have_ever_used/",
+      "snippet": "Oct 8, 2025 ... A restlet is just suitescript underneath and the REST apis are meant to replace SOAP web services eventually. ... Cache reference data and use TBA\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "terminology - What is a callback URL in relation to an API? - Stack ...",
+      "url": "https://stackoverflow.com/questions/23347056/what-is-a-callback-url-in-relation-to-an-api",
+      "snippet": "Apr 28, 2014 ... A callback URL will be invoked by the API method you're calling after it's done. So if you call. POST /api.example.com/foo?",
+      "source": "google"
+    },
+    {
+      "title": "Token Based Authentication (TBA) - Netsuite - rest web services",
+      "url": "https://stackoverflow.com/questions/69104190/token-based-authentication-tba-oauth-netsuite-rest-web-services-invali",
+      "snippet": "Sep 8, 2021 ... \"Invalid login attempt\" is a generic error thrown by NetSuite when there's something misconfigured in the authentication headers.",
+      "source": "google"
+    },
+    {
+      "title": "NetSuite FAQs: Answers to Common Questions for Businesses ...",
+      "url": "https://erppeers.com/netsuite-faqs/",
+      "snippet": "Oct 24, 2024 ... It allows external systems to exchange data with NetSuite, facilitating integrations that synchronize records such as customers, transactions,\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "python - Max retries exceeded with URL in requests - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/23013220/max-retries-exceeded-with-url-in-requests",
+      "snippet": "Apr 11, 2014 ... Just use requests features: python. Copy. import requests from requests.adapters import HTTPAdapter from urllib3.util.retry import Retry\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "python - Max retries exceeded with URL in requests - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/23013220/max-retries-exceeded-with-url-in-requests",
+      "snippet": "Apr 11, 2014 ... Just use requests features: python. Copy. import requests from requests.adapters import HTTPAdapter from urllib3.util.retry import Retry\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "NetSuite is the worst product I have ever used : r/Netsuite",
+      "url": "https://www.reddit.com/r/Netsuite/comments/1o1ic76/netsuite_is_the_worst_product_i_have_ever_used/",
+      "snippet": "Oct 8, 2025 ... For example, I can override the tax code on items in an invoice, but ... The data model is much more straightforward than competitors.",
+      "source": "google"
+    },
+    {
+      "title": "NetSuite SuiteTalk REST Web Services - Invalid Login Attempt ...",
+      "url": "https://stackoverflow.com/questions/59447622/netsuite-suitetalk-rest-web-services-invalid-login-attempt",
+      "snippet": "Dec 22, 2019 ... I had the same issue using the sandbox. Apparently there is a mismatch between the account ID (used in realm authorization) and the account\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "NetSuite SuiteTalk REST Web Services - Invalid Login Attempt ...",
+      "url": "https://stackoverflow.com/questions/59447622/netsuite-suitetalk-rest-web-services-invalid-login-attempt",
+      "snippet": "Dec 22, 2019 ... 1) Started by verifying that REST API testing in production still works. 2) The sandbox was refreshed by a CRM admin. The application was still\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "NetSuite is the worst product I have ever used : r/Netsuite",
+      "url": "https://www.reddit.com/r/Netsuite/comments/1o1ic76/netsuite_is_the_worst_product_i_have_ever_used/",
+      "snippet": "Oct 8, 2025 ... ... API methods are pretty straightforward. I'm not trying to put ... The data model is much more straightforward than competitors. And\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "python - Max retries exceeded with URL in requests - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/23013220/max-retries-exceeded-with-url-in-requests",
+      "snippet": "Apr 11, 2014 ... Just use requests features: python. Copy. import requests from requests.adapters import HTTPAdapter from urllib3.util.retry import Retry\u00a0...",
+      "source": "google"
+    }
+  ],
+  "key_findings": [
+    "Most mentioned concepts: import, requests, still, features:, python.",
+    "Top result: NetSuite SuiteTalk REST Web Services - Invalid Login Attempt ... (https://stackoverflow.com/questions/59447622/netsuite-suitetalk-rest-web-services-invalid-login-attempt)"
+  ],
+  "documentation_urls": [],
+  "code_examples": [],
+  "best_practices": [],
+  "confidence_score": 45,
+  "sources_consulted": [
+    "quick_search",
+    "deep_search"
+  ],
+  "cached": true
+}
