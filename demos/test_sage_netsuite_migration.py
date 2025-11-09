@@ -19,9 +19,15 @@ import asyncio
 import os
 from datetime import datetime
 
-# Load .env file
+# Load .env file from project root
 from dotenv import load_dotenv
-load_dotenv()  # Load environment variables from .env
+project_root = Path(__file__).parent.parent
+env_path = project_root / '.env'
+load_dotenv(dotenv_path=env_path)  # Load environment variables from .env
+print(f"[DEBUG] Loading .env from: {env_path}")
+print(f"[DEBUG] .env exists: {env_path.exists()}")
+if env_path.exists():
+    print(f"[DEBUG] GOOGLE_API_KEY set: {bool(os.getenv('GOOGLE_API_KEY'))}")
 
 # Import Q2O agents
 from agents.orchestrator import OrchestratorAgent
@@ -35,7 +41,7 @@ async def main():
     
     print("=" * 80)
     print(" " * 15 + "Q2O REAL PROJECT TEST")
-    print(" " * 10 + "SAGE NetSuite → Odoo v18 Migration")
+    print(" " * 10 + "SAGE NetSuite to Odoo v18 Migration")
     print("=" * 80)
     print()
     
@@ -242,7 +248,7 @@ async def main():
 
 if __name__ == "__main__":
     print()
-    print("Starting SAGE NetSuite → Odoo Migration Test...")
+    print("Starting SAGE NetSuite to Odoo Migration Test...")
     print("This will demonstrate Q2O's full LLM-enhanced capabilities")
     print()
     

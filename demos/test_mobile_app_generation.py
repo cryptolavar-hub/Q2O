@@ -20,9 +20,11 @@ import asyncio
 import os
 from datetime import datetime
 
-# Load .env file
+# Load .env file from project root
 from dotenv import load_dotenv
-load_dotenv()  # Load environment variables from .env
+project_root = Path(__file__).parent.parent
+env_path = project_root / '.env'
+load_dotenv(dotenv_path=env_path)  # Load environment variables from .env
 
 from agents.mobile_agent import MobileAgent
 from agents.base_agent import Task, AgentType
