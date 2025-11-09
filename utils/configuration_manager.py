@@ -110,25 +110,53 @@ class ConfigurationManager:
         ACME ResearcherAgent: Gemini Pro (override - save $$$)
     """
     
-    def __init__(self, config_dir: str = "config"):
+    def __init__(self, config_dir: str = "config", use_database: bool = True):
         """
         Initialize configuration manager.
         
+        NEW: Checks PostgreSQL database first for scalability (multi-host).
+        Falls back to file-based config if database unavailable.
+        
         Args:
-            config_dir: Directory to store configuration files
+            config_dir: Directory to store configuration files (fallback)
+            use_database: Try to use PostgreSQL first (default: True)
         """
         self.config_dir = Path(config_dir)
         self.config_dir.mkdir(exist_ok=True)
         
-        # Configuration files
+        # Configuration files (fallback storage)
         self.system_config_file = self.config_dir / "system_llm_config.json"
         self.projects_config_file = self.config_dir / "projects_llm_config.json"
+        
+        # Database availability
+        self.use_database = use_database and self._check_database_available()
+        
+        if self.use_database:
+            logging.info("✅ Using PostgreSQL for configuration (scalable!)")
+        else:
+            logging.info("ℹ️  Using file-based configuration (fallback)")
         
         # Load configurations
         self.system_config = self._load_system_config()
         self.projects = self._load_projects_config()
         
         logging.info("✅ ConfigurationManager initialized")
+    
+    def _check_database_available(self) -> bool:
+        """Check if PostgreSQL database is available for configuration storage."""
+        try:
+            from addon_portal.api.core.db import get_db
+            from addon_portal.api.models.llm_config import LLMSystemConfig
+            
+            # Try to query database
+            db = next(get_db())
+            db.query(LLMSystemConfig).first()
+            db.close()
+            
+            return True
+        except Exception as e:
+            logging.debug(f"Database not available for configuration: {e}")
+            return False
     
     def _load_system_config(self) -> LLMConfig:
         """Load system-level configuration."""
