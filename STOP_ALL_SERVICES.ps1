@@ -1,6 +1,6 @@
 # =========================================================================
 # STOP_ALL_SERVICES.ps1
-# Quick2Odoo Combined - Intelligent Service Shutdown Script
+# Q2O Platform - Intelligent Service Shutdown Script
 # =========================================================================
 # This script:
 # 1. Detects which services are currently running
@@ -10,7 +10,7 @@
 # =========================================================================
 
 Write-Host "==========================================================================" -ForegroundColor Cyan
-Write-Host "  Quick2Odoo Combined - Service Shutdown Script" -ForegroundColor Cyan
+Write-Host "  Q2O Platform - Service Shutdown Script" -ForegroundColor Cyan
 Write-Host "==========================================================================" -ForegroundColor Cyan
 Write-Host ""
 

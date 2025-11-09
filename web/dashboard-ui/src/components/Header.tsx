@@ -14,7 +14,7 @@ export function Header({ connected, error, projectName }: HeaderProps) {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold drop-shadow-md">
-              🤖 Quick2Odoo Multi-Agent Dashboard
+              🤖 Q2O Multi-Agent Dashboard
             </h1>
             {projectName && (
               <p className="text-sm opacity-90 mt-1">

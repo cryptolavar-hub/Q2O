@@ -150,7 +150,7 @@ export default function Dashboard() {
 
         {/* Footer */}
         <footer className="mt-12 text-center text-gray-500 text-sm pb-6">
-          <p>Quick2Odoo Multi-Agent Dashboard • Real-time Monitoring</p>
+          <p>Q2O Multi-Agent Dashboard • Real-time Monitoring</p>
           <p className="text-xs mt-1">Powered by agents that build everything</p>
         </footer>
       </main>

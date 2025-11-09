@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { AdminHeader } from '@/components/AdminHeader';
+import { Navigation } from '@/components/Navigation';
 
 interface LearnedTemplate {
   template_id: string;
@@ -146,7 +147,8 @@ export default function LearnedTemplates() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <AdminHeader title="Learned Templates" />
+      <AdminHeader title="Learned Templates" subtitle="View and manage AI-learned code templates" />
+      <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Back Button */}

@@ -4,7 +4,7 @@ export default function Document() {
   return (
     <Html lang="en">
       <Head>
-        <meta name="description" content="Quick2Odoo Tenant Portal" />
+        <meta name="description" content="Q2O Tenant Portal" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <body style={{ margin: 0, padding: 0, boxSizing: 'border-box' }}>

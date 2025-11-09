@@ -1,6 +1,6 @@
 # =========================================================================
 # START_ALL_SERVICES.ps1
-# Quick2Odoo Combined - Automated Startup Script with Pre-flight Checks
+# Q2O Platform - Automated Startup Script with Pre-flight Checks
 # =========================================================================
 # This script:
 # 1. Runs comprehensive verification checks
@@ -9,7 +9,7 @@
 # =========================================================================
 
 Write-Host "==========================================================================" -ForegroundColor Cyan
-Write-Host "  Quick2Odoo Combined - Automated Startup Script" -ForegroundColor Cyan
+Write-Host "  Q2O Platform - Automated Startup Script" -ForegroundColor Cyan
 Write-Host "==========================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -727,12 +727,7 @@ function Show-ServiceMenu {
             }
             
             Write-Host "[START] Starting Dashboard API..." -ForegroundColor Yellow
-            # Dashboard API runs from project root - ensure we're there
-            $scriptRoot = Split-Path -Parent $PSScriptRoot
-            if (Test-Path $PSScriptRoot) {
-                Set-Location $PSScriptRoot
-            }
-            Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot'; python -m uvicorn api.dashboard.main:app --host :: --port 8000 --reload"
+            Start-Process powershell -ArgumentList "-NoExit", "-Command", "python -m uvicorn api.dashboard.main:app --host :: --port 8000 --reload"
             Start-Sleep -Seconds 15
             Write-Host "[OK] Dashboard API restarted!" -ForegroundColor Green
             Write-Host ""

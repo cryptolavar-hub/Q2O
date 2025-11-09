@@ -310,7 +310,7 @@ export default function Home() {
         fontSize: '0.9rem',
         paddingBottom: 32
       }}>
-        Quick2Odoo Tenant Portal • Powered by agents that build everything
+        Q2O Tenant Portal • Powered by agents that build everything
       </footer>
       </div>
     </div>

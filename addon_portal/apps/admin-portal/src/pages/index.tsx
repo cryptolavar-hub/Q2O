@@ -90,7 +90,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <AdminHeader
-        title="🎯 Quick2Odoo Licensing Admin"
+        title="🎯 Q2O Licensing Admin"
         subtitle="Multi-tenant subscription & licensing management"
         action={
           <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2">
@@ -242,7 +242,7 @@ export default function AdminDashboard() {
 
         {/* Footer */}
         <footer className="mt-12 text-center text-gray-500 text-sm pb-6">
-          <p>Quick2Odoo Licensing Admin Portal • Multi-Tenant Management</p>
+          <p>Q2O Licensing Admin Portal • Multi-Tenant Management</p>
           <p className="text-xs mt-1">Powered by agents that build everything</p>
         </footer>
       </main>

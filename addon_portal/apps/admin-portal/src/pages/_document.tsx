@@ -4,7 +4,7 @@ export default function Document() {
   return (
     <Html lang="en">
       <Head>
-        <meta name="description" content="Quick2Odoo Licensing Admin Portal" />
+        <meta name="description" content="Q2O Licensing Admin Portal" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <body>

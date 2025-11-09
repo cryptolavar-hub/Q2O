@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { AdminHeader } from '@/components/AdminHeader';
+import { Navigation } from '@/components/Navigation';
 
 interface LLMConfig {
   providers: {
@@ -106,7 +107,8 @@ export default function LLMConfiguration() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <AdminHeader title="LLM Configuration" />
+      <AdminHeader title="LLM Configuration" subtitle="Manage providers, API keys, and settings" />
+      <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Back Button */}
