@@ -7,9 +7,15 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
 import os
+import sys
 import json
 from pathlib import Path
 from datetime import datetime, timedelta
+
+# Add parent directory to path for utils imports
+parent_dir = Path(__file__).parent.parent.parent.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
 
 # Import LLM components
 try:
@@ -17,7 +23,8 @@ try:
     from utils.template_learning_engine import get_template_learning_engine, TemplateLearningEngine
     from utils.configuration_manager import get_configuration_manager, ConfigurationManager
     LLM_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    print(f"LLM components not available: {e}")
     LLM_AVAILABLE = False
 
 router = APIRouter(prefix="/api/llm", tags=["llm_management"])
