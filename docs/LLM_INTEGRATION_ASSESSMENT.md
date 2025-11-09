@@ -287,27 +287,43 @@ return {
 
 ### **LLM API Costs (OpenAI GPT-4 Turbo)**
 
-| Usage Type | Tokens per Call | Cost per Call | Calls per Project | Project Cost |
-|------------|-----------------|---------------|-------------------|--------------|
-| **Orchestrator** (task breakdown) | ~2,000 | $0.02 | 1 | $0.02 |
-| **Researcher** (synthesis) | ~4,000 | $0.04 | 3-5 | $0.12-0.20 |
-| **Coder** (code generation) | ~8,000 | $0.08 | 10-20 | $0.80-1.60 |
-| **Testing** (test generation) | ~6,000 | $0.06 | 5-10 | $0.30-0.60 |
-| **QA** (analysis) | ~4,000 | $0.04 | 2-5 | $0.08-0.20 |
-| **TOTAL PER PROJECT** | | | **21-41 calls** | **$1.32-2.62** |
+**Pricing (November 2025)**:
+- Input: $0.01 per 1K tokens
+- Output: $0.03 per 1K tokens (3x more expensive!)
 
-**Monthly Cost** (10 active projects): **$13-26/month**  
-**Monthly Cost** (50 active projects): **$66-131/month**  
-**Monthly Cost** (100 active projects): **$132-262/month**
+| Usage Type | Input | Output | Input Cost | Output Cost | **Total Cost** | Calls/Project | **Per Project** |
+|------------|-------|--------|------------|-------------|----------------|---------------|-----------------|
+| **Orchestrator** | 2,000 | 2,000 | $0.02 | $0.06 | **$0.08** | 1 | **$0.08** |
+| **Researcher** | 4,000 | 3,000 | $0.04 | $0.09 | **$0.13** | 3-5 | **$0.39-0.65** |
+| **Coder** | 8,000 | 6,000 | $0.08 | $0.18 | **$0.26** | 10-20 | **$2.60-5.20** |
+| **Testing** | 6,000 | 4,000 | $0.06 | $0.12 | **$0.18** | 5-10 | **$0.90-1.80** |
+| **QA** | 4,000 | 2,000 | $0.04 | $0.06 | **$0.10** | 2-5 | **$0.20-0.50** |
+| **TOTAL** | | | | | | **21-41 calls** | **$4.17-8.23** |
 
-### **Alternative: Google Gemini Pro**
+**⚠️ Critical Note**: Output tokens cost 3x more than input. Code generation has highest output (6,000 tokens = $0.18 output alone).
 
-| Model | Input Cost | Output Cost | vs GPT-4 |
-|-------|-----------|-------------|----------|
-| **Gemini 1.5 Pro** | $0.00125/1K tokens | $0.005/1K tokens | **70% cheaper** |
-| **Gemini 1.5 Flash** | $0.000075/1K tokens | $0.0003/1K tokens | **95% cheaper** |
+**OpenAI GPT-4 Turbo Monthly Costs**:
+- **10 active projects**: **$42-82/month**  
+- **50 active projects**: **$208-412/month**  
+- **100 active projects**: **$417-823/month**
 
-**Recommendation**: Start with Gemini 1.5 Pro (cheaper, excellent quality)
+---
+
+### **Alternative: Google Gemini Pro** (Recommended)
+
+**Pricing (November 2025)**:
+
+| Model | Input Cost | Output Cost | Per Project | vs GPT-4 Turbo |
+|-------|-----------|-------------|-------------|----------------|
+| **Gemini 1.5 Pro** | $0.00125/1K | $0.005/1K | **$0.52-1.03** | **87% cheaper** |
+| **Gemini 1.5 Flash** | $0.000075/1K | $0.0003/1K | **$0.03-0.06** | **99% cheaper** |
+
+**Gemini 1.5 Pro Monthly Costs**:
+- **10 projects**: **$5-10/month** (vs $42-82 GPT-4)
+- **50 projects**: **$26-52/month** (vs $208-412 GPT-4)
+- **100 projects**: **$52-103/month** (vs $417-823 GPT-4)
+
+**Recommendation**: Start with **Gemini 1.5 Pro** - 87% cheaper with comparable quality
 
 ### **ROI Calculation**
 
@@ -598,22 +614,22 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
 - Limited to 6 platforms
 - Manual template maintenance: 10 hours/month = **$1,000/month**
 
-**With LLM** (Gemini 1.5 Pro):
-- API costs: **$5-10/month** (10 projects)
-- Implementation: **$10,000** (one-time, 2-3 weeks)
-- Unlimited platforms
-- No template maintenance
+**With LLM** (Provider Options):
 
-**With LLM** (OpenAI GPT-4):
-- API costs: **$42-82/month** (10 projects)
-- Higher quality for complex tasks
-- Premium option
+| Provider | Monthly Cost | Notes |
+|----------|--------------|-------|
+| **Gemini 1.5 Pro** ⭐ | **$5-10/month** | Recommended (87% cheaper than GPT-4) |
+| **Gemini 1.5 Flash** | **$0.30-0.60/month** | Budget option (99% cheaper) |
+| **OpenAI GPT-4 Turbo** | **$42-82/month** | Premium quality option |
 
-**Payback Period**: **1.5-2 months** (after adding 1 new platform)  
-**Year 1 Savings**: **$40,000+** (eliminate template development)  
-**Year 2+ Savings**: **$55,000+/year** (ongoing efficiency)
+**Implementation**: $10,000 (one-time, 2-3 weeks)  
+**Result**: Unlimited platforms, no template maintenance
 
-**Key Insight**: Even with corrected costs (including output tokens), ROI remains **excellent** at 10-20x
+**ROI Analysis** (using Gemini 1.5 Pro):
+- **Payback Period**: **1.5 months** (after adding 1 new platform)  
+- **Year 1 Net Savings**: **$48,000+** ($8,000 platform saved - $10K implementation - $120 API)
+- **Year 2+ Net Savings**: **$96,000+/year** ($8K/platform × 12 platforms - $120 API)
+- **5-Year Value**: **$400,000+** (50+ platforms at no template cost)
 
 ---
 
