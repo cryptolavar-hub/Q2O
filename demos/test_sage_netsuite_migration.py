@@ -68,7 +68,7 @@ async def main():
     output_dir = Path(__file__).parent / "output" / project_name
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    print(f"📁 Output Directory: {output_dir}")
+    print(f"[OUTPUT] Output Directory: {output_dir}")
     print()
     
     # ========================================================================
