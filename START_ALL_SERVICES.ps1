@@ -727,7 +727,12 @@ function Show-ServiceMenu {
             }
             
             Write-Host "[START] Starting Dashboard API..." -ForegroundColor Yellow
-            Start-Process powershell -ArgumentList "-NoExit", "-Command", "python -m uvicorn api.dashboard.main:app --host :: --port 8000 --reload"
+            # Dashboard API runs from project root - ensure we're there
+            $scriptRoot = Split-Path -Parent $PSScriptRoot
+            if (Test-Path $PSScriptRoot) {
+                Set-Location $PSScriptRoot
+            }
+            Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot'; python -m uvicorn api.dashboard.main:app --host :: --port 8000 --reload"
             Start-Sleep -Seconds 15
             Write-Host "[OK] Dashboard API restarted!" -ForegroundColor Green
             Write-Host ""
