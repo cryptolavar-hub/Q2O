@@ -6,31 +6,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import AdminHeader from '@/components/AdminHeader';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-} from 'chart.js';
-import { Line, Bar, Doughnut } from 'react-chartjs-2';
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement
-);
 
 interface LLMStats {
   totalCalls: number;
@@ -137,44 +112,6 @@ export default function LLMOverview() {
   }
 
   const budgetPercent = (stats.budgetUsed / stats.monthlyBudget) * 100;
-
-  // Chart data
-  const costTrendData = {
-    labels: stats.dailyCosts.map(d => d.date),
-    datasets: [
-      {
-        label: 'Daily Cost ($)',
-        data: stats.dailyCosts.map(d => d.cost),
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.4,
-      },
-    ],
-  };
-
-  const providerData = {
-    labels: ['Gemini', 'GPT-4', 'Claude'],
-    datasets: [
-      {
-        data: [
-          stats.providerBreakdown.gemini.cost,
-          stats.providerBreakdown.openai.cost,
-          stats.providerBreakdown.anthropic.cost,
-        ],
-        backgroundColor: [
-          'rgba(59, 130, 246, 0.8)',
-          'rgba(16, 185, 129, 0.8)',
-          'rgba(251, 146, 60, 0.8)',
-        ],
-        borderColor: [
-          'rgb(59, 130, 246)',
-          'rgb(16, 185, 129)',
-          'rgb(251, 146, 60)',
-        ],
-        borderWidth: 2,
-      },
-    ],
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -286,56 +223,72 @@ export default function LLMOverview() {
           </div>
         </div>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Cost Trend */}
-          <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Cost Trend (Last 30 Days)</h3>
-            <Line
-              data={costTrendData}
-              options={{
-                responsive: true,
-                plugins: {
-                  legend: { display: false },
-                  tooltip: {
-                    callbacks: {
-                      label: (context) => `$${context.parsed.y.toFixed(2)}`,
-                    },
-                  },
-                },
-                scales: {
-                  y: {
-                    beginAtZero: true,
-                    ticks: {
-                      callback: (value) => `$${value}`,
-                    },
-                  },
-                },
-              }}
-            />
+        {/* Provider Cost Breakdown */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {/* Gemini */}
+          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Gemini 1.5 Pro</h3>
+              <span className="text-2xl">💎</span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Calls:</span>
+                <span className="text-sm font-semibold">{stats.providerBreakdown.gemini.calls}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Total Cost:</span>
+                <span className="text-sm font-semibold text-blue-600">${stats.providerBreakdown.gemini.cost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Avg Cost:</span>
+                <span className="text-sm font-semibold">${(stats.providerBreakdown.gemini.cost / (stats.providerBreakdown.gemini.calls || 1)).toFixed(4)}</span>
+              </div>
+            </div>
           </div>
 
-          {/* Provider Breakdown */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Provider Costs</h3>
-            <Doughnut
-              data={providerData}
-              options={{
-                responsive: true,
-                plugins: {
-                  legend: { position: 'bottom' },
-                  tooltip: {
-                    callbacks: {
-                      label: (context) => {
-                        const label = context.label || '';
-                        const value = context.parsed || 0;
-                        return `${label}: $${value.toFixed(2)}`;
-                      },
-                    },
-                  },
-                },
-              }}
-            />
+          {/* GPT-4 */}
+          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">GPT-4 Turbo</h3>
+              <span className="text-2xl">🤖</span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Calls:</span>
+                <span className="text-sm font-semibold">{stats.providerBreakdown.openai.calls}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Total Cost:</span>
+                <span className="text-sm font-semibold text-green-600">${stats.providerBreakdown.openai.cost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Avg Cost:</span>
+                <span className="text-sm font-semibold">${(stats.providerBreakdown.openai.cost / (stats.providerBreakdown.openai.calls || 1)).toFixed(4)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Claude */}
+          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Claude 3.5 Sonnet</h3>
+              <span className="text-2xl">🧠</span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Calls:</span>
+                <span className="text-sm font-semibold">{stats.providerBreakdown.anthropic.calls}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Total Cost:</span>
+                <span className="text-sm font-semibold text-orange-600">${stats.providerBreakdown.anthropic.cost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Avg Cost:</span>
+                <span className="text-sm font-semibold">${(stats.providerBreakdown.anthropic.cost / (stats.providerBreakdown.anthropic.calls || 1)).toFixed(4)}</span>
+              </div>
+            </div>
           </div>
         </div>
 

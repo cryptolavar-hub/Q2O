@@ -210,19 +210,59 @@ if (Test-Path $envPath) {
         $usingPostgreSQL = $true
         Write-Host "  [INFO] Using PostgreSQL database" -ForegroundColor Cyan
         
-        # Check if PostgreSQL service is running
-        $pgService = Get-Service -Name "postgresql-x64-18" -ErrorAction SilentlyContinue
-        if ($pgService) {
-            if ($pgService.Status -eq "Running") {
-                Write-Host "  [OK] PostgreSQL 18 service is running" -ForegroundColor Green
+        # Extract database connection details from .env
+        $dbHost = "localhost"
+        $dbPort = "5432"
+        $dbName = "q2o"
+        
+        if ($envContent -match 'DB_DSN[=:].*?postgresql://(?:[^:]+:)?[^@]+@([^:/]+)(?::(\d+))?/([^"\s]+)') {
+            $dbHost = $matches[1]
+            if ($matches[2]) { $dbPort = $matches[2] }
+            if ($matches[3]) { $dbName = $matches[3] }
+        }
+        
+        Write-Host "  [INFO] Database Host: $dbHost" -ForegroundColor Cyan
+        Write-Host "  [INFO] Database Port: $dbPort" -ForegroundColor Cyan
+        Write-Host "  [INFO] Database Name: $dbName" -ForegroundColor Cyan
+        
+        # Check if local PostgreSQL service (if localhost)
+        if ($dbHost -eq "localhost" -or $dbHost -eq "127.0.0.1" -or $dbHost -eq "::1") {
+            $pgService = Get-Service -Name "postgresql-x64-*" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($pgService -and $pgService.Status -eq "Running") {
+                Write-Host "  [OK] Local PostgreSQL service is running" -ForegroundColor Green
             } else {
-                Write-Host "  [WARNING] PostgreSQL 18 service is stopped" -ForegroundColor Yellow
-                Write-Host "  [INFO] Start with: net start postgresql-x64-18" -ForegroundColor Yellow
+                Write-Host "  [WARNING] Local PostgreSQL service not running" -ForegroundColor Yellow
+                Write-Host "  [INFO] If using local database, start with: net start postgresql-x64-18" -ForegroundColor Yellow
                 $WarningCount++
             }
-        } else {
-            Write-Host "  [WARNING] PostgreSQL 18 service not found" -ForegroundColor Yellow
-            $WarningCount++
+        }
+        
+        # Network connectivity check (works for local or remote)
+        Write-Host "  [INFO] Testing database connectivity..." -ForegroundColor Cyan
+        try {
+            $tcpClient = New-Object System.Net.Sockets.TcpClient
+            $tcpClient.Connect($dbHost, $dbPort)
+            $tcpClient.Close()
+            Write-Host "  [OK] Database connection successful ($dbHost:$dbPort)" -ForegroundColor Green
+            
+            # Try to verify database exists using psql if available
+            $psqlPath = Get-Command psql -ErrorAction SilentlyContinue
+            if ($psqlPath) {
+                $dbCheckCmd = "SELECT 1 FROM pg_database WHERE datname='$dbName'"
+                $dbExists = & psql -h $dbHost -p $dbPort -U postgres -tAc $dbCheckCmd 2>$null
+                if ($dbExists -eq "1") {
+                    Write-Host "  [OK] Database '$dbName' exists" -ForegroundColor Green
+                } else {
+                    Write-Host "  [WARNING] Database '$dbName' not found" -ForegroundColor Yellow
+                    Write-Host "  [INFO] Create with: psql -h $dbHost -p $dbPort -U postgres -f setup_postgresql.sql" -ForegroundColor Yellow
+                    $WarningCount++
+                }
+            }
+        } catch {
+            Write-Host "  [ERROR] Cannot connect to PostgreSQL at $dbHost:$dbPort" -ForegroundColor Red
+            Write-Host "  [INFO] Check database is running and accessible" -ForegroundColor Yellow
+            Write-Host "  [INFO] For network databases, ensure firewall allows connections" -ForegroundColor Yellow
+            $ErrorCount++
         }
     } elseif ($envContent -match "sqlite") {
         $usingSQLite = $true
