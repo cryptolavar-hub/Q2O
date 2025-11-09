@@ -243,7 +243,7 @@ if (Test-Path $envPath) {
             $tcpClient = New-Object System.Net.Sockets.TcpClient
             $tcpClient.Connect($dbHost, $dbPort)
             $tcpClient.Close()
-            Write-Host "  [OK] Database connection successful ($dbHost:$dbPort)" -ForegroundColor Green
+            Write-Host "  [OK] Database connection successful (${dbHost}:${dbPort})" -ForegroundColor Green
             
             # Try to verify database exists using psql if available
             $psqlPath = Get-Command psql -ErrorAction SilentlyContinue
@@ -259,7 +259,7 @@ if (Test-Path $envPath) {
                 }
             }
         } catch {
-            Write-Host "  [ERROR] Cannot connect to PostgreSQL at $dbHost:$dbPort" -ForegroundColor Red
+            Write-Host "  [ERROR] Cannot connect to PostgreSQL at ${dbHost}:${dbPort}" -ForegroundColor Red
             Write-Host "  [INFO] Check database is running and accessible" -ForegroundColor Yellow
             Write-Host "  [INFO] For network databases, ensure firewall allows connections" -ForegroundColor Yellow
             $ErrorCount++
