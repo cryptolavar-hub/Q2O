@@ -1,0 +1,19 @@
+# LLM Integration POC - API Configuration
+# Copy this to .env and add your actual API keys
+
+# Google Gemini API (Primary - Recommended)
+# Get your key from: https://makersuite.google.com/app/apikey
+GOOGLE_API_KEY=AIzaSy...your_key_here
+
+# OpenAI API (Fallback - Optional)
+# Get your key from: https://platform.openai.com/api-keys
+OPENAI_API_KEY=sk-...your_key_here
+
+# Feature Flags
+USE_GEMINI=true
+USE_OPENAI=false
+
+# Cost Control
+MAX_TOKENS=8192
+TEMPERATURE=0.3
+
