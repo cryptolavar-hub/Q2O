@@ -368,13 +368,13 @@ class CostMonitor:
         remaining = self.monthly_budget - spent
         
         alerts = {
-            50: f"⚠️  Budget Alert: 50% used (${spent:.2f} of ${self.monthly_budget:.2f}, ${remaining:.2f} remaining)",
-            70: f"⚠️  Budget Alert: 70% used (${spent:.2f} of ${self.monthly_budget:.2f}, ${remaining:.2f} remaining)",
-            80: f"⚠️⚠️  Budget Alert: 80% used (${spent:.2f} of ${self.monthly_budget:.2f}, ${remaining:.2f} remaining)",
-            90: f"⚠️⚠️  Budget Alert: 90% used (${spent:.2f} of ${self.monthly_budget:.2f}) - Consider template-only mode",
-            95: f"🚨 Budget Alert: 95% used (${spent:.2f} of ${self.monthly_budget:.2f}) - Approaching limit!",
-            99: f"🚨🚨 Budget Alert: 99% used (${spent:.2f} of ${self.monthly_budget:.2f}) - CRITICAL!",
-            100: f"🛑 Budget Exceeded: ${spent:.2f} of ${self.monthly_budget:.2f} - LLM disabled, templates only"
+            50: f"[ALERT-50%] Budget Alert: 50% used (${spent:.2f} of ${self.monthly_budget:.2f}, ${remaining:.2f} remaining)",
+            70: f"[ALERT-70%] Budget Alert: 70% used (${spent:.2f} of ${self.monthly_budget:.2f}, ${remaining:.2f} remaining)",
+            80: f"[ALERT-80%] Budget Alert: 80% used (${spent:.2f} of ${self.monthly_budget:.2f}, ${remaining:.2f} remaining)",
+            90: f"[ALERT-90%] Budget Alert: 90% used (${spent:.2f} of ${self.monthly_budget:.2f}) - Consider template-only mode",
+            95: f"[ALERT-95%] Budget Alert: 95% used (${spent:.2f} of ${self.monthly_budget:.2f}) - Approaching limit!",
+            99: f"[ALERT-99%] Budget Alert: 99% used (${spent:.2f} of ${self.monthly_budget:.2f}) - CRITICAL!",
+            100: f"[LIMIT] Budget Exceeded: ${spent:.2f} of ${self.monthly_budget:.2f} - LLM disabled, templates only"
         }
         
         return alerts.get(percentage, f"Budget: {percentage}% (${spent:.2f})")
