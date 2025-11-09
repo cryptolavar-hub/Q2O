@@ -16,6 +16,7 @@ interface DashboardStats {
   revokedDevices: number;
   totalTenants: number;
   activeTenants: number;
+  successRate: number;
 }
 
 export default function AdminDashboard() {
@@ -28,28 +29,39 @@ export default function AdminDashboard() {
     revokedDevices: 0,
     totalTenants: 0,
     activeTenants: 0,
+    successRate: 0,
   });
 
   const [loading, setLoading] = useState(true);
   const [activityDateRange, setActivityDateRange] = useState('7d');
 
   useEffect(() => {
-    // Fetch stats from API
-    // For now, using mock data
-    setTimeout(() => {
-      setStats({
-        totalCodes: 45,
-        activeCodes: 32,
-        expiredCodes: 13,
-        totalDevices: 89,
-        activeDevices: 76,
-        revokedDevices: 13,
-        totalTenants: 12,
-        activeTenants: 11,
-      });
-      setLoading(false);
-    }, 500);
+    fetchDashboardStats();
   }, []);
+
+  const fetchDashboardStats = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/admin/api/dashboard-stats`);
+      if (response.ok) {
+        const data = await response.json();
+        setStats({
+          totalCodes: data.totalCodes || 0,
+          activeCodes: data.activeCodes || 0,
+          expiredCodes: data.expiredCodes || 0,
+          totalDevices: data.totalDevices || 0,
+          activeDevices: data.activeDevices || 0,
+          revokedDevices: data.revokedDevices || 0,
+          totalTenants: data.totalTenants || 0,
+          activeTenants: data.activeTenants || 0,
+          successRate: data.successRate || 0,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch dashboard stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const StatCard = ({ title, value, subtitle, icon, trend }: any) => (
     <motion.div
@@ -126,10 +138,9 @@ export default function AdminDashboard() {
           />
           <StatCard
             title="Success Rate"
-            value="96%"
+            value={`${stats.successRate.toFixed(1)}%`}
             subtitle="Activation success"
             icon="📊"
-            trend={{ value: 3, direction: 'up' }}
           />
         </div>
 

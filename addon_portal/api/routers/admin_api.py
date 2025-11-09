@@ -16,6 +16,57 @@ router = APIRouter(prefix="/admin/api", tags=["admin_api"])
 
 
 # ============================================================================
+# DASHBOARD STATS ENDPOINT
+# ============================================================================
+
+@router.get("/dashboard-stats")
+async def get_dashboard_stats(db: Session = Depends(get_db)):
+    """Get dashboard statistics for the main admin page."""
+    
+    # Count activation codes by status
+    all_codes = db.query(ActivationCode).all()
+    total_codes = len(all_codes)
+    active_codes = sum(1 for c in all_codes if c.revoked_at is None and (c.expires_at is None or c.expires_at > datetime.now()) and c.use_count < c.max_uses)
+    expired_codes = sum(1 for c in all_codes if c.expires_at and c.expires_at <= datetime.now())
+    revoked_codes = sum(1 for c in all_codes if c.revoked_at is not None)
+    
+    # Count devices
+    all_devices = db.query(Device).all()
+    total_devices = len(all_devices)
+    active_devices = sum(1 for d in all_devices if not d.is_revoked)
+    revoked_devices = sum(1 for d in all_devices if d.is_revoked)
+    
+    # Count tenants
+    all_tenants = db.query(Tenant).all()
+    total_tenants = len(all_tenants)
+    # Determine active tenants (has active subscription)
+    active_tenants = 0
+    for tenant in all_tenants:
+        if tenant.subscriptions:
+            for sub in tenant.subscriptions:
+                if sub.status == 'active':
+                    active_tenants += 1
+                    break
+    
+    # Calculate success rate (codes successfully used vs total codes)
+    used_codes = sum(1 for c in all_codes if c.used_at is not None)
+    success_rate = (used_codes / total_codes * 100) if total_codes > 0 else 0
+    
+    return {
+        "totalCodes": total_codes,
+        "activeCodes": active_codes,
+        "expiredCodes": expired_codes,
+        "revokedCodes": revoked_codes,
+        "totalDevices": total_devices,
+        "activeDevices": active_devices,
+        "revokedDevices": revoked_devices,
+        "totalTenants": total_tenants,
+        "activeTenants": active_tenants,
+        "successRate": round(success_rate, 1)
+    }
+
+
+# ============================================================================
 # PYDANTIC MODELS
 # ============================================================================
 

@@ -6,12 +6,12 @@ Adds code_plain, usage_quota, and usage_current fields to existing database
 import sys
 from pathlib import Path
 
-# Add addon_portal directory to path (this file is IN addon_portal/)
-addon_portal_dir = Path(__file__).parent
-sys.path.insert(0, str(addon_portal_dir))
+# Add parent to path
+parent_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(parent_dir))
 
 from sqlalchemy import text
-from api.core.db import engine
+from addon_portal.api.core.db import engine
 
 def run_migration():
     """Add missing fields to database."""
