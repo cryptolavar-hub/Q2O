@@ -10,7 +10,7 @@ Manages System → Project → Agent configuration hierarchy for:
 This enables maximum flexibility for IT consultants to customize per client.
 """
 
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, TYPE_CHECKING
 from enum import Enum
 import json
 import os
@@ -18,7 +18,10 @@ import logging
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from datetime import datetime
-from agents.base_agent import AgentType
+
+# Use TYPE_CHECKING to avoid circular import at runtime
+if TYPE_CHECKING:
+    from agents.base_agent import AgentType
 
 # Import after ensuring it exists
 try:
@@ -256,7 +259,7 @@ Output ONLY the code - no explanations, no markdown."""
     def get_llm_provider_for_task(
         self,
         project_id: Optional[str],
-        agent_type: AgentType
+        agent_type: "AgentType"  # String annotation to avoid circular import
     ) -> str:
         """
         Get LLM provider for a specific task using cascading logic.
@@ -294,7 +297,7 @@ Output ONLY the code - no explanations, no markdown."""
     def get_prompt_for_task(
         self,
         project_id: Optional[str],
-        agent_type: AgentType,
+        agent_type: "AgentType",  # String annotation to avoid circular import
         task_description: str,
         tech_stack: List[str]
     ) -> Tuple[str, str]:
@@ -366,7 +369,7 @@ Generate complete, production-ready implementation."""
     def get_temperature_for_task(
         self,
         project_id: Optional[str],
-        agent_type: AgentType
+        agent_type: "AgentType"  # String annotation to avoid circular import
     ) -> float:
         """Get temperature setting using cascading logic."""
         # Try agent-level
