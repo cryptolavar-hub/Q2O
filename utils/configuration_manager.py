@@ -143,17 +143,29 @@ class ConfigurationManager:
         logging.info("✅ ConfigurationManager initialized")
     
     def _check_database_available(self) -> bool:
-        """Check if PostgreSQL database is available for configuration storage."""
+        """
+        Check if PostgreSQL database is available for configuration storage.
+        
+        NOTE: Imports are LAZY (inside method) to avoid circular imports.
+        """
         try:
+            # Lazy imports to avoid circular dependency
+            import sys
+            from pathlib import Path
+            
+            # Try to import database components
             from addon_portal.api.core.db import get_db
             from addon_portal.api.models.llm_config import LLMSystemConfig
             
             # Try to query database
             db = next(get_db())
-            db.query(LLMSystemConfig).first()
+            result = db.query(LLMSystemConfig).first()
             db.close()
             
             return True
+        except ImportError as e:
+            logging.debug(f"Database models not available: {e}")
+            return False
         except Exception as e:
             logging.debug(f"Database not available for configuration: {e}")
             return False
