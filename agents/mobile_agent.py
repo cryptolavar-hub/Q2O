@@ -520,14 +520,14 @@ export default function App() {
     
     def _generate_navigation_template(self, features: List[str]) -> str:
         """Generate basic navigation template."""
-        # Use sanitize_for_filename for consistency with actual file names
+        # Use sanitize_objective for component names (class_name field)
         screens_import = "\n".join([
-            f"import {sanitize_objective(f)}Screen from '../screens/{sanitize_for_filename(f)}Screen';"
+            f"import {sanitize_objective(f)['class_name']}Screen from '../screens/{sanitize_for_filename(f)}Screen';"
             for f in features
         ])
         
         screens_nav = "\n      ".join([
-            f'<Stack.Screen name="{sanitize_objective(f)}" component={{{sanitize_objective(f)}Screen}} />'
+            f'<Stack.Screen name="{sanitize_objective(f)['class_name']}" component={{{sanitize_objective(f)['class_name']}Screen}} />'
             for f in features
         ])
         
@@ -548,7 +548,7 @@ export default function RootNavigator() {{
     
     def _generate_screen_template(self, feature: str, platforms: List[str]) -> str:
         """Generate basic screen template."""
-        screen_name = sanitize_objective(feature)
+        screen_name = sanitize_objective(feature)['class_name']
         
         return f'''import React from 'react';
 import {{View, Text, StyleSheet}} from 'react-native';

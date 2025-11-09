@@ -209,7 +209,7 @@ async def main():
         if screens:
             sample_screen = output_dir / screens[0]
             if sample_screen.exists():
-                print("📄 Sample Generated Code:")
+                print("[CODE] Sample Generated Code:")
                 print("   " + "=" * 76)
                 content = sample_screen.read_text()
                 lines = content.split('\n')[:25]  # First 25 lines
