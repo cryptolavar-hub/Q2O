@@ -24,8 +24,8 @@ class Tenant(Base):
     usage_current = Column(Integer, default=0, nullable=False)  # Current usage count
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    subscription = relationship("Subscription", back_populates="tenant", uselist=False)
-    subscriptions = relationship("Subscription", back_populates="tenant")  # For admin API
+    subscription = relationship("Subscription", back_populates="tenant", uselist=False, overlaps="subscriptions")
+    subscriptions = relationship("Subscription", back_populates="tenant", overlaps="subscription")  # For admin API
 
 class Plan(Base):
     __tablename__ = "plans"

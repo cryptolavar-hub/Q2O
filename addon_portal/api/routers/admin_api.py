@@ -44,7 +44,7 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     for tenant in all_tenants:
         if tenant.subscriptions:
             for sub in tenant.subscriptions:
-                if sub.status == 'active':
+                if sub.state and sub.state.value == 'active':
                     active_tenants += 1
                     break
     
@@ -178,7 +178,7 @@ async def get_all_tenants(
             "primaryColor": tenant.primary_color,
             "domain": tenant.domain,
             "subscriptionPlan": subscription.plan.name if subscription and subscription.plan else "None",
-            "subscriptionStatus": subscription.status if subscription else "none",
+            "subscriptionStatus": subscription.state.value if subscription and subscription.state else "none",
             "usageQuota": tenant.usage_quota,
             "usageCurrent": tenant.usage_current,
             "createdAt": tenant.created_at.isoformat() if tenant.created_at else None
@@ -206,7 +206,7 @@ async def get_tenant(tenant_slug: str, db: Session = Depends(get_db)):
         "primaryColor": tenant.primary_color,
         "domain": tenant.domain,
         "subscriptionPlan": subscription.plan.name if subscription and subscription.plan else "None",
-        "subscriptionStatus": subscription.status if subscription else "none",
+        "subscriptionStatus": subscription.state.value if subscription and subscription.state else "none",
         "usageQuota": tenant.usage_quota,
         "usageCurrent": tenant.usage_current,
         "createdAt": tenant.created_at.isoformat() if tenant.created_at else None
