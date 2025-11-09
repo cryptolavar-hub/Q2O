@@ -632,13 +632,13 @@ class AgentPromptCreate(BaseModel):
     agent_type: str
     custom_instructions: str
     provider_override: Optional[str] = None
-    is_enabled: bool = True
+    enabled: bool = True
 
 
 class AgentPromptUpdate(BaseModel):
     custom_instructions: Optional[str] = None
     provider_override: Optional[str] = None
-    is_enabled: Optional[bool] = None
+    enabled: Optional[bool] = None
 
 
 # GET /api/llm/project-prompts - Get all project prompts
@@ -858,7 +858,7 @@ async def create_agent_prompt(
         agent_type=data.agent_type,
         custom_instructions=data.custom_instructions,
         provider_override=data.provider_override,
-        is_enabled=data.is_enabled
+        enabled=data.enabled
     )
     
     db.add(new_agent)
@@ -891,8 +891,8 @@ async def update_agent_prompt(
         agent.custom_instructions = data.custom_instructions
     if data.provider_override is not None:
         agent.provider_override = data.provider_override
-    if data.is_enabled is not None:
-        agent.is_enabled = data.is_enabled
+    if data.enabled is not None:
+        agent.enabled = data.enabled
     
     db.commit()
     
