@@ -641,26 +641,186 @@ Write-Host "  Activation Code:       12RY-S55W-4MZR-KP2J" -ForegroundColor Gray
 Write-Host ""
 Write-Host "==========================================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "What would you like to do?" -ForegroundColor Yellow
-Write-Host ""
-Write-Host "  1 - Keep services running and exit" -ForegroundColor White
-Write-Host "  2 - Stop all services now" -ForegroundColor White
-Write-Host ""
-Write-Host -NoNewline "Enter choice (1-2): " -ForegroundColor Yellow
-$choice = Read-Host
 
-if ($choice -eq "2") {
+# Interactive service management menu
+function Show-ServiceMenu {
+    Write-Host "==========================================================================" -ForegroundColor Cyan
+    Write-Host "  Service Management Menu" -ForegroundColor Cyan
+    Write-Host "==========================================================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "Launching STOP_ALL_SERVICES.ps1..." -ForegroundColor Cyan
+    Write-Host "What would you like to do?" -ForegroundColor Yellow
     Write-Host ""
-    Start-Sleep -Seconds 1
-    & "$PSScriptRoot\STOP_ALL_SERVICES.ps1"
-} else {
+    Write-Host "  General Options:" -ForegroundColor Cyan
+    Write-Host "    1 - Keep services running and exit" -ForegroundColor White
+    Write-Host "    2 - Stop all services now" -ForegroundColor White
     Write-Host ""
-    Write-Host "Services will continue running." -ForegroundColor Green
+    Write-Host "  Restart Individual Services:" -ForegroundColor Cyan
+    Write-Host "    3 - Restart Licensing API (port 8080)" -ForegroundColor White
+    Write-Host "    4 - Restart Dashboard API (port 8000)" -ForegroundColor White
+    Write-Host "    5 - Restart Tenant Portal (port 3000)" -ForegroundColor White
+    Write-Host "    6 - Restart Dashboard UI (port 3001)" -ForegroundColor White
+    Write-Host "    7 - Restart Admin Portal (port 3002)" -ForegroundColor White
     Write-Host ""
-    Write-Host "To stop services later:" -ForegroundColor White
-    Write-Host "  - Run: STOP_ALL.bat" -ForegroundColor Cyan
-    Write-Host "  - Or close each PowerShell window manually" -ForegroundColor Gray
-    Write-Host ""
+    Write-Host -NoNewline "Enter choice (1-7): " -ForegroundColor Yellow
+    $choice = Read-Host
+    
+    switch ($choice) {
+        "1" {
+            Write-Host ""
+            Write-Host "Services will continue running." -ForegroundColor Green
+            Write-Host ""
+            Write-Host "To manage services later:" -ForegroundColor White
+            Write-Host "  - Run: MANAGE_SERVICES.bat (interactive menu)" -ForegroundColor Cyan
+            Write-Host "  - Run: STOP_ALL.bat (stop all services)" -ForegroundColor Cyan
+            Write-Host ""
+            return
+        }
+        "2" {
+            Write-Host ""
+            Write-Host "Launching STOP_ALL_SERVICES.ps1..." -ForegroundColor Cyan
+            Write-Host ""
+            Start-Sleep -Seconds 1
+            & "$PSScriptRoot\STOP_ALL_SERVICES.ps1"
+            return
+        }
+        "3" {
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host "  Restarting Licensing API (port 8080)" -ForegroundColor Yellow
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host ""
+            
+            # Find and stop process on port 8080
+            $conn = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
+            if ($conn) {
+                $processId = $conn.OwningProcess
+                Write-Host "[STOP] Stopping Licensing API (PID: $processId)..." -ForegroundColor Yellow
+                Stop-Process -Id $processId -Force
+                Start-Sleep -Seconds 2
+                Write-Host "[OK] Stopped" -ForegroundColor Green
+            }
+            
+            Write-Host "[START] Starting Licensing API..." -ForegroundColor Yellow
+            Set-Location addon_portal
+            Start-Process powershell -ArgumentList "-NoExit", "-Command", "uvicorn api.main:app --host :: --port 8080 --reload"
+            Set-Location ..
+            Start-Sleep -Seconds 15
+            Write-Host "[OK] Licensing API restarted!" -ForegroundColor Green
+            Write-Host ""
+            
+            Show-ServiceMenu
+        }
+        "4" {
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host "  Restarting Dashboard API (port 8000)" -ForegroundColor Yellow
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host ""
+            
+            $conn = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+            if ($conn) {
+                $processId = $conn.OwningProcess
+                Write-Host "[STOP] Stopping Dashboard API (PID: $processId)..." -ForegroundColor Yellow
+                Stop-Process -Id $processId -Force
+                Start-Sleep -Seconds 2
+                Write-Host "[OK] Stopped" -ForegroundColor Green
+            }
+            
+            Write-Host "[START] Starting Dashboard API..." -ForegroundColor Yellow
+            Start-Process powershell -ArgumentList "-NoExit", "-Command", "python -m uvicorn api.dashboard.main:app --host :: --port 8000 --reload"
+            Start-Sleep -Seconds 15
+            Write-Host "[OK] Dashboard API restarted!" -ForegroundColor Green
+            Write-Host ""
+            
+            Show-ServiceMenu
+        }
+        "5" {
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host "  Restarting Tenant Portal (port 3000)" -ForegroundColor Yellow
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host ""
+            
+            $conn = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
+            if ($conn) {
+                $processId = $conn.OwningProcess
+                Write-Host "[STOP] Stopping Tenant Portal (PID: $processId)..." -ForegroundColor Yellow
+                Stop-Process -Id $processId -Force
+                Start-Sleep -Seconds 2
+                Write-Host "[OK] Stopped" -ForegroundColor Green
+            }
+            
+            Write-Host "[START] Starting Tenant Portal..." -ForegroundColor Yellow
+            Set-Location addon_portal\apps\tenant-portal
+            Start-Process powershell -ArgumentList "-NoExit", "-Command", "npm run dev"
+            Set-Location ..\..\..
+            Start-Sleep -Seconds 15
+            Write-Host "[OK] Tenant Portal restarted!" -ForegroundColor Green
+            Write-Host ""
+            
+            Show-ServiceMenu
+        }
+        "6" {
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host "  Restarting Dashboard UI (port 3001)" -ForegroundColor Yellow
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host ""
+            
+            $conn = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue
+            if ($conn) {
+                $processId = $conn.OwningProcess
+                Write-Host "[STOP] Stopping Dashboard UI (PID: $processId)..." -ForegroundColor Yellow
+                Stop-Process -Id $processId -Force
+                Start-Sleep -Seconds 2
+                Write-Host "[OK] Stopped" -ForegroundColor Green
+            }
+            
+            Write-Host "[START] Starting Dashboard UI..." -ForegroundColor Yellow
+            Set-Location web\dashboard-ui
+            Start-Process powershell -ArgumentList "-NoExit", "-Command", "npm run dev"
+            Set-Location ..\..
+            Start-Sleep -Seconds 15
+            Write-Host "[OK] Dashboard UI restarted!" -ForegroundColor Green
+            Write-Host ""
+            
+            Show-ServiceMenu
+        }
+        "7" {
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host "  Restarting Admin Portal (port 3002)" -ForegroundColor Yellow
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host ""
+            
+            $conn = Get-NetTCPConnection -LocalPort 3002 -State Listen -ErrorAction SilentlyContinue
+            if ($conn) {
+                $processId = $conn.OwningProcess
+                Write-Host "[STOP] Stopping Admin Portal (PID: $processId)..." -ForegroundColor Yellow
+                Stop-Process -Id $processId -Force
+                Start-Sleep -Seconds 2
+                Write-Host "[OK] Stopped" -ForegroundColor Green
+            }
+            
+            Write-Host "[START] Starting Admin Portal..." -ForegroundColor Yellow
+            Set-Location addon_portal\apps\admin-portal
+            Start-Process powershell -ArgumentList "-NoExit", "-Command", "npm run dev"
+            Set-Location ..\..\..
+            Start-Sleep -Seconds 15
+            Write-Host "[OK] Admin Portal restarted!" -ForegroundColor Green
+            Write-Host ""
+            
+            Show-ServiceMenu
+        }
+        default {
+            Write-Host ""
+            Write-Host "Invalid choice. Please enter 1-7." -ForegroundColor Red
+            Write-Host ""
+            Start-Sleep -Seconds 2
+            Show-ServiceMenu
+        }
+    }
 }
+
+# Show the menu
+Show-ServiceMenu
