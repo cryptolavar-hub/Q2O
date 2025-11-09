@@ -208,14 +208,18 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
             if learned_template:
                 self.logger.info(f"📚 Using learned template for {feature}")
                 self.template_learning.increment_usage(learned_template.template_id)
-                return [self._write_file(f"src/screens/{feature}Screen.tsx", learned_template.template_content)]
+                # BUG FIX: Use sanitize_for_filename instead of raw feature name
+                sanitized_name = sanitize_for_filename(feature)
+                return [self._write_file(f"src/screens/{sanitized_name}Screen.tsx", learned_template.template_content)]
         
         # STEP 2: Try traditional template
         try:
             content = self._generate_screen_template(feature, platforms)
             if content:
                 self.logger.info(f"📄 Used traditional template for {feature}")
-                return [self._write_file(f"src/screens/{feature}Screen.tsx", content)]
+                # BUG FIX: Use sanitize_for_filename instead of raw feature name
+                sanitized_name = sanitize_for_filename(feature)
+                return [self._write_file(f"src/screens/{sanitized_name}Screen.tsx", content)]
         except Exception as e:
             self.logger.debug(f"Traditional template not available for {feature}: {e}")
         
@@ -304,8 +308,9 @@ Generate a complete, working screen component with:
             if template_id:
                 self.logger.info(f"✨ Learned new mobile template: {template_id}")
         
-        # Write file
-        file_path = f"src/screens/{sanitize_for_filename(feature)}Screen.tsx"
+        # Write file (BUG FIX: Use sanitize_for_filename)
+        sanitized_name = sanitize_for_filename(feature)
+        file_path = f"src/screens/{sanitized_name}Screen.tsx"
         return [self._write_file(file_path, code_content)]
     
     def _generate_mobile_app(
@@ -330,7 +335,9 @@ Generate a complete, working screen component with:
         for feature in features:
             try:
                 content = self._generate_screen_template(feature, platforms)
-                file_path = f"src/screens/{sanitize_for_filename(feature)}Screen.tsx"
+                # Use sanitize_for_filename for consistency
+                sanitized_name = sanitize_for_filename(feature)
+                file_path = f"src/screens/{sanitized_name}Screen.tsx"
                 generated_files.append(self._write_file(file_path, content))
             except Exception as e:
                 self.logger.warning(f"Could not generate {feature}: {e}")
@@ -441,8 +448,9 @@ export default function App() {
     
     def _generate_navigation_template(self, features: List[str]) -> str:
         """Generate basic navigation template."""
+        # Use sanitize_for_filename for consistency with actual file names
         screens_import = "\n".join([
-            f"import {sanitize_objective(f)}Screen from '../screens/{sanitize_objective(f)}Screen';"
+            f"import {sanitize_objective(f)}Screen from '../screens/{sanitize_for_filename(f)}Screen';"
             for f in features
         ])
         
@@ -547,4 +555,3 @@ const styles = StyleSheet.create({{
         self.generated_files.append(relative_path)
         
         return relative_path
-

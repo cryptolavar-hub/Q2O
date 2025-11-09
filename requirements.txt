@@ -121,6 +121,9 @@ openai>=1.0.0,<2.0.0
 # Anthropic Claude API (Tertiary - Optional)
 anthropic>=0.8.0,<1.0.0
 
+# Python dotenv for .env file loading
+python-dotenv>=1.0.0,<2.0.0
+
 # Cost & benefits:
 # - Gemini 1.5 Pro: ~$0.52-1.03 per project (20 code generations)
 # - With template learning: Costs drop 80-98% after initial projects

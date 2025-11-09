@@ -19,6 +19,10 @@ import asyncio
 import os
 from datetime import datetime
 
+# Load .env file
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env
+
 # Import Q2O agents
 from agents.orchestrator import OrchestratorAgent
 from agents.researcher_agent import ResearcherAgent

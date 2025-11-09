@@ -9,6 +9,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import asyncio
 import os
+
+# Load .env file
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env
+
 from agents.coder_agent import CoderAgent
 from agents.base_agent import Task, AgentType
 
