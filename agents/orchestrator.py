@@ -121,13 +121,25 @@ class OrchestratorAgent(BaseAgent):
         # Try LLM breakdown first (if enabled)
         if self.llm_enabled:
             try:
-                loop = asyncio.get_event_loop()
-                llm_tasks = loop.run_until_complete(
-                    self._analyze_objective_with_llm(objective, context, start_counter)
-                )
-                if llm_tasks:
-                    self.logger.info(f"🤖 LLM breakdown: {len(llm_tasks)} tasks created for '{objective}'")
-                    return llm_tasks
+                # Check if we're already in async context
+                try:
+                    loop = asyncio.get_running_loop()
+                    # Already in async - fall back to rules to avoid conflicts
+                    self.logger.warning("Already in async context, using rules-based breakdown")
+                    return self._analyze_objective_basic(objective, context, start_counter)
+                except RuntimeError:
+                    # No running loop - safe to create new one
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        llm_tasks = loop.run_until_complete(
+                            self._analyze_objective_with_llm(objective, context, start_counter)
+                        )
+                        if llm_tasks:
+                            self.logger.info(f"🤖 LLM breakdown: {len(llm_tasks)} tasks created for '{objective}'")
+                            return llm_tasks
+                    finally:
+                        loop.close()
             except Exception as e:
                 self.logger.warning(f"LLM breakdown failed, using rules: {e}")
         

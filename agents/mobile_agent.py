@@ -105,10 +105,22 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
             
             # Generate mobile app components (handles async if LLM enabled)
             if self.llm_enabled:
-                loop = asyncio.get_event_loop()
-                generated_files = loop.run_until_complete(
-                    self._generate_mobile_app_async(description, platforms, features, tech_stack, task)
-                )
+                try:
+                    # Check if we're already in async context
+                    loop = asyncio.get_running_loop()
+                    # Already in async - fall back to template mode
+                    self.logger.warning("Already in async context, using template-only mode")
+                    generated_files = self._generate_mobile_app(description, platforms, features, tech_stack, task)
+                except RuntimeError:
+                    # No running loop - safe to create new one
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        generated_files = loop.run_until_complete(
+                            self._generate_mobile_app_async(description, platforms, features, tech_stack, task)
+                        )
+                    finally:
+                        loop.close()
             else:
                 generated_files = self._generate_mobile_app(description, platforms, features, tech_stack, task)
             

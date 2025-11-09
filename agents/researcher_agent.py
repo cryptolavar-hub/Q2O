@@ -907,13 +907,25 @@ class ResearcherAgent(BaseAgent):
         # Try LLM synthesis first (if enabled)
         if self.llm_enabled:
             try:
-                loop = asyncio.get_event_loop()
-                llm_findings = loop.run_until_complete(
-                    self._synthesize_findings_with_llm(research_results, query)
-                )
-                if llm_findings:
-                    self.logger.info(f"🤖 LLM synthesis: {len(llm_findings)} insights generated")
-                    return llm_findings
+                # Check if we're already in async context
+                try:
+                    loop = asyncio.get_running_loop()
+                    # Already in async - fall back to basic synthesis to avoid conflicts
+                    self.logger.warning("Already in async context, using basic synthesis")
+                    return self._synthesize_findings_basic(research_results, query)
+                except RuntimeError:
+                    # No running loop - safe to create new one
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        llm_findings = loop.run_until_complete(
+                            self._synthesize_findings_with_llm(research_results, query)
+                        )
+                        if llm_findings:
+                            self.logger.info(f"🤖 LLM synthesis: {len(llm_findings)} insights generated")
+                            return llm_findings
+                    finally:
+                        loop.close()
             except Exception as e:
                 self.logger.warning(f"LLM synthesis failed, using basic synthesis: {e}")
         

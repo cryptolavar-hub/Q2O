@@ -106,11 +106,24 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             
             # Implement the code (handles async if LLM enabled)
             if self.llm_enabled:
-                # Run async implementation
-                loop = asyncio.get_event_loop()
-                implemented_files = loop.run_until_complete(
-                    self._implement_code_async(code_structure, task)
-                )
+                # Run async implementation with proper event loop handling
+                try:
+                    # Check if we're already in async context
+                    loop = asyncio.get_running_loop()
+                    # Already in async - use run_coroutine_threadsafe or nest_asyncio
+                    # For now, fall back to sync mode to avoid conflicts
+                    self.logger.warning("Already in async context, using template-only mode for this call")
+                    implemented_files = self._implement_code(code_structure, task)
+                except RuntimeError:
+                    # No running loop - safe to create new one
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        implemented_files = loop.run_until_complete(
+                            self._implement_code_async(code_structure, task)
+                        )
+                    finally:
+                        loop.close()
             else:
                 # Traditional synchronous implementation
                 implemented_files = self._implement_code(code_structure, task)
