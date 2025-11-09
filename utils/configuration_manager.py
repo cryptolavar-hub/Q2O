@@ -503,7 +503,7 @@ Generate complete, production-ready implementation."""
     def get_effective_config(
         self,
         project_id: Optional[str],
-        agent_type: AgentType
+        agent_type: "AgentType"  # String annotation to avoid circular import
     ) -> Dict[str, Any]:
         """
         Get the effective configuration for a task after cascading.
