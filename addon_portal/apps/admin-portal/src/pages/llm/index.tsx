@@ -126,7 +126,7 @@ export default function LLMOverview() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              📝 Project & Agent Prompts
+              <span className="text-2xl">📝</span> Project &amp; Agent Prompts
             </h2>
             <button
               onClick={() => router.push('/llm/prompts')}
@@ -179,25 +179,25 @@ export default function LLMOverview() {
             onClick={() => router.push('/llm/configuration')}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            ⚙️ Configuration
+            Configuration
           </button>
           <button
             onClick={() => router.push('/llm/templates')}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
           >
-            📚 Learned Templates
+            Learned Templates
           </button>
           <button
             onClick={() => router.push('/llm/logs')}
             className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
           >
-            📋 Usage Logs
+            Usage Logs
           </button>
           <button
             onClick={() => router.push('/llm/alerts')}
             className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
           >
-            🚨 Alerts ({stats.alerts.length})
+            Alerts ({stats.alerts.length})
           </button>
         </div>
 
