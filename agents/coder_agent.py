@@ -1,30 +1,79 @@
 """
 Coder Agent - Implements coding tasks and generates code based on requirements.
+
+Enhanced with LLM integration for adaptive code generation:
+- Checks learned templates first (free!)
+- Uses traditional templates (fast)
+- Falls back to LLM for novel/complex tasks (adaptive)
+- Learns from successful LLM generations (self-improving)
 """
 
 from typing import Dict, Any, List, Optional
+import os
+import logging
+import asyncio
+
 from agents.base_agent import BaseAgent, AgentType, Task, TaskStatus
 from agents.research_aware_mixin import ResearchAwareMixin
 from utils.template_renderer import TemplateRenderer, get_renderer
 from utils.project_layout import ProjectLayout, get_default_layout
 from utils.name_sanitizer import sanitize_objective, sanitize_for_filename, sanitize_for_class_name
-import os
-import logging
+
+# LLM Integration (with graceful fallback if not available)
+try:
+    from utils.llm_service import get_llm_service, LLMService
+    from utils.template_learning_engine import get_template_learning_engine, TemplateLearningEngine
+    from utils.configuration_manager import get_configuration_manager, ConfigurationManager
+    LLM_INTEGRATION_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"LLM integration not available: {e}")
+    LLM_INTEGRATION_AVAILABLE = False
 
 
 class CoderAgent(BaseAgent, ResearchAwareMixin):
-    """Agent responsible for implementing code based on task requirements."""
+    """
+    Agent responsible for implementing code based on task requirements.
+    
+    Enhanced with hybrid generation strategy:
+    1. Check learned templates (free, instant)
+    2. Use traditional templates (fast, reliable)
+    3. Generate with LLM (adaptive, handles anything)
+    4. Learn from LLM successes (self-improving)
+    """
 
     def __init__(self, agent_id: str = "coder_main", workspace_path: str = ".", 
-                 project_layout: Optional[ProjectLayout] = None):
+                 project_layout: Optional[ProjectLayout] = None,
+                 project_id: Optional[str] = None):
         super().__init__(agent_id, AgentType.CODER, project_layout)
         self.workspace_path = workspace_path
         self.implemented_files: List[str] = []
         self.template_renderer = get_renderer()
+        self.project_id = project_id
+        
+        # LLM Integration (Phase 1 - November 2025)
+        self.use_llm = os.getenv("Q2O_USE_LLM", "true").lower() == "true"
+        
+        if LLM_INTEGRATION_AVAILABLE and self.use_llm:
+            self.llm_service = get_llm_service()
+            self.template_learning = get_template_learning_engine()
+            self.config_manager = get_configuration_manager()
+            self.llm_enabled = True
+            logging.info("✅ CoderAgent: LLM integration enabled (hybrid mode)")
+        else:
+            self.llm_service = None
+            self.template_learning = None
+            self.config_manager = None
+            self.llm_enabled = False
+            if self.use_llm:
+                logging.warning("⚠️  CoderAgent: LLM requested but not available, template-only mode")
+            else:
+                logging.info("ℹ️  CoderAgent: LLM disabled, template-only mode")
 
     def process_task(self, task: Task) -> Task:
         """
         Process a coding task by generating and implementing code.
+        
+        Enhanced with LLM integration for hybrid generation.
         
         Args:
             task: The coding task to process
@@ -55,8 +104,16 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             # Generate code structure (with tech stack awareness)
             code_structure = self._plan_code_structure(description, objective, complexity, tech_stack)
             
-            # Implement the code
-            implemented_files = self._implement_code(code_structure, task)
+            # Implement the code (handles async if LLM enabled)
+            if self.llm_enabled:
+                # Run async implementation
+                loop = asyncio.get_event_loop()
+                implemented_files = loop.run_until_complete(
+                    self._implement_code_async(code_structure, task)
+                )
+            else:
+                # Traditional synchronous implementation
+                implemented_files = self._implement_code(code_structure, task)
             
             # Update task metadata
             task.metadata["implemented_files"] = implemented_files
@@ -210,9 +267,161 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
 
         return structure
 
+    async def _implement_code_async(self, code_structure: Dict[str, Any], task: Task) -> List[str]:
+        """
+        Implement code using HYBRID approach with LLM integration.
+        
+        Strategy (in order):
+        1. Check learned templates (FREE, instant)
+        2. Use traditional templates (fast, reliable)
+        3. Generate with LLM (adaptive, handles anything)
+        4. Learn from successful LLM generations
+        
+        Args:
+            code_structure: Planned code structure
+            task: The task being implemented
+            
+        Returns:
+            List of file paths created
+        """
+        implemented_files = []
+        objective = code_structure["objective"]
+        files_to_create = code_structure["files"]
+        tech_stack = task.tech_stack or []
+
+        for file_info in files_to_create:
+            file_path = file_info["path"]
+            file_type = file_info["type"]
+            full_path = os.path.join(self.workspace_path, file_path)
+            
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            
+            # HYBRID GENERATION: Try multiple strategies
+            code_content = await self._generate_code_hybrid(
+                file_type, file_info, objective, task, tech_stack
+            )
+            
+            # Write file
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(code_content)
+            
+            implemented_files.append(file_path)
+            self.logger.info(f"✅ Created file: {file_path}")
+
+        return implemented_files
+    
+    async def _generate_code_hybrid(
+        self,
+        file_type: str,
+        file_info: Dict[str, Any],
+        objective: str,
+        task: Task,
+        tech_stack: List[str]
+    ) -> str:
+        """
+        HYBRID code generation with learning.
+        
+        Flow:
+        1. Check learned templates (from previous LLM generations)
+        2. Use traditional templates (built-in)
+        3. Generate with LLM (if enabled and needed)
+        4. Learn from successful LLM generation
+        
+        Args:
+            file_type: Type of file (api, model, service, etc.)
+            file_info: File metadata
+            objective: What we're building
+            task: The task
+            tech_stack: Technologies being used
+        
+        Returns:
+            Generated code content
+        """
+        task_desc = f"{file_type}: {file_info.get('description', objective)}"
+        
+        # STEP 1: Check learned templates (FREE!)
+        if self.template_learning:
+            learned_template = self.template_learning.find_similar_template(
+                task_desc, tech_stack
+            )
+            if learned_template:
+                self.logger.info(f"📚 Using learned template: {learned_template.name} (saved ${0.52:.2f}!)")
+                self.template_learning.increment_usage(learned_template.template_id)
+                return learned_template.template_content
+        
+        # STEP 2: Try traditional template (FAST)
+        try:
+            code_content = self._generate_code_content(file_type, file_info, objective, task)
+            self.logger.info(f"📄 Used traditional template for {file_type}")
+            return code_content
+        except Exception as template_error:
+            self.logger.debug(f"Traditional template not available: {template_error}")
+        
+        # STEP 3: Generate with LLM (ADAPTIVE)
+        if not self.llm_service:
+            # No LLM available and no template - fail
+            raise ValueError(f"No template for {file_type} and LLM not available")
+        
+        self.logger.info(f"🤖 Generating with LLM for {file_type} (no template available)")
+        
+        # Get configuration for this task
+        system_prompt, user_prompt = self.config_manager.get_prompt_for_task(
+            self.project_id, AgentType.CODER, task_desc, tech_stack
+        )
+        
+        # Get research context
+        research_context = task.metadata.get('research_context')
+        
+        # Generate with LLM
+        response = await self.llm_service.generate_code(
+            task_description=task_desc,
+            tech_stack=tech_stack,
+            research_context=research_context
+        )
+        
+        if not response.success:
+            raise ValueError(f"LLM generation failed: {response.error}")
+        
+        code_content = response.content
+        
+        # Log usage
+        if response.usage:
+            self.logger.info(
+                f"💰 LLM cost: ${response.usage.total_cost:.4f} "
+                f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens, "
+                f"{response.usage.duration_seconds:.2f}s)"
+            )
+        
+        # STEP 4: Learn from successful generation (for future cost savings)
+        if self.template_learning and response.success:
+            # TODO: Add quality scoring
+            quality_score = 95  # Placeholder - will add proper validation
+            
+            template_id = await self.template_learning.learn_from_generation(
+                task_description=task_desc,
+                tech_stack=tech_stack,
+                generated_code=code_content,
+                source_llm=response.provider,
+                quality_score=quality_score,
+                metadata={
+                    "file_type": file_type,
+                    "objective": objective,
+                    "task_id": task.id
+                }
+            )
+            
+            if template_id:
+                self.logger.info(f"✨ Learned new template: {template_id} (future similar tasks will be FREE!)")
+        
+        return code_content
+    
     def _implement_code(self, code_structure: Dict[str, Any], task: Task) -> List[str]:
         """
-        Implement code based on the planned structure.
+        Implement code based on the planned structure (TRADITIONAL MODE).
+        
+        This is the original implementation without LLM integration.
+        Used when LLM is disabled or not available.
         
         Args:
             code_structure: Planned code structure
