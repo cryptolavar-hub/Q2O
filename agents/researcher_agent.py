@@ -1,6 +1,12 @@
 """
 Researcher Agent - Conducts web research for project objectives and tasks.
 Searches, scrapes, and synthesizes information from the web to assist other agents.
+
+Enhanced with LLM synthesis (Phase 2 - November 2025):
+- Intelligently synthesizes research findings using LLM
+- Extracts actionable insights from web research
+- Identifies patterns, best practices, and recommendations
+- Falls back to basic synthesis if LLM unavailable
 """
 
 from typing import Dict, Any, List, Optional, Set
@@ -11,9 +17,19 @@ import json
 import logging
 import time
 import hashlib
+import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 import re
+
+# LLM Integration (Phase 2 - with graceful fallback)
+try:
+    from utils.llm_service import get_llm_service, LLMService
+    from utils.configuration_manager import get_configuration_manager, ConfigurationManager
+    LLM_INTEGRATION_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"LLM integration not available for ResearcherAgent: {e}")
+    LLM_INTEGRATION_AVAILABLE = False
 
 
 class ResearchCache:
@@ -353,13 +369,22 @@ class WebSearcher:
 
 
 class ResearcherAgent(BaseAgent):
-    """Agent responsible for conducting web research to assist other agents."""
+    """
+    Agent responsible for conducting web research to assist other agents.
+    
+    Enhanced with LLM synthesis (Phase 2):
+    - Intelligently synthesizes research findings
+    - Extracts actionable insights and recommendations
+    - Identifies patterns and best practices
+    """
     
     def __init__(self, agent_id: str = "researcher_main", workspace_path: str = ".",
-                 project_layout: Optional[ProjectLayout] = None):
+                 project_layout: Optional[ProjectLayout] = None,
+                 project_id: Optional[str] = None):
         super().__init__(agent_id, AgentType.RESEARCHER, project_layout)
         self.workspace_path = workspace_path
         self.research_files: List[str] = []
+        self.project_id = project_id
         
         # Initialize research cache (shared across projects)
         cache_dir = os.path.expanduser("~/.quickodoo/research_cache")
@@ -374,6 +399,23 @@ class ResearcherAgent(BaseAgent):
         
         # Track research requests
         self.research_requests: Dict[str, Dict] = {}
+        
+        # LLM Integration (Phase 2 - November 2025)
+        self.use_llm = os.getenv("Q2O_USE_LLM", "true").lower() == "true"
+        
+        if LLM_INTEGRATION_AVAILABLE and self.use_llm:
+            self.llm_service = get_llm_service()
+            self.config_manager = get_configuration_manager()
+            self.llm_enabled = True
+            logging.info("✅ ResearcherAgent: LLM synthesis enabled")
+        else:
+            self.llm_service = None
+            self.config_manager = None
+            self.llm_enabled = False
+            if self.use_llm:
+                logging.warning("⚠️  ResearcherAgent: LLM requested but not available, basic synthesis only")
+            else:
+                logging.info("ℹ️  ResearcherAgent: LLM disabled, basic synthesis only")
         
         # Subscribe to research channel for agent requests
         if hasattr(self, 'message_broker') and self.message_broker:
@@ -850,7 +892,10 @@ class ResearcherAgent(BaseAgent):
     
     def _synthesize_findings(self, research_results: Dict, query: str) -> List[str]:
         """
-        Synthesize key findings from research.
+        Synthesize key findings from research (ENHANCED with LLM).
+        
+        Uses LLM to intelligently analyze and synthesize research findings.
+        Falls back to basic synthesis if LLM unavailable.
         
         Args:
             research_results: Research results
@@ -858,6 +903,138 @@ class ResearcherAgent(BaseAgent):
             
         Returns:
             List of key findings
+        """
+        # Try LLM synthesis first (if enabled)
+        if self.llm_enabled:
+            try:
+                loop = asyncio.get_event_loop()
+                llm_findings = loop.run_until_complete(
+                    self._synthesize_findings_with_llm(research_results, query)
+                )
+                if llm_findings:
+                    self.logger.info(f"🤖 LLM synthesis: {len(llm_findings)} insights generated")
+                    return llm_findings
+            except Exception as e:
+                self.logger.warning(f"LLM synthesis failed, using basic synthesis: {e}")
+        
+        # Fallback to basic synthesis
+        return self._synthesize_findings_basic(research_results, query)
+    
+    async def _synthesize_findings_with_llm(self, research_results: Dict, query: str) -> List[str]:
+        """
+        Use LLM to intelligently synthesize research findings.
+        
+        This is WHERE THE MAGIC HAPPENS - LLM reads all research and extracts
+        actionable insights, patterns, best practices, and recommendations.
+        
+        Args:
+            research_results: Research results with search results, docs, code examples
+            query: Original research query
+        
+        Returns:
+            List of synthesized insights (5-10 actionable findings)
+        """
+        if not self.llm_service:
+            return []
+        
+        # Prepare research data for LLM
+        search_snippets = []
+        for idx, result in enumerate(research_results.get('search_results', [])[:10], 1):
+            search_snippets.append(f"{idx}. {result.get('title', 'Untitled')}\n   {result.get('snippet', '')}\n   Source: {result.get('url', '')}")
+        
+        docs_list = research_results.get('documentation_urls', [])
+        code_examples_list = research_results.get('code_examples', [])
+        
+        # Build comprehensive prompt
+        system_prompt = """You are a senior software architect analyzing research findings.
+
+Your task: Synthesize research results into actionable insights for developers.
+
+Extract:
+1. Key capabilities and features
+2. Best practices and recommended approaches
+3. Common pitfalls and gotchas to avoid
+4. Implementation patterns
+5. Integration requirements (auth, APIs, data formats)
+6. Performance and security considerations
+
+Return 5-10 concise, actionable insights as a JSON array:
+{
+  "insights": [
+    "Insight 1: Brief, specific, actionable finding",
+    "Insight 2: Another finding with specifics",
+    ...
+  ]
+}
+
+Be specific. Avoid vague statements. Focus on what developers NEED to know."""
+        
+        user_prompt = f"""Research Query: {query}
+
+Search Results:
+{chr(10).join(search_snippets)}
+
+Official Documentation: {len(docs_list)} sources found
+{chr(10).join([f"- {url}" for url in docs_list[:5]])}
+
+Code Examples Found: {len(code_examples_list)}
+
+Please synthesize these findings into 5-10 actionable insights."""
+        
+        # Generate synthesis with LLM
+        response = await self.llm_service.complete(
+            system_prompt,
+            user_prompt,
+            temperature=0.3,  # Lower for analytical synthesis
+            max_tokens=1024
+        )
+        
+        if not response.success:
+            self.logger.warning(f"LLM synthesis failed: {response.error}")
+            return []
+        
+        # Parse JSON response
+        try:
+            import json
+            content = response.content
+            
+            # Extract JSON if wrapped in markdown
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0]
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0]
+            
+            result = json.loads(content.strip())
+            insights = result.get('insights', [])
+            
+            # Log LLM usage
+            if response.usage:
+                self.logger.info(
+                    f"💰 LLM synthesis cost: ${response.usage.total_cost:.4f} "
+                    f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens)"
+                )
+            
+            return insights
+            
+        except Exception as e:
+            self.logger.error(f"Failed to parse LLM synthesis: {e}")
+            # Try to extract insights from plain text if JSON parsing fails
+            lines = response.content.split('\n')
+            insights = [line.strip() for line in lines if line.strip() and len(line.strip()) > 20]
+            return insights[:10] if insights else []
+    
+    def _synthesize_findings_basic(self, research_results: Dict, query: str) -> List[str]:
+        """
+        Basic synthesis (fallback when LLM unavailable).
+        
+        Simple keyword-based analysis.
+        
+        Args:
+            research_results: Research results
+            query: Original query
+            
+        Returns:
+            List of basic findings
         """
         findings = []
         
