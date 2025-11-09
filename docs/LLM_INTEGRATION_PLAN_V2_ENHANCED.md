@@ -380,24 +380,16 @@ class TemplateLearningEngine:
         row = cursor.fetchone()
         conn.close()
         
-        # Handle empty table (aggregates return None)
-        total_templates = row[0] or 0
-        total_uses = row[1] or 0
-        avg_quality = row[2] or 0.0
-        from_gemini = row[3] or 0
-        from_gpt4 = row[4] or 0
-        from_claude = row[5] or 0
-        
         return {
-            "total_templates": total_templates,
-            "total_uses": total_uses,
-            "avg_quality": round(avg_quality, 1),
+            "total_templates": row[0],
+            "total_uses": row[1],
+            "avg_quality": row[2],
             "by_source": {
-                "gemini": from_gemini,
-                "gpt4": from_gpt4,
-                "claude": from_claude
+                "gemini": row[3],
+                "gpt4": row[4],
+                "claude": row[5]
             },
-            "cost_saved": round(total_uses * 0.52, 2)  # Uses × avg Gemini cost saved
+            "cost_saved": row[1] * 0.52  # Uses × avg Gemini cost saved
         }
 ```
 
