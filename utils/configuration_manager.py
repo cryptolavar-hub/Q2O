@@ -441,7 +441,7 @@ Generate complete, production-ready implementation."""
     def set_agent_override(
         self,
         project_id: str,
-        agent_type: AgentType,
+        agent_type: "AgentType",  # String annotation to avoid circular import
         provider: Optional[str] = None,
         custom_instructions: Optional[str] = None,
         temperature: Optional[float] = None
@@ -548,7 +548,7 @@ Generate complete, production-ready implementation."""
             "cascade_path": self._get_cascade_path(project_id, agent_type)
         }
     
-    def _get_cascade_path(self, project_id: Optional[str], agent_type: AgentType) -> List[str]:
+    def _get_cascade_path(self, project_id: Optional[str], agent_type: "AgentType") -> List[str]:
         """Get the configuration cascade path for debugging."""
         path = ["system"]
         
