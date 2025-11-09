@@ -59,8 +59,8 @@ async def main():
         print("See QUICK_LLM_SETUP.md for instructions")
         return
     
-    print("✅ LLM Integration: ACTIVE")
-    print(f"✅ API Keys: Configured")
+    print("[OK] LLM Integration: ACTIVE")
+    print(f"[OK] API Keys: Configured")
     print()
     
     # Create output directory
@@ -103,7 +103,7 @@ async def main():
     
     tasks = orchestrator.break_down_project(project_description, objectives)
     
-    print(f"✅ Created {len(tasks)} tasks")
+    print(f"[OK] Created {len(tasks)} tasks")
     print()
     print("Task Breakdown:")
     for idx, task in enumerate(tasks, 1):
@@ -130,13 +130,13 @@ async def main():
         )
         
         for research_task in research_tasks[:1]:  # Just first one for demo
-            print(f"🔍 Researching: {research_task.title}")
+            print(f"[RESEARCH] Researching: {research_task.title}")
             print()
             
             result_task = researcher.process_task(research_task)
             
             if result_task.result:
-                print(f"✅ Research complete!")
+                print(f"[OK] Research complete!")
                 print(f"   Confidence: {result_task.result.get('confidence_score', 0)}/100")
                 print(f"   Results: {result_task.result.get('results_count', 0)} sources")
                 print()
@@ -144,7 +144,7 @@ async def main():
                 # Show key findings (LLM-synthesized insights!)
                 findings = result_task.result.get('key_findings', [])
                 if findings:
-                    print("📊 Key Insights (LLM Synthesis):")
+                    print("[INSIGHTS] Key Insights (LLM Synthesis):")
                     for idx, finding in enumerate(findings[:5], 1):
                         print(f"   {idx}. {finding}")
                     print()
@@ -167,17 +167,17 @@ async def main():
             project_id="sage_netsuite_odoo"
         )
         
-        print(f"🤖 Generating code for {len(coder_tasks)} implementation tasks...")
+        print(f"[GENERATE] Generating code for {len(coder_tasks)} implementation tasks...")
         print()
         
         for coder_task in coder_tasks[:2]:  # First 2 for demo
-            print(f"💻 Generating: {coder_task.title}")
+            print(f"[CODING] Generating: {coder_task.title}")
             
             result_task = coder.process_task(coder_task)
             
             if result_task.result:
                 files_created = result_task.result.get('files_created', [])
-                print(f"   ✅ Created {len(files_created)} files")
+                print(f"   [OK] Created {len(files_created)} files")
                 
                 for file in files_created:
                     file_path = output_dir / "code" / file
@@ -193,14 +193,14 @@ async def main():
     print("MIGRATION PROJECT GENERATION COMPLETE!")
     print("=" * 80)
     print()
-    print("📊 Summary:")
+    print("[SUMMARY] Summary:")
     print(f"   Total Tasks: {len(tasks)}")
     print(f"   Research Tasks: {len([t for t in tasks if t.agent_type == AgentType.RESEARCHER])}")
     print(f"   Implementation Tasks: {len([t for t in tasks if t.agent_type == AgentType.CODER])}")
     print(f"   Testing Tasks: {len([t for t in tasks if t.agent_type == AgentType.TESTING])}")
     print(f"   QA Tasks: {len([t for t in tasks if t.agent_type == AgentType.QA])}")
     print()
-    print("📁 Generated Files:")
+    print("[FILES] Generated Files:")
     
     # List all generated files
     code_dir = output_dir / "code"
@@ -218,21 +218,21 @@ async def main():
         print(f"   {rel_path} ({size:,} bytes)")
     
     print()
-    print(f"📂 Full Output: {output_dir}")
+    print(f"[OUTPUT] Full Output: {output_dir}")
     print()
     print("=" * 80)
-    print("🎉 SUCCESS! Q2O generated a complete migration system!")
+    print("[SUCCESS] Q2O generated a complete migration system!")
     print("=" * 80)
     print()
     print("What was generated:")
-    print("  ✅ Intelligent research insights (not keywords!)")
-    print("  ✅ NetSuite API integration code")
-    print("  ✅ Odoo data import logic")
-    print("  ✅ Data mapping and transformation")
-    print("  ✅ Migration orchestration")
-    print("  ✅ All with LLM-enhanced quality")
+    print("  [OK] Intelligent research insights (not keywords!)")
+    print("  [OK] NetSuite API integration code")
+    print("  [OK] Odoo data import logic")
+    print("  [OK] Data mapping and transformation")
+    print("  [OK] Migration orchestration")
+    print("  [OK] All with LLM-enhanced quality")
     print()
-    print("💰 Cost Tracking:")
+    print("[COSTS] Cost Tracking:")
     print("  Check llm_costs.db for detailed usage")
     print("  Check learned_templates.db for templates created")
     print()
@@ -242,7 +242,7 @@ async def main():
     print("  3. Run tests (TestingAgent will generate these)")
     print("  4. Deploy to production")
     print()
-    print("🚀 Q2O: From idea to production code in minutes!")
+    print("[Q2O] From idea to production code in minutes!")
     print()
 
 

@@ -57,7 +57,7 @@ async def main():
     output_dir = Path(__file__).parent / "output" / project_name
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    print(f"📁 Output Directory: {output_dir}")
+    print(f"[OUTPUT] Output Directory: {output_dir}")
     print()
     
     # ========================================================================
@@ -67,7 +67,7 @@ async def main():
     print("GENERATING MOBILE APP")
     print("=" * 80)
     print()
-    print("🤖 Initializing MobileAgent...")
+    print("[INIT] Initializing MobileAgent...")
     print()
     
     mobile = MobileAgent(
@@ -77,11 +77,11 @@ async def main():
     )
     
     if mobile.llm_enabled:
-        print("   ✅ LLM Integration: ACTIVE")
-        print("   ✅ Hybrid Generation: Enabled")
-        print("   ✅ Template Learning: Ready")
+        print("   [OK] LLM Integration: ACTIVE")
+        print("   [OK] Hybrid Generation: Enabled")
+        print("   [OK] Template Learning: Ready")
     else:
-        print("   ℹ️  LLM Integration: Disabled (templates only)")
+        print("   [INFO] LLM Integration: Disabled (templates only)")
     
     print()
     
@@ -96,7 +96,7 @@ async def main():
         "Notifications"
     ]
     
-    print(f"📱 App Features: {len(features)} screens")
+    print(f"[FEATURES] App Features: {len(features)} screens")
     for idx, feature in enumerate(features, 1):
         print(f"   {idx}. {feature}")
     print()
@@ -137,7 +137,7 @@ async def main():
         }
     )
     
-    print("💻 Generating mobile app...")
+    print("[GENERATE] Generating mobile app...")
     print()
     
     # Process the task
@@ -156,7 +156,7 @@ async def main():
         files_created = result_task.result.get("files_created", [])
         platforms = result_task.result.get("platforms", [])
         
-        print("📊 Summary:")
+        print("[SUMMARY] Summary:")
         print(f"   Status: {result_task.result.get('status', 'unknown')}")
         print(f"   Files Generated: {len(files_created)}")
         print(f"   Platforms: {', '.join(platforms)}")
@@ -170,7 +170,7 @@ async def main():
         config = [f for f in files_created if 'package.json' in f or 'tsconfig' in f or 'Info.plist' in f or 'Manifest' in f]
         other = [f for f in files_created if f not in screens + components + navigation + config]
         
-        print("📁 Generated Files by Category:")
+        print("[FILES] Generated Files by Category:")
         print()
         
         if screens:
@@ -225,31 +225,31 @@ async def main():
     
     print()
     print("=" * 80)
-    print("🎉 SUCCESS! Q2O generated a complete React Native mobile app!")
+    print("[SUCCESS] Q2O generated a complete React Native mobile app!")
     print("=" * 80)
     print()
     print("What was generated:")
-    print("  ✅ Complete React Native project structure")
-    print("  ✅ Authentication screens (Login, Register, Password Reset)")
-    print("  ✅ Main app screens (Home, Profile, Settings, Notifications)")
-    print("  ✅ Navigation setup with React Navigation")
-    print("  ✅ TypeScript configuration")
-    print("  ✅ Platform-specific configs (iOS Info.plist, Android Manifest)")
-    print("  ✅ Package.json with dependencies")
+    print("  [OK] Complete React Native project structure")
+    print("  [OK] Authentication screens (Login, Register, Password Reset)")
+    print("  [OK] Main app screens (Home, Profile, Settings, Notifications)")
+    print("  [OK] Navigation setup with React Navigation")
+    print("  [OK] TypeScript configuration")
+    print("  [OK] Platform-specific configs (iOS Info.plist, Android Manifest)")
+    print("  [OK] Package.json with dependencies")
     print()
     
     if mobile.llm_enabled:
-        print("💡 LLM Enhancement:")
+        print("[LLM] LLM Enhancement:")
         print("  - Intelligent code generation for complex features")
         print("  - Templates learned and saved for future apps")
         print("  - Next similar app will be faster and cheaper!")
         print()
-        print("💰 Cost Tracking:")
+        print("[COSTS] Cost Tracking:")
         print("  Check llm_costs.db for detailed usage")
         print("  Check learned_templates.db for mobile templates created")
         print()
     
-    print(f"📂 Full Output: {output_dir}")
+    print(f"[OUTPUT] Full Output: {output_dir}")
     print()
     print("Next Steps:")
     print("  1. cd into output directory")
@@ -257,7 +257,7 @@ async def main():
     print("  3. Run: npm run ios (or npm run android)")
     print("  4. Customize the generated code for your needs")
     print()
-    print("🚀 Q2O: From idea to mobile app in minutes!")
+    print("[Q2O] From idea to mobile app in minutes!")
     print()
 
 
