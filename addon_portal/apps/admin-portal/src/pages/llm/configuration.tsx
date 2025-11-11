@@ -48,28 +48,30 @@ export default function ConfigureLLM() {
 
   const fetchConfiguration = async () => {
     try {
-      // Fetch API keys
-      const keysRes = await fetch('/api/llm/config');
+      // Fetch system configuration from new DB-backed endpoint
+      const keysRes = await fetch('/api/llm/system');
       if (keysRes.ok) {
         const data = await keysRes.json();
+        
+        // API keys are read from environment, displayed in system config
         const keys: APIKey[] = [
           {
             provider: 'gemini',
             name: 'Google Gemini Pro',
-            key: data.providers?.gemini?.apiKey || 'Not configured',
-            enabled: data.providers?.gemini?.enabled || false
+            key: 'Configured via .env',  // API keys not exposed in API response
+            enabled: data.primaryProvider === 'gemini' || data.secondaryProvider === 'gemini' || data.tertiaryProvider === 'gemini'
           },
           {
             provider: 'openai',
             name: 'OpenAI GPT-4',
-            key: data.providers?.openai?.apiKey || 'Not configured',
-            enabled: data.providers?.openai?.enabled || false
+            key: 'Configured via .env',
+            enabled: data.primaryProvider === 'openai' || data.secondaryProvider === 'openai' || data.tertiaryProvider === 'openai'
           },
           {
             provider: 'anthropic',
             name: 'Anthropic Claude',
-            key: data.providers?.anthropic?.apiKey || 'Not configured',
-            enabled: data.providers?.anthropic?.enabled || false
+            key: 'Configured via .env',
+            enabled: data.primaryProvider === 'anthropic' || data.secondaryProvider === 'anthropic' || data.tertiaryProvider === 'anthropic'
           }
         ];
         setApiKeys(keys);
@@ -83,18 +85,18 @@ export default function ConfigureLLM() {
       }
 
       // Fetch project prompts from database
-      const promptsRes = await fetch('/api/llm/project-prompts');
+      const promptsRes = await fetch('/api/llm/projects');
       if (promptsRes.ok) {
         const promptsData = await promptsRes.json();
-        const formattedPrompts: ProjectPrompt[] = promptsData.projects.map((p: any) => ({
-          id: p.id.toString(),
-          projectName: p.projectName,
-          tenantName: p.tenantName,
-          label: p.label,
-          projectPrompt: p.projectPrompt,
-          agentPrompts: p.agentPrompts.map((a: any) => ({
+        const formattedPrompts: ProjectPrompt[] = (promptsData.items || []).map((p: any) => ({
+          id: p.projectId || p.id?.toString() || '',
+          projectName: p.clientName || p.projectName || 'Unknown Project',
+          tenantName: p.clientName || p.tenantName || '',
+          label: p.description || p.label || '',
+          projectPrompt: p.customInstructions || p.projectPrompt || '',
+          agentPrompts: (p.agentPrompts || []).map((a: any) => ({
             agentType: a.agentType,
-            prompt: a.prompt
+            prompt: a.customPrompt || a.prompt || ''
           }))
         }));
         setProjectPrompts(formattedPrompts);

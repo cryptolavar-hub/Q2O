@@ -85,7 +85,7 @@ export default function CodesPage() {
   const handleRevokeCode = async (code: ActivationCode) => {
     if (confirm(`Are you sure you want to revoke code ${code.code}? This action cannot be undone.`)) {
       try {
-        await revokeCode(code.tenant, code.code || '');
+        await revokeCode(code.id);
         await loadCodes(); // Reload codes list
         alert('Code revoked successfully');
       } catch (error) {

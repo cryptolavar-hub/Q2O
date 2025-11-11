@@ -82,28 +82,21 @@ export interface TenantQueryParams {
 // Generate activation codes
 export async function generateCodes(data: GenerateCodesRequest): Promise<string[]> {
   try {
-    const formData = new URLSearchParams();
-    formData.append('tenant_slug', data.tenant_slug);
-    formData.append('count', data.count.toString());
-    if (data.ttl_days) formData.append('ttl_days', data.ttl_days.toString());
-    if (data.label) formData.append('label', data.label);
-    if (data.max_uses) formData.append('max_uses', data.max_uses.toString());
-
-    const response = await fetch(`${API_BASE}/admin/codes/generate`, {
+    const response = await fetch(`${API_BASE}/admin/api/codes/generate`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
       },
-      body: formData.toString(),
+      body: JSON.stringify(data),
     });
 
-    if (response.ok && response.redirected) {
-      const url = new URL(response.url);
-      const created = url.searchParams.get('created');
-      return created ? created.split(',') : [];
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+      throw new Error(errorData.detail || `Failed to generate codes: ${response.statusText}`);
     }
-    
-    throw new Error('Failed to generate codes');
+
+    const responseData = await response.json();
+    return responseData.codes || [];
   } catch (error) {
     console.error('Error generating codes:', error);
     throw error;
@@ -161,18 +154,15 @@ export async function getTenants(params: TenantQueryParams = {}): Promise<Tenant
 }
 
 // Revoke activation code
-export async function revokeCode(tenantSlug: string, code: string): Promise<void> {
-  const formData = new URLSearchParams();
-  formData.append('tenant_slug', tenantSlug);
-  formData.append('code_plain', code);
-
-  await fetch(`${API_BASE}/admin/codes/revoke`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: formData.toString(),
+export async function revokeCode(codeId: number): Promise<void> {
+  const response = await fetch(`${API_BASE}/admin/api/codes/${codeId}`, {
+    method: 'DELETE',
   });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(errorData.detail || `Failed to revoke code: ${response.statusText}`);
+  }
 }
 
 // Revoke device
