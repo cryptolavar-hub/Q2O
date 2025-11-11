@@ -10,42 +10,36 @@ echo   COMMITTING API BUG FIXES AND LLM PROMPTS
 echo ================================================
 echo.
 
-REM Stage critical bug fixes
-echo [1/5] Staging API bug fixes...
-git add addon_portal/apps/admin-portal/src/lib/api.ts
-git add addon_portal/apps/admin-portal/src/pages/codes.tsx
-git add addon_portal/apps/admin-portal/src/pages/llm/configuration.tsx
-
-REM Stage LLM prompts page rewrite
-echo [2/5] Staging LLM prompts page rewrite...
-git add addon_portal/apps/admin-portal/src/pages/llm/prompts.tsx
-
-REM Stage documentation
-echo [3/5] Staging documentation...
-git add API_BUGS_FIXED.md
-git add LLM_PROMPTS_PAGE_COMPLETE.md
-git add SESSION_UPDATE_LLM_PROMPTS.md
-git add COMMIT_LLM_PROMPTS_AND_BUGS.bat
-
-REM Stage any other related files (if they exist)
-echo [4/5] Checking for other modified files...
-git add addon_portal/apps/admin-portal/src/pages/llm/prompts.tsx 2>nul
-
-echo.
-echo [5/5] All files staged!
-echo.
-
-REM Show what will be committed
-echo ================================================
-echo   FILES TO BE COMMITTED:
-echo ================================================
+REM Show current status first
+echo [INFO] Current git status:
 git status --short
 echo.
 
+REM Stage all modified and new files
+echo [1/3] Staging all changes...
+git add -A
+
+REM Show what will be committed
+echo.
+echo [2/3] Files staged for commit:
+git status --short
+echo.
+
+REM Check if there are any changes to commit
+git diff --cached --quiet
+if %ERRORLEVEL% EQU 0 (
+    echo ================================================
+    echo   NO CHANGES TO COMMIT!
+    echo ================================================
+    echo.
+    echo All files are already committed or there are no changes.
+    echo.
+    pause
+    exit /b 0
+)
+
 REM Commit with detailed message
-echo ================================================
-echo   CREATING COMMIT...
-echo ================================================
+echo [3/3] Creating commit...
 echo.
 
 git commit -m "Fix critical API bugs and complete LLM prompts page rewrite" ^
@@ -54,6 +48,7 @@ git commit -m "Fix critical API bugs and complete LLM prompts page rewrite" ^
   -m "- Fixed code revocation to use DELETE with code_id parameter" ^
   -m "- Fixed LLM config to use /api/llm/system and /api/llm/projects endpoints" ^
   -m "- Updated codes page to pass code.id for revocation" ^
+  -m "- Fixed .gitignore to allow TypeScript lib directories" ^
   -m "" ^
   -m "LLM Prompts Page:" ^
   -m "- Complete rewrite with database integration (650+ lines)" ^
@@ -62,10 +57,15 @@ git commit -m "Fix critical API bugs and complete LLM prompts page rewrite" ^
   -m "- Modern UI with design system components (Card, Button)" ^
   -m "- Proper error handling and validation" ^
   -m "" ^
+  -m "Backend:" ^
+  -m "- Updated admin_api.py with proper exception handling" ^
+  -m "- Fixed ActivationCode.revoked_at field usage" ^
+  -m "" ^
   -m "Documentation:" ^
   -m "- Added comprehensive bug fix documentation" ^
   -m "- Added LLM prompts page implementation summary" ^
-  -m "- Added session update documentation"
+  -m "- Added session update documentation" ^
+  -m "- Added commit helper scripts"
 
 if %ERRORLEVEL% EQU 0 (
     echo.
@@ -87,13 +87,14 @@ if %ERRORLEVEL% EQU 0 (
     echo   COMMIT FAILED! ✗
     echo ================================================
     echo.
+    echo Error code: %ERRORLEVEL%
+    echo.
     echo Possible reasons:
-    echo - No changes to commit (all files already committed)
     echo - Git configuration issue
+    echo - No changes to commit (already committed)
     echo.
     echo Check status: git status
     echo.
 )
 
 pause
-

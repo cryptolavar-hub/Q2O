@@ -319,7 +319,7 @@ async def generate_codes_json(data: ActivationCodeGenerate, db: Session = Depend
             expires_at=expires_at,
             max_uses=data.max_uses,
             use_count=0,
-            revoked=False
+            revoked_at=None
         )
         
         db.add(new_code)
