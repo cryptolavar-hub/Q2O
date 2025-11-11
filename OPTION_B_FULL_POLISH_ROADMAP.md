@@ -54,8 +54,8 @@ By the end of this roadmap:
 - [ ] Update SESSION SUMMARY to confirm breadcrumbs implemented
 
 **Task 1.2: Resolve Dependency Conflicts** ⏱️ 1-2 hours
-- [ ] Check current `requirements.txt`
-- [ ] Add missing critical dependencies:
+- [x] Check current `requirements.txt`
+- [x] Add missing critical dependencies:
   ```bash
   pyjwt>=2.8.0,<3.0.0
   cryptography>=41.0.0,<42.0.0
@@ -63,9 +63,9 @@ By the end of this roadmap:
   python-multipart>=0.0.6,<0.1.0
   ```
 - [ ] Test Stripe v9 compatibility with addon code
-- [ ] Update Pydantic range: `pydantic>=2.7.1,<3.0.0`
-- [ ] Run `pip install -r requirements.txt` and verify no conflicts
-- [ ] Test all services start successfully
+- [x] Update Pydantic range: `pydantic>=2.7.1,<3.0.0`
+- [ ] Run `pip install -r requirements.txt` and verify no conflicts *(planned during backend test pass)*
+- [ ] Test all services start successfully *(scheduled with Day 1 evening smoke tests)*
 
 #### Afternoon Session (4 hours)
 **Task 1.3: Design System Foundation** ⏱️ 3-4 hours

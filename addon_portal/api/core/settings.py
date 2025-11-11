@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # Database Configuration
     # Default: SQLite for development (no server required, zero setup)
-    # Production: Set DB_DSN in .env to: postgresql+psycopg2://q2o_user:password@localhost:5432/q2o
+    # Production: Set DB_DSN in .env to: postgresql+psycopg://q2o_user:password@localhost:5432/q2o
     # 
     # SQLite pros: Zero setup, perfect for development/testing
     # PostgreSQL pros: Production-grade, concurrent users, scalability, ACID compliance

@@ -8,7 +8,7 @@
 ## Quick start
 1. Install FastAPI deps:
    ```bash
-   pip install fastapi uvicorn sqlalchemy psycopg2-binary alembic pydantic stripe pyjwt Authlib Jinja2
+   pip install fastapi uvicorn sqlalchemy psycopg alembic "pydantic>=2.7.1,<3" "stripe>=7,<10" pyjwt Authlib Jinja2 python-multipart cryptography
    ```
 2. Configure `.env` (see `api/core/settings.py` for keys).
 3. Run app:
