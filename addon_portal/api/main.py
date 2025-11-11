@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from .core.settings import settings
+from .core.exceptions import register_exception_handlers
 from .routers import authz, licenses, billing_stripe, admin_pages, auth_sso, usage, llm_management, admin_api
 
 app = FastAPI(title=f"{settings.APP_NAME} Licensing Service")
@@ -16,6 +17,8 @@ app.add_middleware(
 )
 
 app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
+
+register_exception_handlers(app)
 
 app.include_router(authz.router)
 app.include_router(licenses.router)

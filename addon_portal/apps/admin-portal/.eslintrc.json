@@ -1,0 +1,16 @@
+{
+  "\u0024schema": "https://json.schemastore.org/eslintrc",
+  "extends": ["next/core-web-vitals", "eslint:recommended"],
+  "plugins": ["import"],
+  "rules": {
+    "react/jsx-sort-props": ["warn", {"callbacksLast": true, "shorthandFirst": true, "ignoreCase": true}],
+    "import/order": [
+      "warn",
+      {
+        "newlines-between": "always",
+        "alphabetize": {"order": "asc", "caseInsensitive": true},
+        "groups": [["builtin", "external"], ["internal"], ["parent", "sibling", "index"]]
+      }
+    ]
+  }
+}

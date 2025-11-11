@@ -1,403 +1,487 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Navigation } from '../components/Navigation';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
+import { Breadcrumb } from '@/components/Breadcrumb';
+import { Navigation } from '@/components/Navigation';
+import { Badge, Button, Card } from '@/design-system';
 import { AdminHeader } from '../components/AdminHeader';
-import { Breadcrumb } from '../components/Breadcrumb';
-import { getTenants, addTenant, editTenant, type Tenant, type AddTenantRequest, type EditTenantRequest } from '../lib/api';
+import {
+  addTenant,
+  editTenant,
+  getTenants,
+  type AddTenantRequest,
+  type EditTenantRequest,
+  type Tenant,
+  type TenantPage,
+  type TenantQueryParams,
+} from '../lib/api';
+
+const STATUS_LABELS: Record<string, string> = {
+  active: 'Active',
+  trialing: 'Trialing',
+  past_due: 'Past Due',
+  canceled: 'Canceled',
+  unpaid: 'Unpaid',
+  suspended: 'Suspended',
+  none: 'No Subscription',
+};
+
+const STATUS_BADGE_VARIANT: Record<string, { className: string; label: string }> = {
+  active: { className: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Active' },
+  trialing: { className: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Trialing' },
+  past_due: { className: 'bg-amber-100 text-amber-700 border-amber-200', label: 'Past Due' },
+  canceled: { className: 'bg-gray-100 text-gray-600 border-gray-200', label: 'Canceled' },
+  unpaid: { className: 'bg-rose-100 text-rose-700 border-rose-200', label: 'Unpaid' },
+  suspended: { className: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Suspended' },
+  none: { className: 'bg-slate-100 text-slate-600 border-slate-200', label: 'No Subscription' },
+};
+
+const PLAN_OPTIONS = [
+  { value: 'Starter', label: 'Starter · 10 migrations / month' },
+  { value: 'Professional', label: 'Professional · 50 migrations / month' },
+  { value: 'Enterprise', label: 'Enterprise · 200 migrations / month' },
+];
+
+interface ModalState {
+  visible: boolean;
+  mode: 'create' | 'edit';
+}
+
+function formatStatus(status: string | null | undefined): { className: string; label: string } {
+  if (!status) {
+    return STATUS_BADGE_VARIANT.none;
+  }
+  return STATUS_BADGE_VARIANT[status] ?? STATUS_BADGE_VARIANT.none;
+}
+
+function calculateUsagePercentage(usage: number, quota: number): number {
+  if (quota <= 0) {
+    return 0;
+  }
+  return Math.min(100, Math.round((usage / quota) * 100));
+}
 
 export default function TenantsPage() {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [tenantPage, setTenantPage] = useState<TenantPage | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [modalState, setModalState] = useState<ModalState>({ visible: false, mode: 'create' });
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
 
-  useEffect(() => {
-    loadTenants();
+  const loadTenants = useCallback(async (params: TenantQueryParams) => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      const response = await getTenants(params);
+      setTenantPage(response);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to load tenants.');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const loadTenants = async () => {
-    try {
-      const data = await getTenants();
-      setTenants(data);
-    } catch (error) {
-      console.error('Error loading tenants:', error);
-    }
-  };
+  useEffect(() => {
+    void loadTenants({
+      page,
+      pageSize,
+      search: searchTerm || undefined,
+      status: selectedStatus || undefined,
+      sortField: 'created_at',
+      sortDirection: 'desc',
+    });
+  }, [page, pageSize, searchTerm, selectedStatus, loadTenants]);
 
-  const handleAddTenant = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    
-    try {
-      const tenantData: AddTenantRequest = {
-        name: formData.get('name') as string,
-        slug: formData.get('slug') as string,
-        logo_url: formData.get('logo_url') as string || undefined,
-        primary_color: formData.get('primary_color') as string || '#875A7B',
-        domain: formData.get('domain') as string || undefined,
-        subscription_plan: formData.get('subscription_plan') as string || 'Starter',
-        usage_quota: parseInt(formData.get('usage_quota') as string) || 10,
+  const paginationTotalPages = useMemo(() => {
+    if (!tenantPage) {
+      return 1;
+    }
+    return Math.max(1, Math.ceil(tenantPage.total / tenantPage.pageSize));
+  }, [tenantPage]);
+
+  const resetModalState = useCallback(() => {
+    setModalState({ visible: false, mode: 'create' });
+    setSelectedTenant(null);
+  }, []);
+
+  const handleAddTenant = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const formData = new FormData(form);
+
+      const payload: AddTenantRequest = {
+        name: (formData.get('name') as string).trim(),
+        slug: (formData.get('slug') as string).trim(),
+        logoUrl: (formData.get('logoUrl') as string | null) || undefined,
+        primaryColor: (formData.get('primaryColor') as string | null) || '#875A7B',
+        domain: (formData.get('domain') as string | null)?.trim() || undefined,
+        subscriptionPlan: (formData.get('subscriptionPlan') as string) || 'Starter',
+        usageQuota: Number(formData.get('usageQuota')) || 10,
       };
-      
-      await addTenant(tenantData);
-      setShowAddModal(false);
-      await loadTenants(); // Reload to show new tenant
-      alert('✅ Tenant created successfully!');
-    } catch (error) {
-      alert(`❌ Failed to create tenant: ${error}`);
-    }
-  };
 
-  const handleEditTenant = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    
-    if (!selectedTenant) return;
-    
-    try {
-      const updateData: EditTenantRequest = {
-        name: formData.get('name') as string || undefined,
-        logo_url: formData.get('logo_url') as string || undefined,
-        primary_color: formData.get('primary_color') as string || undefined,
-        domain: formData.get('domain') as string || undefined,
-        subscription_plan: formData.get('subscription_plan') as string || undefined,
-        usage_quota: parseInt(formData.get('usage_quota') as string) || undefined,
+      try {
+        await addTenant(payload);
+        resetModalState();
+        void loadTenants({
+          page: 1,
+          pageSize,
+          search: searchTerm || undefined,
+          status: selectedStatus || undefined,
+          sortField: 'created_at',
+          sortDirection: 'desc',
+        });
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Unable to create tenant.');
+      }
+    },
+    [loadTenants, pageSize, resetModalState, searchTerm, selectedStatus],
+  );
+
+  const handleEditTenant = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!selectedTenant) {
+        return;
+      }
+
+      const form = event.currentTarget;
+      const formData = new FormData(form);
+
+      const payload: EditTenantRequest = {
+        name: (formData.get('name') as string | null)?.trim() || undefined,
+        logoUrl: (formData.get('logoUrl') as string | null) || undefined,
+        primaryColor: (formData.get('primaryColor') as string | null) || undefined,
+        domain: (formData.get('domain') as string | null)?.trim() || undefined,
+        subscriptionPlan: (formData.get('subscriptionPlan') as string | null) || undefined,
+        usageQuota: formData.get('usageQuota') ? Number(formData.get('usageQuota')) : undefined,
       };
-      
-      await editTenant(selectedTenant.slug, updateData);
-      setShowEditModal(false);
-      setSelectedTenant(null);
-      await loadTenants(); // Reload to show updates
-      alert('✅ Tenant updated successfully!');
-    } catch (error) {
-      alert(`❌ Failed to update tenant: ${error}`);
+
+      try {
+        await editTenant(selectedTenant.slug, payload);
+        resetModalState();
+        void loadTenants({
+          page,
+          pageSize,
+          search: searchTerm || undefined,
+          status: selectedStatus || undefined,
+          sortField: 'created_at',
+          sortDirection: 'desc',
+        });
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Unable to update tenant.');
+      }
+    },
+    [loadTenants, page, pageSize, resetModalState, searchTerm, selectedStatus, selectedTenant],
+  );
+
+  const renderModal = () => {
+    if (!modalState.visible) {
+      return null;
     }
-  };
 
-  const openEditModal = (tenant: Tenant) => {
-    setSelectedTenant(tenant);
-    setShowEditModal(true);
-  };
+    const isEditMode = modalState.mode === 'edit' && selectedTenant;
+    const modalTitle = isEditMode ? `Edit Tenant • ${selectedTenant?.name ?? ''}` : 'Add New Tenant';
 
-  const getStatusBadge = (status: string) => {
-    const colors = {
-      active: 'bg-green-100 text-green-700 border-green-200',
-      trial: 'bg-blue-100 text-blue-700 border-blue-200',
-      expired: 'bg-red-100 text-red-700 border-red-200',
-      cancelled: 'bg-gray-100 text-gray-700 border-gray-200',
-    };
-    return colors[status as keyof typeof colors] || colors.active;
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+        onClick={resetModalState}
+        role="presentation"
+      >
+        <Card className="max-h-[90vh] w-full max-w-3xl overflow-y-auto p-8" onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-start justify-between gap-4">
+            <h3 className="text-2xl font-bold text-gray-900">{modalTitle}</h3>
+            <Button size="sm" variant="ghost" onClick={resetModalState}>
+              Close
+            </Button>
+          </div>
+
+          <form className="mt-6 space-y-5" onSubmit={isEditMode ? handleEditTenant : handleAddTenant}>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
+                Tenant Name *
+                <input
+                  className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                  defaultValue={selectedTenant?.name ?? ''}
+                  name="name"
+                  required
+                  type="text"
+                />
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
+                Tenant Slug *
+                <input
+                  className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 disabled:bg-gray-100"
+                  defaultValue={selectedTenant?.slug ?? ''}
+                  disabled={isEditMode}
+                  name="slug"
+                  placeholder="acme"
+                  required
+                  type="text"
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
+                Domain
+                <input
+                  className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                  defaultValue={selectedTenant?.domain ?? ''}
+                  name="domain"
+                  placeholder="tenant.quick2objective.com"
+                  type="text"
+                />
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
+                Primary Color
+                <input
+                  className="h-12 rounded-lg border border-gray-300 px-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                  defaultValue={selectedTenant?.primaryColor ?? '#875A7B'}
+                  name="primaryColor"
+                  type="color"
+                />
+              </label>
+            </div>
+
+            <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
+              Logo URL
+              <input
+                className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                defaultValue={selectedTenant?.logoUrl ?? ''}
+                name="logoUrl"
+                placeholder="https://example.com/logo.png"
+                type="url"
+              />
+            </label>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
+                Subscription Plan *
+                <select
+                  className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                  defaultValue={selectedTenant?.subscription.planName ?? PLAN_OPTIONS[0]?.value ?? 'Starter'}
+                  name="subscriptionPlan"
+                  required
+                >
+                  {PLAN_OPTIONS.map((plan) => (
+                    <option key={plan.value} value={plan.value}>
+                      {plan.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
+                Usage Quota
+                <input
+                  className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                  defaultValue={selectedTenant?.usageQuota ?? 10}
+                  min={1}
+                  name="usageQuota"
+                  type="number"
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button onClick={resetModalState} size="sm" type="button" variant="ghost">
+                Cancel
+              </Button>
+              <Button size="sm" type="submit" variant="primary">
+                {isEditMode ? 'Save Changes' : 'Create Tenant'}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </div>
+    );
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <AdminHeader
-        title="👥 Tenants"
-        subtitle="Manage tenant organizations and subscriptions"
         action={
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
-          >
-            ➕ Add Tenant
-          </button>
+          <Button onClick={() => setModalState({ visible: true, mode: 'create' })} size="sm" variant="primary">
+            Add Tenant
+          </Button>
         }
+        subtitle="Manage tenant organizations, subscription plans, and usage quotas."
+        title="👥 Tenants"
       />
       <Navigation />
 
       <main className="container mx-auto px-6 py-8">
         <Breadcrumb items={[{ label: 'Tenants' }]} />
 
-        {/* Tenant Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {tenants.map((tenant, i) => (
-            <motion.div
-              key={tenant.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all duration-300"
-            >
-              {/* Header */}
-              <div className="flex items-start gap-4 mb-6">
-                <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 border-2 border-gray-200">
-                  <img src={tenant.logoUrl} alt={tenant.name} className="w-full h-full object-cover" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-2xl font-bold text-gray-900 mb-1">{tenant.name}</h3>
-                  <p className="text-sm text-gray-500 font-mono mb-2">{tenant.slug}</p>
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadge(tenant.subscriptionStatus)}`}>
-                    {tenant.subscriptionStatus.charAt(0).toUpperCase() + tenant.subscriptionStatus.slice(1)}
-                  </span>
-                </div>
-              </div>
+        <section className="mb-6">
+          <Card className="p-6">
+            <div className="flex flex-wrap items-center gap-4">
+              <input
+                className="flex-1 min-w-[200px] rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                placeholder="Search tenants by name or slug..."
+                value={searchTerm}
+                onChange={(event) => {
+                  setPage(1);
+                  setSearchTerm(event.target.value);
+                }}
+                type="search"
+              />
+              <select
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                value={selectedStatus}
+                onChange={(event) => {
+                  setPage(1);
+                  setSelectedStatus(event.target.value);
+                }}
+              >
+                <option value="">All subscription statuses</option>
+                {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value));
+                  setPage(1);
+                }}
+              >
+                {[10, 25, 50].map((size) => (
+                  <option key={size} value={size}>
+                    {size} per page
+                  </option>
+                ))}
+              </select>
+            </div>
+          </Card>
+        </section>
 
-              {/* Stats */}
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-purple-50 rounded-lg p-4">
-                  <p className="text-xs text-purple-600 font-medium mb-1">Subscription</p>
-                  <p className="text-xl font-bold text-purple-700">{tenant.subscriptionPlan}</p>
-                </div>
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <p className="text-xs text-blue-600 font-medium mb-1">Domain</p>
-                  <p className="text-sm font-semibold text-blue-700 truncate">{tenant.domain || '—'}</p>
-                </div>
-              </div>
+        {errorMessage && (
+          <Card className="mb-6 border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {errorMessage}
+          </Card>
+        )}
 
-              {/* Usage Meter */}
-              <div className="mb-6">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-500 font-medium">Usage This Month</span>
-                  <span className="font-bold text-gray-900">{tenant.usageCurrent}/{tenant.usageQuota}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="bg-gradient-success h-full transition-all duration-500 rounded-full"
-                    style={{ width: `${(tenant.usageCurrent / tenant.usageQuota) * 100}%` }}
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  {tenant.usageQuota - tenant.usageCurrent} migrations remaining
-                </p>
-              </div>
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Tenant</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Domain</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Plan</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Usage</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Status</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {isLoading && (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-sm text-gray-500" colSpan={6}>
+                      Loading tenant records...
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && tenantPage && tenantPage.items.length === 0 && (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-sm text-gray-500" colSpan={6}>
+                      No tenants match the current filters.
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && tenantPage &&
+                  tenantPage.items.map((tenant) => {
+                    const statusMeta = formatStatus(tenant.subscription.status ?? 'none');
+                    const usagePercent = calculateUsagePercentage(tenant.usageCurrent, tenant.usageQuota);
+                    return (
+                      <tr key={tenant.id}>
+                        <td className="px-4 py-4 align-top">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-lg border border-gray-200 bg-gray-50" style={{ backgroundColor: tenant.primaryColor ?? '#875A7B' }} />
+                            <div>
+                              <p className="font-semibold text-gray-900">{tenant.name}</p>
+                              <p className="text-xs font-mono text-gray-500">{tenant.slug}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 align-top text-sm text-gray-600">{tenant.domain ?? '—'}</td>
+                        <td className="px-4 py-4 align-top text-sm text-gray-600">{tenant.subscription.planName ?? 'Not Assigned'}</td>
+                        <td className="px-4 py-4 align-top">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex justify-between text-xs text-gray-500">
+                              <span>{tenant.usageCurrent} / {tenant.usageQuota}</span>
+                              <span>{usagePercent}%</span>
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+                              <div className="h-full rounded-full bg-gradient-success" style={{ width: `${usagePercent}%` }} />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 align-top">
+                          <Badge className={statusMeta.className}>{statusMeta.label}</Badge>
+                        </td>
+                        <td className="px-4 py-4 align-top text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              onClick={() => {
+                                setSelectedTenant(tenant);
+                                setModalState({ visible: true, mode: 'edit' });
+                              }}
+                              size="sm"
+                              variant="ghost"
+                            >
+                              Edit
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
 
-              {/* Branding Preview */}
-              <div className="mb-6 p-4 rounded-lg border-2 border-gray-200">
-                <p className="text-xs text-gray-500 font-medium mb-2">Brand Color</p>
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-12 h-12 rounded-lg shadow-inner"
-                    style={{ backgroundColor: tenant.primaryColor }}
-                  />
-                  <code className="text-sm font-mono text-gray-700">{tenant.primaryColor}</code>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => openEditModal(tenant)}
-                  className="flex-1 py-2 bg-purple-50 text-purple-600 rounded-lg font-medium hover:bg-purple-100 transition-colors duration-200"
-                >
-                  ✏️ Edit
-                </button>
-                <button
-                  className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg font-medium hover:bg-blue-100 transition-colors duration-200"
-                >
-                  👁️ View Portal
-                </button>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+        {tenantPage && tenantPage.total > 0 && (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 text-sm text-gray-600">
+            <span>
+              Showing {(tenantPage.page - 1) * tenantPage.pageSize + 1} to{' '}
+              {Math.min(tenantPage.page * tenantPage.pageSize, tenantPage.total)} of {tenantPage.total} tenants
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                disabled={page <= 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                size="sm"
+                variant="ghost"
+              >
+                Previous
+              </Button>
+              <span>
+                Page {page} of {paginationTotalPages}
+              </span>
+              <Button
+                disabled={page >= paginationTotalPages}
+                onClick={() => setPage((current) => Math.min(paginationTotalPages, current + 1))}
+                size="sm"
+                variant="ghost"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </main>
 
-      {/* Add Tenant Modal */}
-      {showAddModal && (
-        <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setShowAddModal(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-2xl p-8 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-2xl font-bold text-gray-900 mb-6">Add New Tenant</h3>
-            
-            <form onSubmit={handleAddTenant} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tenant Name *</label>
-                <input 
-                  name="name"
-                  type="text" 
-                  required
-                  placeholder="e.g., Acme Corporation"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Slug *</label>
-                  <input 
-                    name="slug"
-                    type="text" 
-                    required
-                    placeholder="e.g., acme"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Domain</label>
-                  <input 
-                    name="domain"
-                    type="text" 
-                    placeholder="e.g., acme.quick2odoo.com"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Subscription Plan *</label>
-                  <select 
-                    name="plan"
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">Select plan...</option>
-                    <option value="starter">Starter (10 migrations/mo)</option>
-                    <option value="pro">Pro (50 migrations/mo)</option>
-                    <option value="enterprise">Enterprise (200 migrations/mo)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Primary Color *</label>
-                  <input 
-                    name="primary_color"
-                    type="color" 
-                    defaultValue="#875A7B"
-                    className="w-full h-10 px-2 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Logo URL</label>
-                <input 
-                  name="logo_url"
-                  type="url" 
-                  placeholder="https://example.com/logo.png"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-6 py-3 bg-gradient-success text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-                >
-                  Create Tenant
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Edit Tenant Modal */}
-      {showEditModal && selectedTenant && (
-        <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => { setShowEditModal(false); setSelectedTenant(null); }}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-2xl p-8 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-2xl font-bold text-gray-900 mb-6">Edit Tenant: {selectedTenant.name}</h3>
-            
-            <form onSubmit={handleEditTenant} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tenant Name *</label>
-                <input 
-                  name="name"
-                  type="text" 
-                  required
-                  defaultValue={selectedTenant.name}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Slug</label>
-                  <input 
-                    name="slug"
-                    type="text" 
-                    disabled
-                    defaultValue={selectedTenant.slug}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed" 
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Slug cannot be changed</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Domain</label>
-                  <input 
-                    name="domain"
-                    type="text" 
-                    defaultValue={selectedTenant.domain || ''}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Subscription Status</label>
-                  <select 
-                    name="status"
-                    defaultValue={selectedTenant.subscriptionStatus}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="active">Active</option>
-                    <option value="trial">Trial</option>
-                    <option value="expired">Expired</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Primary Color</label>
-                  <input 
-                    name="primary_color"
-                    type="color" 
-                    defaultValue={selectedTenant.primaryColor}
-                    className="w-full h-10 px-2 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Logo URL</label>
-                <input 
-                  name="logo_url"
-                  type="url" 
-                  defaultValue={selectedTenant.logoUrl}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" 
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => { setShowEditModal(false); setSelectedTenant(null); }}
-                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-6 py-3 bg-gradient-main text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
+      {renderModal()}
     </div>
   );
 }

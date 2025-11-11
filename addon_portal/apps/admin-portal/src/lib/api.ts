@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
 export interface GenerateCodesRequest {
@@ -32,18 +34,49 @@ export interface Device {
   isRevoked: boolean;
 }
 
-export interface Tenant {
-  id: number;
-  name: string;
-  slug: string;
-  logoUrl: string;
-  primaryColor: string;
-  domain: string | null;
-  subscriptionPlan: string;
-  subscriptionStatus: 'active' | 'trial' | 'expired' | 'cancelled';
-  usageQuota: number;
-  usageCurrent: number;
-  createdAt: string;
+const subscriptionStatusSchema = z.enum([
+  'active',
+  'past_due',
+  'canceled',
+  'unpaid',
+  'trialing',
+  'suspended',
+  'none',
+]);
+
+const tenantSchema = z.object({
+  id: z.number().int().nonnegative(),
+  name: z.string().min(1),
+  slug: z.string().min(1),
+  logoUrl: z.string().url().nullable(),
+  primaryColor: z.string().nullable(),
+  domain: z.string().nullable(),
+  usageQuota: z.number().int().nonnegative(),
+  usageCurrent: z.number().int().nonnegative(),
+  createdAt: z.string().min(1),
+  subscription: z.object({
+    planName: z.string().nullable(),
+    status: subscriptionStatusSchema.nullable(),
+  }),
+});
+
+const tenantCollectionSchema = z.object({
+  items: z.array(tenantSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().min(1),
+  pageSize: z.number().int().min(1),
+});
+
+export type Tenant = z.infer<typeof tenantSchema>;
+export interface TenantPage extends z.infer<typeof tenantCollectionSchema> {}
+
+export interface TenantQueryParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  sortField?: 'created_at' | 'name' | 'usage_current';
+  sortDirection?: 'asc' | 'desc';
 }
 
 // Generate activation codes
@@ -108,14 +141,23 @@ export async function getDevices(tenantSlug?: string): Promise<Device[]> {
 }
 
 // Get tenants (database-backed)
-export async function getTenants(): Promise<Tenant[]> {
-  const response = await fetch(`${API_BASE}/admin/api/tenants`);
+export async function getTenants(params: TenantQueryParams = {}): Promise<TenantPage> {
+  const query = new URLSearchParams();
+  if (params.page) query.set('page', params.page.toString());
+  if (params.pageSize) query.set('page_size', params.pageSize.toString());
+  if (params.search) query.set('search', params.search);
+  if (params.status) query.set('status', params.status);
+  if (params.sortField) query.set('sort_field', params.sortField);
+  if (params.sortDirection) query.set('sort_direction', params.sortDirection);
+
+  const url = `${API_BASE}/admin/api/tenants${query.toString() ? `?${query.toString()}` : ''}`;
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error('Failed to fetch tenants');
   }
-  
+
   const data = await response.json();
-  return data.tenants || [];
+  return tenantCollectionSchema.parse(data);
 }
 
 // Revoke activation code
@@ -148,14 +190,14 @@ export async function revokeDevice(tenantSlug: string, deviceId: number): Promis
 export interface AddTenantRequest {
   name: string;
   slug: string;
-  logo_url?: string;
-  primary_color?: string;
+  logoUrl?: string;
+  primaryColor?: string;
   domain?: string;
-  subscription_plan?: string;
-  usage_quota?: number;
+  subscriptionPlan: string;
+  usageQuota?: number;
 }
 
-export async function addTenant(data: AddTenantRequest): Promise<void> {
+export async function addTenant(data: AddTenantRequest): Promise<Tenant> {
   const response = await fetch(`${API_BASE}/admin/api/tenants`, {
     method: 'POST',
     headers: {
@@ -168,19 +210,22 @@ export async function addTenant(data: AddTenantRequest): Promise<void> {
     const error = await response.json();
     throw new Error(error.detail || 'Failed to create tenant');
   }
+
+  const payload = await response.json();
+  return tenantSchema.parse(payload);
 }
 
 // Edit tenant
 export interface EditTenantRequest {
   name?: string;
-  logo_url?: string;
-  primary_color?: string;
+  logoUrl?: string;
+  primaryColor?: string;
   domain?: string;
-  subscription_plan?: string;
-  usage_quota?: number;
+  subscriptionPlan?: string;
+  usageQuota?: number;
 }
 
-export async function editTenant(slug: string, data: EditTenantRequest): Promise<void> {
+export async function editTenant(slug: string, data: EditTenantRequest): Promise<Tenant> {
   const response = await fetch(`${API_BASE}/admin/api/tenants/${slug}`, {
     method: 'PUT',
     headers: {
@@ -193,5 +238,8 @@ export async function editTenant(slug: string, data: EditTenantRequest): Promise
     const error = await response.json();
     throw new Error(error.detail || 'Failed to update tenant');
   }
+
+  const payload = await response.json();
+  return tenantSchema.parse(payload);
 }
 

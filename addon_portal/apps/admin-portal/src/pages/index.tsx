@@ -1,126 +1,154 @@
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Line, Bar, Pie } from 'recharts';
-import { Navigation } from '../components/Navigation';
+import { useRouter } from 'next/router';
+import { useEffect, useMemo, useState } from 'react';
+
+import { Breadcrumb } from '@/components/Breadcrumb';
+import { Navigation } from '@/components/Navigation';
+import { Button, Card, StatCard } from '@/design-system';
 import { AdminHeader } from '../components/AdminHeader';
-import { Breadcrumb } from '../components/Breadcrumb';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
-interface Trend {
-  value: number;
+interface TrendMetric {
   direction: 'up' | 'down';
+  value: number;
 }
 
 interface DashboardStats {
-  totalCodes: number;
   activeCodes: number;
-  expiredCodes: number;
-  totalDevices: number;
   activeDevices: number;
-  revokedDevices: number;
-  totalTenants: number;
   activeTenants: number;
+  expiredCodes: number;
+  revokedDevices: number;
   successRate: number;
+  totalCodes: number;
+  totalDevices: number;
+  totalTenants: number;
   trends: {
-    codes: Trend;
-    devices: Trend;
-    tenants: Trend;
-    successRate: Trend;
+    codes: TrendMetric;
+    devices: TrendMetric;
+    successRate: TrendMetric;
+    tenants: TrendMetric;
   };
 }
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalCodes: 0,
-    activeCodes: 0,
-    expiredCodes: 0,
-    totalDevices: 0,
-    activeDevices: 0,
-    revokedDevices: 0,
-    totalTenants: 0,
-    activeTenants: 0,
-    successRate: 0,
-    trends: {
-      codes: { value: 0, direction: 'up' },
-      devices: { value: 0, direction: 'up' },
-      tenants: { value: 0, direction: 'up' },
-      successRate: { value: 0, direction: 'up' }
-    }
-  });
-
-  const [loading, setLoading] = useState(true);
-  const [activityDateRange, setActivityDateRange] = useState('7d');
+  const router = useRouter();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [activityDateRange, setActivityDateRange] = useState<'7d' | '30d' | '90d'>('7d');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    const fetchDashboardStats = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/admin/api/dashboard-stats`);
+        if (!response.ok) {
+          throw new Error('Failed to load dashboard metrics');
+        }
+
+        const data = await response.json();
+        setStats({
+          activeCodes: data.activeCodes ?? 0,
+          activeDevices: data.activeDevices ?? 0,
+          activeTenants: data.activeTenants ?? 0,
+          expiredCodes: data.expiredCodes ?? 0,
+          revokedDevices: data.revokedDevices ?? 0,
+          successRate: data.successRate ?? 0,
+          totalCodes: data.totalCodes ?? 0,
+          totalDevices: data.totalDevices ?? 0,
+          totalTenants: data.totalTenants ?? 0,
+          trends: data.trends ?? {
+            codes: { direction: 'up', value: 0 },
+            devices: { direction: 'up', value: 0 },
+            successRate: { direction: 'up', value: 0 },
+            tenants: { direction: 'up', value: 0 },
+          },
+        });
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     fetchDashboardStats();
   }, []);
 
-  const fetchDashboardStats = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/admin/api/dashboard-stats`);
-      if (response.ok) {
-        const data = await response.json();
-        setStats({
-          totalCodes: data.totalCodes || 0,
-          activeCodes: data.activeCodes || 0,
-          expiredCodes: data.expiredCodes || 0,
-          totalDevices: data.totalDevices || 0,
-          activeDevices: data.activeDevices || 0,
-          revokedDevices: data.revokedDevices || 0,
-          totalTenants: data.totalTenants || 0,
-          activeTenants: data.activeTenants || 0,
-          successRate: data.successRate || 0,
-          trends: data.trends || {
-            codes: { value: 0, direction: 'up' },
-            devices: { value: 0, direction: 'up' },
-            tenants: { value: 0, direction: 'up' },
-            successRate: { value: 0, direction: 'up' }
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Failed to fetch dashboard stats:', error);
-    } finally {
-      setLoading(false);
+  const metrics = useMemo(() => {
+    if (!stats) {
+      return [];
     }
-  };
 
-  const StatCard = ({ title, value, subtitle, icon, trend }: any) => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300"
-    >
-      <div className="flex items-center justify-between mb-4">
-        <div className="text-4xl">{icon}</div>
-        {trend && (
-          <div className={`text-sm font-semibold ${trend.direction === 'up' ? 'text-green-600' : 'text-red-600'}`}>
-            {trend.direction === 'up' ? '↗' : '↘'} {trend.value}%
-          </div>
-        )}
-      </div>
-      <h3 className="text-gray-500 text-sm font-medium uppercase tracking-wide mb-1">{title}</h3>
-      <p className="text-4xl font-bold text-gray-900 mb-1">{value}</p>
-      {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
-    </motion.div>
+    return [
+      {
+        icon: '🔑',
+        subtitle: `${stats.activeCodes} active`,
+        title: 'Activation Codes',
+        trend: stats.trends.codes,
+        value: stats.totalCodes.toLocaleString(),
+      },
+      {
+        icon: '📱',
+        subtitle: `${stats.activeDevices} active`,
+        title: 'Authorized Devices',
+        trend: stats.trends.devices,
+        value: stats.totalDevices.toLocaleString(),
+      },
+      {
+        icon: '👥',
+        subtitle: `${stats.activeTenants} with active subscriptions`,
+        title: 'Tenants',
+        trend: stats.trends.tenants,
+        value: stats.totalTenants.toLocaleString(),
+      },
+      {
+        icon: '📊',
+        subtitle: 'Activation success rate',
+        title: 'Success Rate',
+        trend: stats.trends.successRate,
+        value: `${stats.successRate.toFixed(1)}%`,
+      },
+    ];
+  }, [stats]);
+
+  const quickActions = useMemo(
+    () => [
+      {
+        description: 'Create new activation codes for tenants',
+        icon: '➕',
+        href: '/codes?action=generate',
+        label: 'Generate Codes',
+      },
+      {
+        description: 'Onboard a new tenant organization',
+        icon: '🏢',
+        href: '/tenants?action=new',
+        label: 'Add Tenant',
+      },
+      {
+        description: 'Usage trends and insights',
+        icon: '📈',
+        href: '/analytics',
+        label: 'View Analytics',
+      },
+      {
+        description: 'View and revoke authorized devices',
+        icon: '🔒',
+        href: '/devices',
+        label: 'Manage Devices',
+      },
+    ],
+    [],
   );
 
-  const QuickActionCard = ({ title, description, icon, href, color }: any) => (
-    <Link href={href}>
-      <motion.div
-        whileHover={{ scale: 1.02, y: -4 }}
-        whileTap={{ scale: 0.98 }}
-        className="bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition-all duration-300 cursor-pointer group"
-      >
-        <div className={`w-14 h-14 rounded-full ${color} flex items-center justify-center text-3xl mb-4 group-hover:scale-110 transition-transform duration-300`}>
-          {icon}
-        </div>
-        <h3 className="font-bold text-gray-900 text-lg mb-2">{title}</h3>
-        <p className="text-gray-600 text-sm">{description}</p>
-      </motion.div>
-    </Link>
+  const activityFeed = useMemo(
+    () => [
+      { icon: '🔑', action: 'Generated 5 activation codes', tenant: 'Demo Consulting', time: '2 hours ago', backdrop: 'bg-indigo-100 text-indigo-600' },
+      { icon: '📱', action: 'Device authorized', tenant: 'Acme Corp', time: '4 hours ago', backdrop: 'bg-emerald-100 text-emerald-600' },
+      { icon: '👥', action: 'New tenant created', tenant: 'Tech Solutions', time: '1 day ago', backdrop: 'bg-rose-100 text-rose-600' },
+      { icon: '🔒', action: 'Device revoked', tenant: 'Demo Consulting', time: '2 days ago', backdrop: 'bg-amber-100 text-amber-600' },
+    ],
+    [],
   );
 
   return (
@@ -140,82 +168,58 @@ export default function AdminDashboard() {
       <main className="container mx-auto px-6 py-8">
         <Breadcrumb items={[{ label: 'Dashboard' }]} />
 
-        {/* Stats Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <StatCard
-            title="Activation Codes"
-            value={stats.totalCodes}
-            subtitle={`${stats.activeCodes} active`}
-            icon="🔑"
-            trend={stats.trends.codes}
-          />
-          <StatCard
-            title="Authorized Devices"
-            value={stats.totalDevices}
-            subtitle={`${stats.activeDevices} active`}
-            icon="📱"
-            trend={stats.trends.devices}
-          />
-          <StatCard
-            title="Tenants"
-            value={stats.totalTenants}
-            subtitle={`${stats.activeTenants} with active subscriptions`}
-            icon="👥"
-            trend={stats.trends.tenants}
-          />
-          <StatCard
-            title="Success Rate"
-            value={`${stats.successRate.toFixed(1)}%`}
-            subtitle="Activation success"
-            icon="📊"
-            trend={stats.trends.successRate}
-          />
-        </div>
-
-        {/* Quick Actions */}
-        <section className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <QuickActionCard
-              title="Generate Codes"
-              description="Create new activation codes for tenants"
-              icon="➕"
-              href="/codes?action=generate"
-              color="bg-gradient-main"
-            />
-            <QuickActionCard
-              title="Add Tenant"
-              description="Onboard a new tenant organization"
-              icon="🏢"
-              href="/tenants?action=new"
-              color="bg-gradient-success"
-            />
-            <QuickActionCard
-              title="View Analytics"
-              description="Usage trends and insights"
-              icon="📈"
-              href="/analytics"
-              color="bg-gradient-warning"
-            />
-            <QuickActionCard
-              title="Manage Devices"
-              description="View and revoke authorized devices"
-              icon="🔒"
-              href="/devices"
-              color="bg-gradient-error"
-            />
+        <section className="mb-10">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+            {(isLoading ? Array.from({ length: 4 }) : metrics).map((metric, index) => (
+              <motion.div key={metric?.title ?? index} animate={{ opacity: 1, y: 0 }} initial={{ opacity: 0, y: 16 }} transition={{ delay: index * 0.05 }}>
+                {metric ? (
+                  <StatCard icon={metric.icon} subtitle={metric.subtitle} title={metric.title} trend={metric.trend} value={metric.value} />
+                ) : (
+                  <Card className="h-full animate-pulse bg-white">
+                    <div className="flex h-32 items-center justify-center text-gray-300">Loading…</div>
+                  </Card>
+                )}
+              </motion.div>
+            ))}
           </div>
         </section>
 
-        {/* Recent Activity */}
-        <section className="mb-8">
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Recent Activity</h2>
-              <select 
+        <section className="mb-10 space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-2xl font-bold text-gray-900">Quick Actions</h2>
+            <Button size="sm" variant="secondary" onClick={() => router.push('/llm')}>
+              Go to LLM Management
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+            {quickActions.map((action, index) => (
+              <motion.div key={action.label} animate={{ opacity: 1, y: 0 }} initial={{ opacity: 0, y: 16 }} transition={{ delay: index * 0.05 }}>
+                <Card className="h-full p-6">
+                  <div className="mb-4 flex items-center gap-3 text-3xl">
+                    <span>{action.icon}</span>
+                    <h3 className="text-lg font-semibold text-gray-900">{action.label}</h3>
+                  </div>
+                  <p className="mb-6 text-sm text-gray-600">{action.description}</p>
+                  <Button className="w-full" size="sm" onClick={() => router.push(action.href)}>
+                    Open
+                  </Button>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mb-10">
+          <Card className="space-y-6 p-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Recent Activity</h2>
+                <p className="text-sm text-gray-500">Automated events from tenants, licensing, and devices.</p>
+              </div>
+              <select
+                className="rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
                 value={activityDateRange}
-                onChange={(e) => setActivityDateRange(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                onChange={(event) => setActivityDateRange(event.target.value as '7d' | '30d' | '90d')}
               >
                 <option value="7d">Last 7 days</option>
                 <option value="30d">Last 30 days</option>
@@ -223,66 +227,70 @@ export default function AdminDashboard() {
               </select>
             </div>
 
-            {/* Activity Feed */}
-            <div className="space-y-4">
-              {[
-                { icon: '🔑', action: 'Generated 5 activation codes', tenant: 'Demo Consulting', time: '2 hours ago', color: 'bg-blue-100 text-blue-700' },
-                { icon: '📱', action: 'Device authorized', tenant: 'Acme Corp', time: '4 hours ago', color: 'bg-green-100 text-green-700' },
-                { icon: '👥', action: 'New tenant created', tenant: 'Tech Solutions', time: '1 day ago', color: 'bg-purple-100 text-purple-700' },
-                { icon: '🔒', action: 'Device revoked', tenant: 'Demo Consulting', time: '2 days ago', color: 'bg-red-100 text-red-700' },
-              ].map((activity, i) => (
+            <div className="space-y-3">
+              {activityFeed.map((activity, index) => (
                 <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: -20 }}
+                  key={`${activity.action}-${activity.time}`}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.1 }}
-                  className="flex items-center gap-4 p-4 rounded-xl hover:bg-gray-50 transition-colors duration-200"
+                  className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white/80 px-4 py-3 transition-shadow duration-200 hover:shadow-md"
+                  initial={{ opacity: 0, x: -12 }}
+                  transition={{ delay: index * 0.05 }}
                 >
-                  <div className={`w-12 h-12 rounded-full ${activity.color} flex items-center justify-center text-2xl flex-shrink-0`}>
-                    {activity.icon}
-                  </div>
+                  <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl text-xl ${activity.backdrop}`}>{activity.icon}</div>
                   <div className="flex-1">
                     <p className="font-semibold text-gray-900">{activity.action}</p>
                     <p className="text-sm text-gray-500">{activity.tenant}</p>
                   </div>
-                  <div className="text-xs text-gray-400">{activity.time}</div>
+                  <span className="text-xs font-medium uppercase tracking-wide text-gray-400">{activity.time}</span>
                 </motion.div>
               ))}
             </div>
-          </div>
+          </Card>
         </section>
 
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Activation Codes Chart */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <h3 className="text-xl font-bold text-gray-900 mb-6">Activation Trends</h3>
-            <div className="h-64 flex items-center justify-center text-gray-400">
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Card className="p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">Activation Trends</h3>
+                <p className="text-sm text-gray-500">Daily activation codes generated across tenants.</p>
+              </div>
+              <Button size="sm" variant="ghost">
+                Export
+              </Button>
+            </div>
+            <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
               <div className="text-center">
-                <div className="text-6xl mb-4">📈</div>
-                <p>Chart: Activation codes generated over time</p>
-                <p className="text-sm mt-2">(Recharts integration)</p>
+                <div className="mb-4 text-6xl">📈</div>
+                <p className="font-medium text-gray-600">Recharts area graph coming in Task 1.7</p>
+                <p className="text-xs text-gray-400">Shows generated vs redeemed codes</p>
               </div>
             </div>
-          </div>
+          </Card>
 
-          {/* Device Distribution Chart */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <h3 className="text-xl font-bold text-gray-900 mb-6">Device Distribution</h3>
-            <div className="h-64 flex items-center justify-center text-gray-400">
+          <Card className="p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">Device Distribution</h3>
+                <p className="text-sm text-gray-500">Snapshot of active vs. revoked devices.</p>
+              </div>
+              <Button size="sm" variant="ghost">
+                View Devices
+              </Button>
+            </div>
+            <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
               <div className="text-center">
-                <div className="text-6xl mb-4">📱</div>
-                <p>Chart: Active vs Revoked devices</p>
-                <p className="text-sm mt-2">(Pie chart visualization)</p>
+                <div className="mb-4 text-6xl">📱</div>
+                <p className="font-medium text-gray-600">Pie chart placeholder</p>
+                <p className="text-xs text-gray-400">Breakdown by platform & status</p>
               </div>
             </div>
-          </div>
-        </div>
+          </Card>
+        </section>
 
-        {/* Footer */}
-        <footer className="mt-12 text-center text-gray-500 text-sm pb-6">
-          <p>Q2O Licensing Admin Portal • Multi-Tenant Management</p>
-          <p className="text-xs mt-1">Powered by agents that build everything</p>
+        <footer className="mt-12 pb-6 text-center text-sm text-gray-500">
+          <p>Q2O Licensing Admin Portal • Multi-tenant command center</p>
+          <p className="mt-1 text-xs text-gray-400">Powered by Quick to Objective Agents</p>
         </footer>
       </main>
     </div>

@@ -3,16 +3,28 @@ Admin API Router - JSON endpoints for React Admin Portal
 Provides CRUD operations for Tenants, Activation Codes, and Devices
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
 
 from ..deps import get_db
-from ..models.licensing import Tenant, ActivationCode, Device
+from ..models.licensing import ActivationCode, Device, Tenant, SubscriptionState
+from ..schemas.tenant import (
+    SortDirection,
+    TenantCollectionResponse,
+    TenantCreatePayload,
+    TenantResponse,
+    TenantSortField,
+    TenantUpdatePayload,
+)
+from ..services.tenant_service import create_tenant, delete_tenant, get_tenant_by_slug, list_tenants, update_tenant
+from ..core.logging import get_logger
+from ..core.exceptions import TenantNotFoundError
 
 router = APIRouter(prefix="/admin/api", tags=["admin_api"])
+LOGGER = get_logger(__name__)
 
 
 # ============================================================================
@@ -115,24 +127,6 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
 # PYDANTIC MODELS
 # ============================================================================
 
-class TenantCreate(BaseModel):
-    name: str
-    slug: str
-    logo_url: Optional[str] = None
-    primary_color: str = "#875A7B"
-    domain: Optional[str] = None
-    subscription_plan: str = "Starter"
-    usage_quota: int = 10
-
-
-class TenantUpdate(BaseModel):
-    name: Optional[str] = None
-    logo_url: Optional[str] = None
-    primary_color: Optional[str] = None
-    domain: Optional[str] = None
-    subscription_plan: Optional[str] = None
-    usage_quota: Optional[int] = None
-
 
 class ActivationCodeGenerate(BaseModel):
     tenant_slug: str
@@ -146,154 +140,89 @@ class ActivationCodeGenerate(BaseModel):
 # TENANT ENDPOINTS
 # ============================================================================
 
-@router.get("/tenants")
-async def get_all_tenants(
+@router.get("/tenants", response_model=TenantCollectionResponse)
+async def get_tenants(
     db: Session = Depends(get_db),
-    search: Optional[str] = None,
-    status: Optional[str] = None
-):
-    """Get all tenants with optional filtering."""
-    
-    query = db.query(Tenant)
-    
-    if search:
-        search_pattern = f"%{search}%"
-        query = query.filter(
-            (Tenant.name.ilike(search_pattern)) |
-            (Tenant.slug.ilike(search_pattern))
-        )
-    
-    tenants = query.all()
-    
-    result = []
-    for tenant in tenants:
-        # Get subscription from relationship
-        subscription = tenant.subscriptions[0] if tenant.subscriptions else None
-        
-        result.append({
-            "id": tenant.id,
-            "name": tenant.name,
-            "slug": tenant.slug,
-            "logoUrl": tenant.logo_url,
-            "primaryColor": tenant.primary_color,
-            "domain": tenant.domain,
-            "subscriptionPlan": subscription.plan.name if subscription and subscription.plan else "None",
-            "subscriptionStatus": subscription.state.value if subscription and subscription.state else "none",
-            "usageQuota": tenant.usage_quota,
-            "usageCurrent": tenant.usage_current,
-            "createdAt": tenant.created_at.isoformat() if tenant.created_at else None
-        })
-    
-    return {"tenants": result, "total": len(result)}
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    search: Optional[str] = Query(None, max_length=200),
+    status: Optional[SubscriptionState] = Query(None),
+    sort_field: TenantSortField = Query(TenantSortField.CREATED_AT),
+    sort_direction: SortDirection = Query(SortDirection.DESC),
+) -> TenantCollectionResponse:
+    """Return a paginated collection of tenants.
 
+    Args:
+        db: Injected database session.
+        page: Page number (1-indexed).
+        page_size: Number of records per page.
+        search: Optional case-insensitive search term.
+        status: Optional subscription status filter.
+        sort_field: Field to sort by.
+        sort_direction: Direction of sort.
 
-@router.get("/tenants/{tenant_slug}")
-async def get_tenant(tenant_slug: str, db: Session = Depends(get_db)):
-    """Get a single tenant by slug."""
-    
-    tenant = db.query(Tenant).filter(Tenant.slug == tenant_slug).first()
-    
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    
-    subscription = tenant.subscriptions[0] if tenant.subscriptions else None
-    
-    return {
-        "id": tenant.id,
-        "name": tenant.name,
-        "slug": tenant.slug,
-        "logoUrl": tenant.logo_url,
-        "primaryColor": tenant.primary_color,
-        "domain": tenant.domain,
-        "subscriptionPlan": subscription.plan.name if subscription and subscription.plan else "None",
-        "subscriptionStatus": subscription.state.value if subscription and subscription.state else "none",
-        "usageQuota": tenant.usage_quota,
-        "usageCurrent": tenant.usage_current,
-        "createdAt": tenant.created_at.isoformat() if tenant.created_at else None
-    }
+    Returns:
+        A paginated tenant collection.
+    """
 
-
-@router.post("/tenants")
-async def create_tenant(data: TenantCreate, db: Session = Depends(get_db)):
-    """Create a new tenant."""
-    
-    # Check if slug already exists
-    existing = db.query(Tenant).filter(Tenant.slug == data.slug).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Tenant slug already exists")
-    
-    # Create tenant
-    new_tenant = Tenant(
-        name=data.name,
-        slug=data.slug,
-        logo_url=data.logo_url,
-        primary_color=data.primary_color,
-        domain=data.domain,
-        usage_quota=data.usage_quota,
-        usage_current=0
+    LOGGER.info(
+        "list_tenants_request",
+        extra={
+            "page": page,
+            "pageSize": page_size,
+            "search": search,
+            "status": status.value if status else None,
+            "sortField": sort_field.value,
+            "sortDirection": sort_direction.value,
+        },
     )
-    
-    db.add(new_tenant)
-    db.commit()
-    db.refresh(new_tenant)
-    
-    return {
-        "success": True,
-        "message": "Tenant created successfully",
-        "tenantId": new_tenant.id,
-        "slug": new_tenant.slug
-    }
+    return list_tenants(
+        db,
+        page=page,
+        page_size=page_size,
+        search=search,
+        status=status,
+        sort_field=sort_field,
+        sort_direction=sort_direction,
+    )
 
 
-@router.put("/tenants/{tenant_slug}")
-async def update_tenant(
+@router.get("/tenants/{tenant_slug}", response_model=TenantResponse)
+async def get_tenant(tenant_slug: str, db: Session = Depends(get_db)) -> TenantResponse:
+    """Return a single tenant by slug."""
+
+    try:
+        return get_tenant_by_slug(db, tenant_slug)
+    except TenantNotFoundError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error.message) from error
+
+
+@router.post("/tenants", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
+async def create_tenant_endpoint(payload: TenantCreatePayload, db: Session = Depends(get_db)) -> TenantResponse:
+    """Create a tenant and return the persisted record."""
+
+    LOGGER.info("create_tenant_request", extra={"slug": payload.slug})
+    return create_tenant(db, payload)
+
+
+@router.put("/tenants/{tenant_slug}", response_model=TenantResponse)
+async def update_tenant_endpoint(
     tenant_slug: str,
-    data: TenantUpdate,
-    db: Session = Depends(get_db)
-):
-    """Update an existing tenant."""
-    
-    tenant = db.query(Tenant).filter(Tenant.slug == tenant_slug).first()
-    
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    
-    # Update fields
-    if data.name is not None:
-        tenant.name = data.name
-    if data.logo_url is not None:
-        tenant.logo_url = data.logo_url
-    if data.primary_color is not None:
-        tenant.primary_color = data.primary_color
-    if data.domain is not None:
-        tenant.domain = data.domain
-    if data.usage_quota is not None:
-        tenant.usage_quota = data.usage_quota
-    
-    db.commit()
-    
-    return {
-        "success": True,
-        "message": "Tenant updated successfully"
-    }
+    payload: TenantUpdatePayload,
+    db: Session = Depends(get_db),
+) -> TenantResponse:
+    """Update tenant details and return the updated record."""
+
+    LOGGER.info("update_tenant_request", extra={"slug": tenant_slug})
+    return update_tenant(db, tenant_slug, payload)
 
 
-@router.delete("/tenants/{tenant_slug}")
-async def delete_tenant(tenant_slug: str, db: Session = Depends(get_db)):
-    """Delete a tenant."""
-    
-    tenant = db.query(Tenant).filter(Tenant.slug == tenant_slug).first()
-    
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    
-    db.delete(tenant)
-    db.commit()
-    
-    return {
-        "success": True,
-        "message": "Tenant deleted successfully"
-    }
+@router.delete("/tenants/{tenant_slug}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tenant_endpoint(tenant_slug: str, db: Session = Depends(get_db)) -> None:
+    """Delete the requested tenant."""
+
+    LOGGER.info("delete_tenant_request", extra={"slug": tenant_slug})
+    delete_tenant(db, tenant_slug)
 
 
 # ============================================================================

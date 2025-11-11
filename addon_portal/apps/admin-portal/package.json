@@ -17,6 +17,7 @@
     "framer-motion": "^10.16.16",
     "date-fns": "^2.30.0",
     "qrcode.react": "^3.1.0",
+    "zod": "^3.23.8",
     "@heroicons/react": "^2.1.1"
   },
   "devDependencies": {
