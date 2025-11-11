@@ -16,7 +16,8 @@
     "recharts": "^2.10.3",
     "framer-motion": "^10.16.16",
     "date-fns": "^2.30.0",
-    "qrcode.react": "^3.1.0"
+    "qrcode.react": "^3.1.0",
+    "@heroicons/react": "^2.1.1"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",

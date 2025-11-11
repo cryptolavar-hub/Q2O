@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Navigation } from '../components/Navigation';
 import { AdminHeader } from '../components/AdminHeader';
+import { Breadcrumb } from '../components/Breadcrumb';
 import { getTenants, addTenant, editTenant, type Tenant, type AddTenantRequest, type EditTenantRequest } from '../lib/api';
 
 export default function TenantsPage() {
@@ -105,6 +106,8 @@ export default function TenantsPage() {
       <Navigation />
 
       <main className="container mx-auto px-6 py-8">
+        <Breadcrumb items={[{ label: 'Tenants' }]} />
+
         {/* Tenant Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {tenants.map((tenant, i) => (

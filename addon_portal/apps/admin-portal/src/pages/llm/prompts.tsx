@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { AdminHeader } from '@/components/AdminHeader';
 import { Navigation } from '@/components/Navigation';
+import { Breadcrumb } from '@/components/Breadcrumb';
 
 interface PromptConfig {
   system: {
@@ -161,6 +162,8 @@ export default function PromptManagement() {
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Breadcrumb items={[{ label: 'LLM Management', href: '/llm' }, { label: 'Prompts' }]} />
+
         <button
           onClick={() => router.push('/llm')}
           className="mb-6 text-blue-600 hover:text-blue-700 flex items-center gap-2"

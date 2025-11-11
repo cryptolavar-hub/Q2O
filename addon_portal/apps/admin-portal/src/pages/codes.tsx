@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import QRCode from 'qrcode.react';
 import { Navigation } from '../components/Navigation';
 import { AdminHeader } from '../components/AdminHeader';
+import { Breadcrumb } from '../components/Breadcrumb';
 import { getCodes, generateCodes, revokeCode, type ActivationCode } from '../lib/api';
 
 export default function CodesPage() {
@@ -131,6 +132,8 @@ export default function CodesPage() {
       <Navigation />
 
       <main className="container mx-auto px-6 py-8">
+        <Breadcrumb items={[{ label: 'Activation Codes' }]} />
+
         {/* Generated Codes Success Banner */}
         {generatedCodes.length > 0 && (
           <motion.div

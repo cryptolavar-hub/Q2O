@@ -1,56 +1,55 @@
 import React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/router';
+import { ChevronRightIcon, HomeIcon } from '@heroicons/react/24/outline';
 
-interface BreadcrumbItem {
+export interface BreadcrumbItem {
   label: string;
   href?: string;
 }
 
-export function Breadcrumb() {
-  const router = useRouter();
-  
-  const pathMap: { [key: string]: string } = {
-    '/': 'Dashboard',
-    '/codes': 'Activation Codes',
-    '/devices': 'Devices',
-    '/tenants': 'Tenants',
-    '/analytics': 'Analytics',
-  };
-
-  const currentPath = router.pathname;
-  const breadcrumbs: BreadcrumbItem[] = [
-    { label: '🏠 Home', href: '/' },
-  ];
-
-  if (currentPath !== '/') {
-    breadcrumbs.push({ label: pathMap[currentPath] || 'Page' });
-  }
-
-  return (
-    <div className="bg-white border-b border-gray-200">
-      <div className="container mx-auto px-6 py-3">
-        <nav className="flex items-center gap-2 text-sm">
-          {breadcrumbs.map((item, index) => (
-            <React.Fragment key={index}>
-              {index > 0 && (
-                <span className="text-gray-400">/</span>
-              )}
-              {item.href ? (
-                <Link 
-                  href={item.href}
-                  className="text-purple-600 hover:text-purple-800 font-medium transition-colors"
-                >
-                  {item.label}
-                </Link>
-              ) : (
-                <span className="text-gray-600 font-medium">{item.label}</span>
-              )}
-            </React.Fragment>
-          ))}
-        </nav>
-      </div>
-    </div>
-  );
+interface BreadcrumbProps {
+  items: BreadcrumbItem[];
 }
 
+export const Breadcrumb: React.FC<BreadcrumbProps> = ({ items }) => {
+  return (
+    <nav className="flex items-center space-x-2 text-sm text-gray-600 mb-6" aria-label="Breadcrumb">
+      {/* Home icon as first item */}
+      <Link 
+        href="/" 
+        className="flex items-center hover:text-purple-600 transition-colors"
+        aria-label="Home"
+      >
+        <HomeIcon className="h-4 w-4" />
+      </Link>
+
+      {/* Render breadcrumb items */}
+      {items.map((item, index) => {
+        const isLast = index === items.length - 1;
+
+        return (
+          <React.Fragment key={index}>
+            {/* Separator */}
+            <ChevronRightIcon className="h-4 w-4 text-gray-400" />
+
+            {/* Breadcrumb item */}
+            {item.href && !isLast ? (
+              <Link 
+                href={item.href}
+                className="hover:text-purple-600 transition-colors"
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <span className={isLast ? 'text-gray-900 font-medium' : ''}>
+                {item.label}
+              </span>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </nav>
+  );
+};
+
+export default Breadcrumb;

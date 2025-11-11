@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import { Navigation } from '../components/Navigation';
 import { AdminHeader } from '../components/AdminHeader';
+import { Breadcrumb } from '../components/Breadcrumb';
 import { getDevices, revokeDevice, type Device } from '../lib/api';
 
 export default function DevicesPage() {
@@ -74,6 +75,8 @@ export default function DevicesPage() {
       <Navigation />
 
       <main className="container mx-auto px-6 py-8">
+        <Breadcrumb items={[{ label: 'Devices' }]} />
+
         {/* Filters */}
         <div className="bg-white rounded-2xl p-6 shadow-lg mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

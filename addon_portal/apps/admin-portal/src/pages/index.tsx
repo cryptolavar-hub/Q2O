@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Line, Bar, Pie } from 'recharts';
 import { Navigation } from '../components/Navigation';
 import { AdminHeader } from '../components/AdminHeader';
+import { Breadcrumb } from '../components/Breadcrumb';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
@@ -137,6 +138,8 @@ export default function AdminDashboard() {
       <Navigation />
 
       <main className="container mx-auto px-6 py-8">
+        <Breadcrumb items={[{ label: 'Dashboard' }]} />
+
         {/* Stats Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard

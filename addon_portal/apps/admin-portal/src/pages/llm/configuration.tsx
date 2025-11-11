@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AdminHeader } from '../../components/AdminHeader';
 import { Navigation } from '../../components/Navigation';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { useRouter } from 'next/router';
 
 interface APIKey {
@@ -199,6 +200,7 @@ print(result.workspace_path)`
       <Navigation />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        <Breadcrumb items={[{ label: 'LLM Management', href: '/llm' }, { label: 'Configuration' }]} />
         
         {/* API Keys Section */}
         <div>

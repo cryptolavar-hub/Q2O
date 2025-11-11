@@ -1,7 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { Breadcrumb } from './Breadcrumb';
 
 interface NavItem {
   href: string;
@@ -48,7 +47,6 @@ export function Navigation() {
           </div>
         </div>
       </nav>
-      <Breadcrumb />
     </>
   );
 }
