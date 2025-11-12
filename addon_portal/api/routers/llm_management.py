@@ -14,12 +14,14 @@ from ..schemas.llm import (
     AgentPromptResponse,
     AgentPromptUpdate,
     ProjectCollectionResponse,
+    ProjectCreatePayload,
     ProjectResponse,
     ProjectUpdatePayload,
     SystemConfigResponse,
     SystemConfigUpdate,
 )
 from ..services.llm_config_service import (
+    create_project,
     get_project,
     get_system_config,
     list_projects,
@@ -72,6 +74,17 @@ async def list_llm_projects(
 
     LOGGER.info('list_llm_projects', extra={"page": page, "pageSize": page_size, "search": search})
     return list_projects(db, page=page, page_size=page_size, search=search)
+
+
+@router.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+async def create_project_endpoint(
+    payload: ProjectCreatePayload,
+    db: Session = Depends(get_db),
+) -> ProjectResponse:
+    """Create a new LLM project configuration."""
+
+    LOGGER.info('create_project_request', extra={'projectId': payload.project_id, 'clientName': payload.client_name})
+    return create_project(db, payload)
 
 
 @router.get("/projects/{project_id}", response_model=ProjectResponse)

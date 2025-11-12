@@ -17,6 +17,7 @@ from ..schemas.llm import (
     AgentPromptUpdate,
     LLMProvider,
     ProjectCollectionResponse,
+    ProjectCreatePayload,
     ProjectResponse,
     ProjectUpdatePayload,
     SystemConfigResponse,
@@ -191,6 +192,54 @@ def get_project(session: Session, project_id: str) -> ProjectResponse:
 
     if project is None:
         raise ConfigurationError('Project not found.', detail={'projectId': project_id})
+
+    return _serialize_project(project)
+
+
+def create_project(
+    session: Session,
+    payload: ProjectCreatePayload,
+    *,
+    created_by: str = 'admin-ui',
+) -> ProjectResponse:
+    """Create a new project-level configuration."""
+
+    # Check if project already exists
+    existing = session.execute(
+        select(LLMProjectConfig).where(LLMProjectConfig.project_id == payload.project_id)
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        raise InvalidOperationError(
+            f'Project with ID "{payload.project_id}" already exists.',
+            detail={'projectId': payload.project_id},
+        )
+
+    project = LLMProjectConfig(
+        project_id=payload.project_id,
+        client_name=payload.client_name,
+        description=payload.description,
+        custom_instructions=payload.custom_instructions,
+        is_active=payload.is_active,
+        priority=payload.priority,
+        created_by=created_by,
+    )
+
+    try:
+        session.add(project)
+        session.commit()
+        session.refresh(project)
+    except SQLAlchemyError as exc:
+        session.rollback()
+        LOGGER.error('project_creation_failed', extra={'projectId': payload.project_id, 'error': str(exc)})
+        raise InvalidOperationError('Failed to create project configuration.') from exc
+
+    # Reload with agent configs relationship
+    project = session.execute(
+        select(LLMProjectConfig)
+        .options(selectinload(LLMProjectConfig.agent_configs))
+        .where(LLMProjectConfig.project_id == payload.project_id)
+    ).scalar_one()
 
     return _serialize_project(project)
 

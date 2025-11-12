@@ -138,8 +138,21 @@ class ProjectCollectionResponse(BaseModel):
     page_size: int
 
 
+class ProjectCreatePayload(BaseModel):
+    """Payload for creating a new project-level prompt configuration."""
+
+    model_config = ConfigDict(alias_generator=_to_camel, populate_by_name=True, extra='forbid')
+
+    project_id: str = Field(..., min_length=1, max_length=100)
+    client_name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    custom_instructions: Optional[str] = None
+    is_active: bool = True
+    priority: str = Field(default='normal', pattern=r'^(low|normal|high|critical)$')
+
+
 class ProjectUpdatePayload(BaseModel):
-    """Payload for updating or creating project-level prompt configuration."""
+    """Payload for updating project-level prompt configuration."""
 
     model_config = ConfigDict(alias_generator=_to_camel, populate_by_name=True, extra='forbid')
 
