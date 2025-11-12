@@ -1,39 +1,65 @@
 /**
  * Advanced Prompt Management
  * System, Project, and Agent-level prompt editors
+ * Fully integrated with database-backed API
  */
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { AdminHeader } from '@/components/AdminHeader';
 import { Navigation } from '@/components/Navigation';
+import { Breadcrumb } from '@/components/Breadcrumb';
+import { Card, Button } from '@/design-system';
 
-interface PromptConfig {
-  system: {
-    prompt: string;
-    source: 'env' | 'config' | 'default';
-  };
-  agents: Record<string, {
-    prompt: string;
-    source: 'env' | 'config' | 'default';
-    enabled: boolean;
-  }>;
-  projects: Record<string, {
-    projectId: string;
-    clientName: string;
-    prompt: string;
-    source: 'env' | 'config';
-    enabled: boolean;
-  }>;
+// Use relative URLs to leverage Next.js proxy (avoids IPv6 issues)
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '';
+
+interface SystemConfig {
+  primaryProvider: string;
+  secondaryProvider: string;
+  tertiaryProvider: string;
+  systemPrompt: string;
+  geminiModel: string;
+  openaiModel: string;
+  anthropicModel: string;
+  temperature: number;
+  maxTokens: number;
+  monthlyBudget: number;
+  dailyBudget: number;
+}
+
+interface AgentPrompt {
+  agentType: string;
+  customPrompt?: string;
+  customInstructions?: string;
+  enabled: boolean;
+  providerOverride?: string;
+  modelOverride?: string;
+  temperatureOverride?: number;
+  maxTokensOverride?: number;
+}
+
+interface ProjectConfig {
+  projectId: string;
+  clientName: string;
+  description?: string;
+  customInstructions?: string;
+  isActive: boolean;
+  priority: string;
+  agentPrompts: AgentPrompt[];
 }
 
 export default function PromptManagement() {
   const router = useRouter();
-  const [prompts, setPrompts] = useState<PromptConfig | null>(null);
+  const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
+  const [projects, setProjects] = useState<ProjectConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'system' | 'agent' | 'project'>('system');
-  const [editingAgent, setEditingAgent] = useState<string | null>(null);
   const [editingProject, setEditingProject] = useState<string | null>(null);
+  const [editingAgent, setEditingAgent] = useState<{ projectId: string; agentType: string } | null>(null);
+  const [newProjectId, setNewProjectId] = useState('');
+  const [newClientName, setNewClientName] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const agentTypes = [
     { id: 'coder', name: 'CoderAgent', description: 'Backend services and APIs' },
@@ -45,109 +71,254 @@ export default function PromptManagement() {
   ];
 
   useEffect(() => {
-    fetchPrompts();
+    fetchAllData();
   }, []);
 
-  const fetchPrompts = async () => {
+  const fetchAllData = async () => {
     try {
-      const response = await fetch('/api/llm/prompts');
-      if (response.ok) {
-        const data = await response.json();
-        setPrompts(data);
+      setLoading(true);
+      setError(null);
+      
+      // Fetch system configuration
+      const systemRes = await fetch(`${API_BASE}/api/llm/system`);
+      if (systemRes.ok) {
+        const systemData = await systemRes.json();
+        setSystemConfig(systemData);
+      } else {
+        console.warn('Failed to fetch system config:', systemRes.status);
+        // Set default system config if endpoint fails
+        setSystemConfig({
+          primaryProvider: 'gemini',
+          secondaryProvider: 'openai',
+          tertiaryProvider: 'anthropic',
+          systemPrompt: 'You are a helpful AI assistant specialized in software development.',
+          geminiModel: 'gemini-1.5-pro',
+          openaiModel: 'gpt-4-turbo',
+          anthropicModel: 'claude-3-opus',
+          temperature: 0.7,
+          maxTokens: 4096,
+          monthlyBudget: 1000,
+          dailyBudget: 50,
+        });
+      }
+
+      // Fetch projects
+      const projectsRes = await fetch(`${API_BASE}/api/llm/projects?page_size=100`);
+      if (projectsRes.ok) {
+        const projectsData = await projectsRes.json();
+        setProjects(projectsData.items || []);
+      } else {
+        console.warn('Failed to fetch projects:', projectsRes.status);
+        setProjects([]);
       }
     } catch (error) {
       console.error('Failed to fetch prompts:', error);
+      setError('Failed to load configuration. Please check your connection and try again.');
+      // Set defaults to allow page to render
+      setSystemConfig({
+        primaryProvider: 'gemini',
+        secondaryProvider: 'openai',
+        tertiaryProvider: 'anthropic',
+        systemPrompt: 'You are a helpful AI assistant specialized in software development.',
+        geminiModel: 'gemini-1.5-pro',
+        openaiModel: 'gpt-4-turbo',
+        anthropicModel: 'claude-3-opus',
+        temperature: 0.7,
+        maxTokens: 4096,
+        monthlyBudget: 1000,
+        dailyBudget: 50,
+      });
+      setProjects([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const saveSystemPrompt = async (prompt: string) => {
+  const saveSystemPrompt = async () => {
+    if (!systemConfig) return;
+
     try {
-      const response = await fetch('/api/llm/prompts/system', {
+      const response = await fetch(`${API_BASE}/api/llm/system`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({
+          primaryProvider: systemConfig.primaryProvider,
+          secondaryProvider: systemConfig.secondaryProvider,
+          tertiaryProvider: systemConfig.tertiaryProvider,
+          geminiModel: systemConfig.geminiModel,
+          openaiModel: systemConfig.openaiModel,
+          anthropicModel: systemConfig.anthropicModel,
+          temperature: systemConfig.temperature,
+          maxTokens: systemConfig.maxTokens,
+          retriesPerProvider: 3,
+          monthlyBudget: systemConfig.monthlyBudget,
+          dailyBudget: systemConfig.dailyBudget,
+          templateLearningEnabled: true,
+          crossValidationEnabled: true,
+          cacheEnabled: true,
+          minQualityScore: 70,
+          templateMinQuality: 75,
+          systemPrompt: systemConfig.systemPrompt,
+        }),
       });
 
       if (response.ok) {
-        alert('✅ System prompt saved! Restart services for changes to take effect.');
-        fetchPrompts();
+        const data = await response.json();
+        alert('✅ System prompt saved successfully! Restart services for changes to take effect.');
+        await fetchAllData();
       } else {
-        alert('❌ Failed to save system prompt');
+        let errorMessage = `Failed to save (${response.status}): ${response.statusText}`;
+        try {
+          const error = await response.json();
+          errorMessage = error.detail || error.message || errorMessage;
+        } catch (e) {
+          // Response is not JSON
+        }
+        alert(`❌ ${errorMessage}`);
       }
     } catch (error) {
-      alert('❌ Error saving system prompt');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('System prompt save error:', error);
+      alert(`❌ Error saving system prompt: ${errorMessage}`);
     }
   };
 
-  const saveAgentPrompt = async (agentType: string, prompt: string, enabled: boolean) => {
+  const saveProjectPrompt = async (projectId: string) => {
+    const project = projects.find(p => p.projectId === projectId);
+    if (!project) return;
+
     try {
-      const response = await fetch(`/api/llm/prompts/agent/${agentType}`, {
+      const response = await fetch(`${API_BASE}/api/llm/projects/${projectId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, enabled }),
+        body: JSON.stringify({
+          clientName: project.clientName,
+          description: project.description,
+          customInstructions: project.customInstructions,
+          isActive: project.isActive,
+          priority: project.priority,
+        }),
       });
 
       if (response.ok) {
-        alert(`✅ ${agentType} prompt saved!`);
-        setEditingAgent(null);
-        fetchPrompts();
-      } else {
-        alert('❌ Failed to save agent prompt');
-      }
-    } catch (error) {
-      alert('❌ Error saving agent prompt');
-    }
-  };
-
-  const saveProjectPrompt = async (projectId: string, clientName: string, prompt: string) => {
-    try {
-      const response = await fetch(`/api/llm/prompts/project/${projectId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientName, prompt }),
-      });
-
-      if (response.ok) {
-        alert(`✅ Project prompt saved for ${clientName}!`);
+        alert(`✅ Project prompt saved for ${project.clientName}!`);
         setEditingProject(null);
-        fetchPrompts();
+        await fetchAllData();
       } else {
-        alert('❌ Failed to save project prompt');
+        const error = await response.json();
+        alert(`❌ Failed to save: ${error.detail || 'Unknown error'}`);
       }
     } catch (error) {
       alert('❌ Error saving project prompt');
     }
   };
 
-  const addNewProject = () => {
-    const projectId = prompt('Enter Project ID (e.g., acme_001):');
-    if (!projectId) return;
+  const saveAgentPrompt = async (projectId: string, agentType: string) => {
+    const project = projects.find(p => p.projectId === projectId);
+    if (!project) return;
 
-    const clientName = prompt('Enter Client Name (e.g., ACME Corp):');
-    if (!clientName) return;
+    const agentPrompt = project.agentPrompts.find(ap => ap.agentType === agentType) || {
+      agentType,
+      enabled: false,
+    };
 
-    setEditingProject(projectId);
-    setPrompts({
-      ...prompts!,
-      projects: {
-        ...prompts!.projects,
-        [projectId]: {
-          projectId,
-          clientName,
-          prompt: '',
-          source: 'config',
-          enabled: true
-        }
+    try {
+      const response = await fetch(`${API_BASE}/api/llm/projects/${projectId}/agents/${agentType}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customPrompt: agentPrompt.customPrompt || undefined,
+          customInstructions: agentPrompt.customInstructions || undefined,
+          enabled: agentPrompt.enabled,
+          providerOverride: agentPrompt.providerOverride || undefined,
+          modelOverride: agentPrompt.modelOverride || undefined,
+          temperatureOverride: agentPrompt.temperatureOverride || undefined,
+          maxTokensOverride: agentPrompt.maxTokensOverride || undefined,
+        }),
+      });
+
+      if (response.ok) {
+        alert(`✅ ${agentType} prompt saved for ${project.clientName}!`);
+        setEditingAgent(null);
+        await fetchAllData();
+      } else {
+        const error = await response.json();
+        alert(`❌ Failed to save: ${error.detail || 'Unknown error'}`);
       }
-    });
+    } catch (error) {
+      alert('❌ Error saving agent prompt');
+    }
   };
 
-  if (loading || !prompts) {
+  const createNewProject = async () => {
+    if (!newProjectId || !newClientName) {
+      alert('Please enter both Project ID and Client Name');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/api/llm/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: newProjectId,
+          clientName: newClientName,
+          description: '',
+          customInstructions: '',
+          isActive: true,
+          priority: 'normal',
+        }),
+      });
+
+      if (response.ok) {
+        alert(`✅ Project ${newClientName} created!`);
+        setNewProjectId('');
+        setNewClientName('');
+        await fetchAllData();
+      } else {
+        const error = await response.json();
+        alert(`❌ Failed to create: ${error.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      alert('❌ Error creating project');
+    }
+  };
+
+  const updateProjectField = (projectId: string, field: keyof ProjectConfig, value: any) => {
+    setProjects(prev => prev.map(p => 
+      p.projectId === projectId ? { ...p, [field]: value } : p
+    ));
+  };
+
+  const updateAgentPromptField = (
+    projectId: string,
+    agentType: string,
+    field: keyof AgentPrompt,
+    value: any
+  ) => {
+    setProjects(prev => prev.map(project => {
+      if (project.projectId !== projectId) return project;
+      
+      const existingAgent = project.agentPrompts.find(ap => ap.agentType === agentType);
+      const updatedAgent: AgentPrompt = existingAgent 
+        ? { ...existingAgent, [field]: value }
+        : { agentType, enabled: false, [field]: value };
+
+      return {
+        ...project,
+        agentPrompts: [
+          ...project.agentPrompts.filter(ap => ap.agentType !== agentType),
+          updatedAgent,
+        ],
+      };
+    }));
+  };
+
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <AdminHeader title="Prompt Management" />
+        <Navigation />
         <div className="flex items-center justify-center h-96">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
@@ -155,12 +326,38 @@ export default function PromptManagement() {
     );
   }
 
+  if (!systemConfig) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <AdminHeader title="Prompt Management" />
+        <Navigation />
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <p className="text-red-600 mb-4">Failed to load configuration</p>
+            <Button onClick={fetchAllData}>Retry</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <AdminHeader title="Advanced Prompt Management" subtitle="Customize system, agent, and project prompts" />
+      <AdminHeader title="Advanced Prompt Management" subtitle="Customize system, project, and agent prompts" />
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Breadcrumb items={[{ label: 'LLM Management', href: '/llm' }, { label: 'Prompts' }]} />
+
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-red-800">{error}</p>
+              <button onClick={() => setError(null)} className="text-red-600 hover:text-red-800">×</button>
+            </div>
+          </div>
+        )}
+
         <button
           onClick={() => router.push('/llm')}
           className="mb-6 text-blue-600 hover:text-blue-700 flex items-center gap-2"
@@ -169,15 +366,15 @@ export default function PromptManagement() {
         </button>
 
         {/* Info Banner */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <Card className="mb-6 bg-blue-50 border-blue-200">
           <h4 className="font-semibold text-blue-900 mb-2">🎯 3-Level Prompt Cascade</h4>
           <div className="text-sm text-blue-800 space-y-1">
             <p><strong>System Prompt</strong> → All agents, all projects (baseline)</p>
-            <p><strong>Agent Prompts</strong> → Specific agent type (CoderAgent, MobileAgent, etc.)</p>
             <p><strong>Project Prompts</strong> → Specific client project (ACME Corp, etc.)</p>
-            <p className="pt-2"><strong>Priority</strong>: Agent-specific overrides system, Project additions append to both</p>
+            <p><strong>Agent Prompts</strong> → Specific agent type within a project</p>
+            <p className="pt-2"><strong>Priority</strong>: Agent-specific overrides project, Project overrides system</p>
           </div>
-        </div>
+        </Card>
 
         {/* Tabs */}
         <div className="mb-6 border-b border-gray-200">
@@ -193,16 +390,6 @@ export default function PromptManagement() {
               System Prompt
             </button>
             <button
-              onClick={() => setActiveTab('agent')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'agent'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Agent Prompts ({agentTypes.length})
-            </button>
-            <button
               onClick={() => setActiveTab('project')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'project'
@@ -210,356 +397,286 @@ export default function PromptManagement() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Project Prompts ({Object.keys(prompts.projects).length})
+              Project Prompts ({projects.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('agent')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'agent'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Agent Prompts
             </button>
           </nav>
         </div>
 
         {/* System Prompt Tab */}
         {activeTab === 'system' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">System Prompt</h3>
-                  <p className="text-sm text-gray-600">Applies to all agents and projects (baseline behavior)</p>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  prompts.system.source === 'env' ? 'bg-green-100 text-green-800' :
-                  prompts.system.source === 'config' ? 'bg-blue-100 text-blue-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                  {prompts.system.source === 'env' ? 'From .env' : 
-                   prompts.system.source === 'config' ? 'Custom' : 'Default'}
-                </span>
-              </div>
-
-              <textarea
-                value={prompts.system.prompt}
-                onChange={(e) => setPrompts({
-                  ...prompts,
-                  system: { ...prompts.system, prompt: e.target.value, source: 'config' }
-                })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                rows={12}
-                placeholder="Enter system-level prompt that applies to all agents..."
-              />
-
-              <div className="mt-4 flex justify-between items-center">
-                <div className="text-sm text-gray-600">
-                  {prompts.system.source === 'env' && (
-                    <p>⚠️ This prompt is defined in .env file (Q2O_LLM_SYSTEM_PROMPT). Changes here will override it.</p>
-                  )}
-                </div>
-                <button
-                  onClick={() => saveSystemPrompt(prompts.system.prompt)}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  Save System Prompt
-                </button>
+          <Card>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">System Prompt</h3>
+                <p className="text-sm text-gray-600">Applies to all agents and projects (baseline behavior)</p>
               </div>
             </div>
 
-            {/* Quick Templates */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Prompt Templates</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button
-                  onClick={() => setPrompts({
-                    ...prompts,
-                    system: {
-                      ...prompts.system,
-                      prompt: "You are an expert software architect. Generate production-ready, well-documented code following industry best practices. Focus on code quality, maintainability, security, and performance.",
-                      source: 'config'
-                    }
-                  })}
-                  className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 text-left"
-                >
-                  <p className="font-semibold mb-1">Production Quality</p>
-                  <p className="text-sm text-gray-600">Enterprise-grade code</p>
-                </button>
+            <textarea
+              value={systemConfig.systemPrompt || ''}
+              onChange={(e) => setSystemConfig({ ...systemConfig, systemPrompt: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm whitespace-pre-wrap"
+              rows={15}
+              placeholder="Enter system-level prompt that applies to all agents..."
+              style={{ minHeight: '300px' }}
+            />
 
-                <button
-                  onClick={() => setPrompts({
-                    ...prompts,
-                    system: {
-                      ...prompts.system,
-                      prompt: "You are a security-focused developer. Generate code with security as top priority. Include input validation, error handling, SQL injection prevention, XSS protection, and security logging.",
-                      source: 'config'
-                    }
-                  })}
-                  className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 text-left"
-                >
-                  <p className="font-semibold mb-1">Security First</p>
-                  <p className="text-sm text-gray-600">Maximum security focus</p>
-                </button>
-
-                <button
-                  onClick={() => setPrompts({
-                    ...prompts,
-                    system: {
-                      ...prompts.system,
-                      prompt: "You are a rapid prototyping assistant. Generate working code quickly. Prioritize functionality over perfection. Code should be clear, functional, and easy to iterate on.",
-                      source: 'config'
-                    }
-                  })}
-                  className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 text-left"
-                >
-                  <p className="font-semibold mb-1">Rapid Prototyping</p>
-                  <p className="text-sm text-gray-600">Fast, functional code</p>
-                </button>
-
-                <button
-                  onClick={() => setPrompts({
-                    ...prompts,
-                    system: {
-                      ...prompts.system,
-                      prompt: "You are an educational coding assistant. Generate well-commented code with clear explanations. Focus on teaching best practices and explaining reasoning behind decisions. Include inline comments.",
-                      source: 'config'
-                    }
-                  })}
-                  className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 text-left"
-                >
-                  <p className="font-semibold mb-1">Educational</p>
-                  <p className="text-sm text-gray-600">Teaching-focused code</p>
-                </button>
-              </div>
+            <div className="mt-4 flex justify-end">
+              <Button onClick={saveSystemPrompt} variant="primary">
+                Save System Prompt
+              </Button>
             </div>
-          </div>
-        )}
-
-        {/* Agent Prompts Tab */}
-        {activeTab === 'agent' && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-lg shadow p-6 mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Agent-Specific Prompts</h3>
-              <p className="text-sm text-gray-600">
-                Customize prompts for each agent type. Agent prompts override the system prompt.
-              </p>
-            </div>
-
-            {agentTypes.map((agent) => {
-              const agentConfig = prompts.agents[agent.id] || {
-                prompt: '',
-                source: 'default',
-                enabled: false
-              };
-              const isEditing = editingAgent === agent.id;
-
-              return (
-                <div key={agent.id} className="bg-white rounded-lg shadow">
-                  <div className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h4 className="text-lg font-semibold text-gray-900">{agent.name}</h4>
-                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            agentConfig.source === 'env' ? 'bg-green-100 text-green-800' :
-                            agentConfig.enabled ? 'bg-blue-100 text-blue-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {agentConfig.source === 'env' ? '.env' : agentConfig.enabled ? 'Custom' : 'Using System'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600">{agent.description}</p>
-                      </div>
-                      
-                      <button
-                        onClick={() => setEditingAgent(isEditing ? null : agent.id)}
-                        className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                      >
-                        {isEditing ? 'Cancel' : 'Edit Prompt'}
-                      </button>
-                    </div>
-
-                    {isEditing && (
-                      <div className="mt-4 space-y-4">
-                        <div>
-                          <label className="flex items-center gap-2 mb-3">
-                            <input
-                              type="checkbox"
-                              checked={agentConfig.enabled}
-                              onChange={(e) => {
-                                const newPrompts = { ...prompts };
-                                newPrompts.agents[agent.id] = {
-                                  ...agentConfig,
-                                  enabled: e.target.checked
-                                };
-                                setPrompts(newPrompts);
-                              }}
-                              className="rounded border-gray-300"
-                            />
-                            <span className="text-sm font-medium text-gray-700">
-                              Enable custom prompt for {agent.name}
-                            </span>
-                          </label>
-
-                          <textarea
-                            value={agentConfig.prompt}
-                            onChange={(e) => {
-                              const newPrompts = { ...prompts };
-                              newPrompts.agents[agent.id] = {
-                                ...agentConfig,
-                                prompt: e.target.value,
-                                source: 'config'
-                              };
-                              setPrompts(newPrompts);
-                            }}
-                            disabled={!agentConfig.enabled}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:bg-gray-50"
-                            rows={8}
-                            placeholder={`Custom prompt for ${agent.name}...`}
-                          />
-                        </div>
-
-                        <div className="flex justify-end gap-3">
-                          <button
-                            onClick={() => setEditingAgent(null)}
-                            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => saveAgentPrompt(agent.id, agentConfig.prompt, agentConfig.enabled)}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                          >
-                            Save {agent.name} Prompt
-                          </button>
-                        </div>
-
-                        {agentConfig.source === 'env' && (
-                          <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm text-yellow-800">
-                            ⚠️ This agent has a prompt defined in .env (Q2O_LLM_PROMPT_{agent.id.toUpperCase()}). 
-                            Changes here will override it in the database.
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {!isEditing && agentConfig.enabled && agentConfig.prompt && (
-                      <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                          {agentConfig.prompt.substring(0, 200)}
-                          {agentConfig.prompt.length > 200 && '...'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          </Card>
         )}
 
         {/* Project Prompts Tab */}
         {activeTab === 'project' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-lg shadow p-6">
+            <Card>
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Project-Specific Prompts</h3>
                   <p className="text-sm text-gray-600">
-                    Customize prompts for individual client projects. Useful for client-specific standards, naming conventions, or requirements.
+                    Customize prompts for individual client projects.
                   </p>
                 </div>
-                <button
-                  onClick={addNewProject}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                >
-                  + Add Project
-                </button>
               </div>
-            </div>
 
-            {Object.keys(prompts.projects).length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-12 text-center">
+              {/* Create New Project */}
+              <div className="grid grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
+                <input
+                  type="text"
+                  placeholder="Project ID (e.g., acme_001)"
+                  value={newProjectId}
+                  onChange={(e) => setNewProjectId(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg"
+                />
+                <input
+                  type="text"
+                  placeholder="Client Name (e.g., ACME Corp)"
+                  value={newClientName}
+                  onChange={(e) => setNewClientName(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg"
+                />
+                <div className="col-span-2">
+                  <Button onClick={createNewProject} variant="primary" size="sm">
+                    + Create Project
+                  </Button>
+                </div>
+              </div>
+            </Card>
+
+            {projects.length === 0 ? (
+              <Card className="text-center p-12">
                 <div className="text-6xl mb-4">📋</div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">No Project Prompts</h3>
                 <p className="text-gray-600 mb-6">
                   Create project-specific prompts to customize LLM behavior for individual clients.
                 </p>
-                <button
-                  onClick={addNewProject}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
+                <Button onClick={() => setActiveTab('project')} variant="primary">
                   Add Your First Project Prompt
-                </button>
-              </div>
+                </Button>
+              </Card>
             ) : (
-              Object.entries(prompts.projects).map(([projectId, projectConfig]) => {
-                const isEditing = editingProject === projectId;
+              projects.map((project) => {
+                const isEditing = editingProject === project.projectId;
 
                 return (
-                  <div key={projectId} className="bg-white rounded-lg shadow">
-                    <div className="p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h4 className="text-lg font-semibold text-gray-900">{projectConfig.clientName}</h4>
-                            <code className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs font-mono">
-                              {projectId}
-                            </code>
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              projectConfig.source === 'env' ? 'bg-green-100 text-green-800' :
-                              'bg-blue-100 text-blue-800'
-                            }`}>
-                              {projectConfig.source === 'env' ? '.env' : 'Custom'}
-                            </span>
-                          </div>
+                  <Card key={project.projectId}>
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h4 className="text-lg font-semibold text-gray-900">{project.clientName}</h4>
+                          <code className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs font-mono">
+                            {project.projectId}
+                          </code>
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            project.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {project.isActive ? 'Active' : 'Inactive'}
+                          </span>
                         </div>
-                        
-                        <button
-                          onClick={() => setEditingProject(isEditing ? null : projectId)}
-                          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                          {isEditing ? 'Cancel' : 'Edit'}
-                        </button>
                       </div>
-
-                      {isEditing ? (
-                        <div className="space-y-4">
-                          <textarea
-                            value={projectConfig.prompt}
-                            onChange={(e) => {
-                              const newPrompts = { ...prompts };
-                              newPrompts.projects[projectId] = {
-                                ...projectConfig,
-                                prompt: e.target.value,
-                                source: 'config'
-                              };
-                              setPrompts(newPrompts);
-                            }}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                            rows={10}
-                            placeholder={`Custom requirements for ${projectConfig.clientName}...`}
-                          />
-
-                          <div className="flex justify-end gap-3">
-                            <button
-                              onClick={() => setEditingProject(null)}
-                              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => saveProjectPrompt(projectId, projectConfig.clientName, projectConfig.prompt)}
-                              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                            >
-                              Save Project Prompt
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="p-4 bg-gray-50 rounded-lg">
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                            {projectConfig.prompt || <em className="text-gray-400">No custom prompt set</em>}
-                          </p>
-                        </div>
-                      )}
+                      
+                      <Button
+                        onClick={() => setEditingProject(isEditing ? null : project.projectId)}
+                        variant="secondary"
+                        size="sm"
+                      >
+                        {isEditing ? 'Cancel' : 'Edit'}
+                      </Button>
                     </div>
-                  </div>
+
+                    {isEditing ? (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Client Name
+                          </label>
+                          <input
+                            type="text"
+                            value={project.clientName}
+                            onChange={(e) => updateProjectField(project.projectId, 'clientName', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Description
+                          </label>
+                          <input
+                            type="text"
+                            value={project.description || ''}
+                            onChange={(e) => updateProjectField(project.projectId, 'description', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Custom Instructions
+                          </label>
+                          <textarea
+                            value={project.customInstructions || ''}
+                            onChange={(e) => updateProjectField(project.projectId, 'customInstructions', e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg font-mono text-sm"
+                            rows={8}
+                            placeholder={`Custom requirements for ${project.clientName}...`}
+                          />
+                        </div>
+
+                        <div className="flex justify-end gap-3">
+                          <Button
+                            onClick={() => setEditingProject(null)}
+                            variant="secondary"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={() => saveProjectPrompt(project.projectId)}
+                            variant="primary"
+                          >
+                            Save Project Prompt
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                          {project.customInstructions || <em className="text-gray-400">No custom instructions set</em>}
+                        </p>
+                      </div>
+                    )}
+                  </Card>
                 );
               })
+            )}
+          </div>
+        )}
+
+        {/* Agent Prompts Tab */}
+        {activeTab === 'agent' && (
+          <div className="space-y-6">
+            {projects.length === 0 ? (
+              <Card className="text-center p-12">
+                <p className="text-gray-600">Create a project first to configure agent prompts.</p>
+              </Card>
+            ) : (
+              projects.map((project) => (
+                <Card key={project.projectId}>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">
+                    {project.clientName} ({project.projectId})
+                  </h4>
+                  
+                  <div className="space-y-4">
+                    {agentTypes.map((agent) => {
+                      const agentPrompt = project.agentPrompts.find(ap => ap.agentType === agent.id) || {
+                        agentType: agent.id,
+                        enabled: false,
+                      };
+                      const isEditing = editingAgent?.projectId === project.projectId && editingAgent?.agentType === agent.id;
+
+                      return (
+                        <div key={agent.id} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <h5 className="font-semibold text-gray-900">{agent.name}</h5>
+                              <p className="text-sm text-gray-600">{agent.description}</p>
+                            </div>
+                            <Button
+                              onClick={() => setEditingAgent(isEditing ? null : { projectId: project.projectId, agentType: agent.id })}
+                              variant="secondary"
+                              size="sm"
+                            >
+                              {isEditing ? 'Cancel' : 'Edit'}
+                            </Button>
+                          </div>
+
+                          {isEditing ? (
+                            <div className="space-y-3">
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={agentPrompt.enabled}
+                                  onChange={(e) => updateAgentPromptField(project.projectId, agent.id, 'enabled', e.target.checked)}
+                                  className="rounded border-gray-300"
+                                />
+                                <span className="text-sm font-medium text-gray-700">
+                                  Enable custom prompt for {agent.name}
+                                </span>
+                              </label>
+
+                              <textarea
+                                value={agentPrompt.customPrompt || ''}
+                                onChange={(e) => updateAgentPromptField(project.projectId, agent.id, 'customPrompt', e.target.value)}
+                                disabled={!agentPrompt.enabled}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg font-mono text-sm disabled:bg-gray-50"
+                                rows={6}
+                                placeholder={`Custom prompt for ${agent.name}...`}
+                              />
+
+                              <div className="flex justify-end gap-3">
+                                <Button
+                                  onClick={() => setEditingAgent(null)}
+                                  variant="secondary"
+                                  size="sm"
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  onClick={() => saveAgentPrompt(project.projectId, agent.id)}
+                                  variant="primary"
+                                  size="sm"
+                                >
+                                  Save
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            agentPrompt.enabled && agentPrompt.customPrompt && (
+                              <div className="p-3 bg-gray-50 rounded text-sm text-gray-700">
+                                {agentPrompt.customPrompt.substring(0, 150)}
+                                {agentPrompt.customPrompt.length > 150 && '...'}
+                              </div>
+                            )
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              ))
             )}
           </div>
         )}
@@ -567,4 +684,3 @@ export default function PromptManagement() {
     </div>
   );
 }
-

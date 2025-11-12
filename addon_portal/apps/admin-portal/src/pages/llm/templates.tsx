@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { AdminHeader } from '@/components/AdminHeader';
 import { Navigation } from '@/components/Navigation';
+import { Breadcrumb } from '@/components/Breadcrumb';
 
 interface LearnedTemplate {
   template_id: string;
@@ -151,7 +152,9 @@ export default function LearnedTemplates() {
       <AdminHeader title="Learned Templates" subtitle="View and manage AI-learned code templates" />
       <Navigation />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        <Breadcrumb items={[{ label: 'LLM Management', href: '/llm' }, { label: 'Templates' }]} />
+
         {/* Back Button */}
         <button
           onClick={() => router.push('/llm')}
@@ -159,7 +162,7 @@ export default function LearnedTemplates() {
         >
           ← Back to Overview
         </button>
-
+        
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6">

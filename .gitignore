@@ -24,6 +24,11 @@ wheels/
 .installed.cfg
 *.egg
 
+# EXCEPTION: Allow TypeScript lib directories in Next.js apps
+!addon_portal/apps/*/src/lib/
+!mobile/src/lib/
+!web/*/src/lib/
+
 # PyInstaller
 *.manifest
 *.spec
@@ -149,3 +154,7 @@ python*.exe
 # Next.js build output
 .next/
 *.next
+
+# Log files (keep logs directory structure)
+logs/*.log
+!logs/.gitkeep

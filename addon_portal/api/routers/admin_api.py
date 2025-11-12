@@ -3,16 +3,29 @@ Admin API Router - JSON endpoints for React Admin Portal
 Provides CRUD operations for Tenants, Activation Codes, and Devices
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
 
 from ..deps import get_db
-from ..models.licensing import Tenant, ActivationCode, Device
+from ..models.licensing import ActivationCode, Device, Tenant, SubscriptionState
+from ..schemas.tenant import (
+    SortDirection,
+    TenantCollectionResponse,
+    TenantCreatePayload,
+    TenantResponse,
+    TenantSortField,
+    TenantUpdatePayload,
+)
+from ..services.tenant_service import create_tenant, delete_tenant, get_tenant_by_slug, list_tenants, update_tenant
+from ..core.logging import get_logger
+from ..core.exceptions import TenantNotFoundError
 
 router = APIRouter(prefix="/admin/api", tags=["admin_api"])
+LOGGER = get_logger(__name__)
+# Note: OPTIONS requests are handled by CORSOptionsMiddleware in main.py
 
 
 # ============================================================================
@@ -111,27 +124,143 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/analytics")
+async def get_analytics(
+    db: Session = Depends(get_db),
+    date_range: str = Query("7d", regex="^(today|7d|30d|90d|1y)$")
+):
+    """Get analytics data for charts and metrics."""
+    
+    from datetime import datetime, timedelta
+    from sqlalchemy import func, and_
+    from ..models.licensing import Plan, Subscription, SubscriptionState
+    
+    # Calculate date range
+    now = datetime.now()
+    if date_range == "today":
+        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif date_range == "7d":
+        start_date = now - timedelta(days=7)
+    elif date_range == "30d":
+        start_date = now - timedelta(days=30)
+    elif date_range == "90d":
+        start_date = now - timedelta(days=90)
+    else:  # 1y
+        start_date = now - timedelta(days=365)
+    
+    # Activation trends (daily codes generated and devices activated)
+    activation_trend = []
+    current_date = start_date
+    while current_date <= now:
+        date_str = current_date.strftime('%b %d')
+        codes_count = db.query(ActivationCode).filter(
+            func.date(ActivationCode.created_at) == current_date.date()
+        ).count()
+        devices_count = db.query(Device).filter(
+            func.date(Device.created_at) == current_date.date()
+        ).count()
+        activation_trend.append({
+            "date": date_str,
+            "codes": codes_count,
+            "devices": devices_count
+        })
+        current_date += timedelta(days=1)
+    
+    # Tenant usage (current usage vs quota)
+    tenant_usage = []
+    all_tenants = db.query(Tenant).all()
+    for tenant in all_tenants:
+        # Get active subscription
+        active_sub = None
+        for sub in tenant.subscriptions:
+            if sub.state and sub.state.value == 'active':
+                active_sub = sub
+                break
+        
+        if active_sub and active_sub.plan:
+            # Calculate usage (simplified - you may want to track actual usage)
+            usage = db.query(Device).filter(
+                and_(Device.tenant_id == tenant.id, Device.is_revoked == False)
+            ).count()
+            quota = active_sub.plan.monthly_run_quota or 0
+            tenant_usage.append({
+                "tenant": tenant.name or tenant.slug,
+                "usage": usage,
+                "quota": quota
+            })
+    
+    # Subscription distribution
+    subscription_distribution = []
+    plans = db.query(Plan).all()
+    for plan in plans:
+        count = db.query(Subscription).filter(
+            and_(
+                Subscription.plan_id == plan.id,
+                Subscription.state == SubscriptionState.active
+            )
+        ).count()
+        if count > 0:
+            # Assign colors based on plan name
+            color_map = {
+                'starter': '#4CAF50',
+                'pro': '#9B59B6',
+                'enterprise': '#FF6B9D',
+            }
+            color = color_map.get(plan.name.lower(), '#6B7280')
+            subscription_distribution.append({
+                "name": plan.name,
+                "value": count,
+                "color": color
+            })
+    
+    # Summary stats
+    total_revenue = 0  # Revenue calculation would require Stripe integration
+    total_usage = db.query(Device).filter(Device.is_revoked == False).count()
+    total_quota = 0
+    active_subscriptions = db.query(Subscription).filter(
+        Subscription.state == SubscriptionState.active
+    ).all()
+    
+    for sub in active_subscriptions:
+        if sub.plan and sub.plan.monthly_run_quota:
+            total_quota += sub.plan.monthly_run_quota
+    
+    # Calculate average usage rate
+    avg_usage_rate = (total_usage / total_quota * 100) if total_quota > 0 else 0
+    
+    # Calculate retention rate (30-day active tenants)
+    thirty_days_ago = now - timedelta(days=30)
+    active_tenants_30d = 0
+    total_tenants = len(all_tenants)
+    for tenant in all_tenants:
+        # Check if tenant has devices activated in last 30 days
+        recent_devices = db.query(Device).filter(
+            and_(
+                Device.tenant_id == tenant.id,
+                Device.created_at >= thirty_days_ago,
+                Device.is_revoked == False
+            )
+        ).count()
+        if recent_devices > 0:
+            active_tenants_30d += 1
+    
+    retention_rate = (active_tenants_30d / total_tenants * 100) if total_tenants > 0 else 0
+    
+    return {
+        "activationTrend": activation_trend[-7:] if len(activation_trend) > 7 else activation_trend,  # Last 7 days
+        "tenantUsage": tenant_usage[:10],  # Top 10 tenants
+        "subscriptionDistribution": subscription_distribution,
+        "summaryStats": {
+            "totalRevenue": round(total_revenue, 2),
+            "avgUsageRate": round(avg_usage_rate, 1),
+            "retentionRate": round(retention_rate, 1)
+        }
+    }
+
+
 # ============================================================================
 # PYDANTIC MODELS
 # ============================================================================
-
-class TenantCreate(BaseModel):
-    name: str
-    slug: str
-    logo_url: Optional[str] = None
-    primary_color: str = "#875A7B"
-    domain: Optional[str] = None
-    subscription_plan: str = "Starter"
-    usage_quota: int = 10
-
-
-class TenantUpdate(BaseModel):
-    name: Optional[str] = None
-    logo_url: Optional[str] = None
-    primary_color: Optional[str] = None
-    domain: Optional[str] = None
-    subscription_plan: Optional[str] = None
-    usage_quota: Optional[int] = None
 
 
 class ActivationCodeGenerate(BaseModel):
@@ -146,154 +275,115 @@ class ActivationCodeGenerate(BaseModel):
 # TENANT ENDPOINTS
 # ============================================================================
 
-@router.get("/tenants")
-async def get_all_tenants(
+@router.get("/tenants", response_model=TenantCollectionResponse)
+async def get_tenants(
     db: Session = Depends(get_db),
-    search: Optional[str] = None,
-    status: Optional[str] = None
-):
-    """Get all tenants with optional filtering."""
-    
-    query = db.query(Tenant)
-    
-    if search:
-        search_pattern = f"%{search}%"
-        query = query.filter(
-            (Tenant.name.ilike(search_pattern)) |
-            (Tenant.slug.ilike(search_pattern))
-        )
-    
-    tenants = query.all()
-    
-    result = []
-    for tenant in tenants:
-        # Get subscription from relationship
-        subscription = tenant.subscriptions[0] if tenant.subscriptions else None
-        
-        result.append({
-            "id": tenant.id,
-            "name": tenant.name,
-            "slug": tenant.slug,
-            "logoUrl": tenant.logo_url,
-            "primaryColor": tenant.primary_color,
-            "domain": tenant.domain,
-            "subscriptionPlan": subscription.plan.name if subscription and subscription.plan else "None",
-            "subscriptionStatus": subscription.state.value if subscription and subscription.state else "none",
-            "usageQuota": tenant.usage_quota,
-            "usageCurrent": tenant.usage_current,
-            "createdAt": tenant.created_at.isoformat() if tenant.created_at else None
-        })
-    
-    return {"tenants": result, "total": len(result)}
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    search: Optional[str] = Query(None, max_length=200),
+    status: Optional[SubscriptionState] = Query(None),
+    sort_field: TenantSortField = Query(TenantSortField.CREATED_AT),
+    sort_direction: SortDirection = Query(SortDirection.DESC),
+) -> TenantCollectionResponse:
+    """Return a paginated collection of tenants.
 
+    Args:
+        db: Injected database session.
+        page: Page number (1-indexed).
+        page_size: Number of records per page.
+        search: Optional case-insensitive search term.
+        status: Optional subscription status filter.
+        sort_field: Field to sort by.
+        sort_direction: Direction of sort.
 
-@router.get("/tenants/{tenant_slug}")
-async def get_tenant(tenant_slug: str, db: Session = Depends(get_db)):
-    """Get a single tenant by slug."""
-    
-    tenant = db.query(Tenant).filter(Tenant.slug == tenant_slug).first()
-    
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    
-    subscription = tenant.subscriptions[0] if tenant.subscriptions else None
-    
-    return {
-        "id": tenant.id,
-        "name": tenant.name,
-        "slug": tenant.slug,
-        "logoUrl": tenant.logo_url,
-        "primaryColor": tenant.primary_color,
-        "domain": tenant.domain,
-        "subscriptionPlan": subscription.plan.name if subscription and subscription.plan else "None",
-        "subscriptionStatus": subscription.state.value if subscription and subscription.state else "none",
-        "usageQuota": tenant.usage_quota,
-        "usageCurrent": tenant.usage_current,
-        "createdAt": tenant.created_at.isoformat() if tenant.created_at else None
-    }
+    Returns:
+        A paginated tenant collection.
+    """
 
-
-@router.post("/tenants")
-async def create_tenant(data: TenantCreate, db: Session = Depends(get_db)):
-    """Create a new tenant."""
-    
-    # Check if slug already exists
-    existing = db.query(Tenant).filter(Tenant.slug == data.slug).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Tenant slug already exists")
-    
-    # Create tenant
-    new_tenant = Tenant(
-        name=data.name,
-        slug=data.slug,
-        logo_url=data.logo_url,
-        primary_color=data.primary_color,
-        domain=data.domain,
-        usage_quota=data.usage_quota,
-        usage_current=0
+    LOGGER.info(
+        "list_tenants_request",
+        extra={
+            "page": page,
+            "pageSize": page_size,
+            "search": search,
+            "status": status.value if status else None,
+            "sortField": sort_field.value,
+            "sortDirection": sort_direction.value,
+        },
     )
-    
-    db.add(new_tenant)
-    db.commit()
-    db.refresh(new_tenant)
-    
-    return {
-        "success": True,
-        "message": "Tenant created successfully",
-        "tenantId": new_tenant.id,
-        "slug": new_tenant.slug
-    }
+    return list_tenants(
+        db,
+        page=page,
+        page_size=page_size,
+        search=search,
+        status=status,
+        sort_field=sort_field,
+        sort_direction=sort_direction,
+    )
 
 
-@router.put("/tenants/{tenant_slug}")
-async def update_tenant(
+@router.post("/tenants", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
+async def create_tenant_endpoint(payload: TenantCreatePayload, db: Session = Depends(get_db)) -> TenantResponse:
+    """Create a tenant and return the persisted record."""
+
+    LOGGER.info("create_tenant_request", extra={"slug": payload.slug})
+    return create_tenant(db, payload)
+
+
+# IMPORTANT: More specific routes must come BEFORE generic routes
+# FastAPI matches routes in order, so /tenants/{slug}/deletion-impact must come before /tenants/{slug}
+@router.get("/tenants/{tenant_slug}/deletion-impact")
+async def get_tenant_deletion_impact_endpoint(
     tenant_slug: str,
-    data: TenantUpdate,
-    db: Session = Depends(get_db)
-):
-    """Update an existing tenant."""
-    
-    tenant = db.query(Tenant).filter(Tenant.slug == tenant_slug).first()
-    
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    
-    # Update fields
-    if data.name is not None:
-        tenant.name = data.name
-    if data.logo_url is not None:
-        tenant.logo_url = data.logo_url
-    if data.primary_color is not None:
-        tenant.primary_color = data.primary_color
-    if data.domain is not None:
-        tenant.domain = data.domain
-    if data.usage_quota is not None:
-        tenant.usage_quota = data.usage_quota
-    
-    db.commit()
-    
-    return {
-        "success": True,
-        "message": "Tenant updated successfully"
-    }
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get a summary of all records that will be deleted with a tenant."""
+
+    LOGGER.info("get_tenant_deletion_impact_request", extra={"slug": tenant_slug})
+    from ..services.tenant_service import get_tenant_deletion_impact
+
+    return get_tenant_deletion_impact(db, tenant_slug)
 
 
-@router.delete("/tenants/{tenant_slug}")
-async def delete_tenant(tenant_slug: str, db: Session = Depends(get_db)):
-    """Delete a tenant."""
-    
-    tenant = db.query(Tenant).filter(Tenant.slug == tenant_slug).first()
-    
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    
-    db.delete(tenant)
-    db.commit()
-    
-    return {
-        "success": True,
-        "message": "Tenant deleted successfully"
-    }
+@router.get("/tenants/{tenant_slug}", response_model=TenantResponse)
+async def get_tenant(tenant_slug: str, db: Session = Depends(get_db)) -> TenantResponse:
+    """Return a single tenant by slug."""
+
+    try:
+        return get_tenant_by_slug(db, tenant_slug)
+    except TenantNotFoundError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error.message) from error
+
+
+@router.put("/tenants/{tenant_slug}", response_model=TenantResponse)
+async def update_tenant_endpoint(
+    tenant_slug: str,
+    payload: TenantUpdatePayload,
+    db: Session = Depends(get_db),
+) -> TenantResponse:
+    """Update tenant details and return the updated record."""
+
+    LOGGER.info("update_tenant_request", extra={"slug": tenant_slug})
+    return update_tenant(db, tenant_slug, payload)
+
+
+@router.delete("/tenants/{tenant_slug}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tenant_endpoint(tenant_slug: str, db: Session = Depends(get_db)) -> None:
+    """Delete the requested tenant and all related records.
+
+    This will permanently delete:
+    - All activation codes (revoked first)
+    - All devices (revoked first)
+    - All subscriptions
+    - All usage events and rollups
+    - All LLM project configs and agent configs (if associated)
+    - The tenant itself
+
+    This action cannot be undone.
+    """
+
+    LOGGER.info("delete_tenant_request", extra={"slug": tenant_slug})
+    delete_tenant(db, tenant_slug)
 
 
 # ============================================================================
@@ -309,7 +399,9 @@ async def get_all_codes(
 ):
     """Get all activation codes with optional filtering."""
     
-    query = db.query(ActivationCode).join(Tenant)
+    from sqlalchemy.orm import joinedload
+    
+    query = db.query(ActivationCode).join(Tenant).options(joinedload(ActivationCode.tenant))
     
     if tenant_slug:
         query = query.filter(Tenant.slug == tenant_slug)
@@ -339,11 +431,15 @@ async def get_all_codes(
         elif code.use_count >= code.max_uses:
             status_value = 'used'
         
+        # Get tenant info - use relationship if available, otherwise query
+        tenant_name = code.tenant.name if hasattr(code, 'tenant') and code.tenant else "Unknown"
+        tenant_slug_val = code.tenant.slug if hasattr(code, 'tenant') and code.tenant else "unknown"
+        
         result.append({
             "id": code.id,
             "code": code.code_plain,
-            "tenant": code.tenant.name,
-            "tenantSlug": code.tenant.slug,
+            "tenant": tenant_name,
+            "tenantSlug": tenant_slug_val,
             "label": code.label,
             "status": status_value,
             "expiresAt": code.expires_at.isoformat() if code.expires_at else None,
@@ -367,14 +463,31 @@ async def generate_codes_json(data: ActivationCodeGenerate, db: Session = Depend
     
     # Generate codes
     import secrets
+    import hashlib
+    from ..core.settings import settings
+    
+    def _hash_code(code: str) -> str:
+        """Hash activation code for secure storage."""
+        return hashlib.sha256((settings.ACTIVATION_CODE_PEPPER + code).encode()).hexdigest()
+    
+    def _generate_activation_code() -> str:
+        """Generate human-readable activation code (e.g., 12RY-S55W-4MZR-KP2J).
+        
+        Uses alphanumeric characters excluding ambiguous ones (I, O, 0, 1)
+        to avoid user confusion.
+        """
+        chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # No ambiguous chars
+        parts = []
+        for _ in range(4):
+            part = ''.join(secrets.choice(chars) for _ in range(4))
+            parts.append(part)
+        return '-'.join(parts)
+    
     generated_codes = []
     
     for _ in range(data.count):
-        # Generate random code (format: XXXX-XXXX-XXXX-XXXX)
-        code_plain = '-'.join([
-            secrets.token_hex(2).upper()[:4]
-            for _ in range(4)
-        ])
+        # Generate random code (format: XXXX-XXXX-XXXX-XXXX, e.g., 12RY-S55W-4MZR-KP2J)
+        code_plain = _generate_activation_code()
         
         # Calculate expiration
         expires_at = None
@@ -385,12 +498,12 @@ async def generate_codes_json(data: ActivationCodeGenerate, db: Session = Depend
         new_code = ActivationCode(
             tenant_id=tenant.id,
             code_plain=code_plain,
-            code_hash=code_plain,  # In production, hash this properly
+            code_hash=_hash_code(code_plain),  # Properly hash the code
             label=data.label,
             expires_at=expires_at,
             max_uses=data.max_uses,
             use_count=0,
-            revoked=False
+            revoked_at=None
         )
         
         db.add(new_code)

@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # Database Configuration
     # Default: SQLite for development (no server required, zero setup)
-    # Production: Set DB_DSN in .env to: postgresql+psycopg2://q2o_user:password@localhost:5432/q2o
+    # Production: Set DB_DSN in .env to: postgresql+psycopg://q2o_user:password@localhost:5432/q2o
     # 
     # SQLite pros: Zero setup, perfect for development/testing
     # PostgreSQL pros: Production-grade, concurrent users, scalability, ACID compliance
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # Branding CDN (optional)
     BRANDING_CDN_BASE: Optional[AnyHttpUrl] = None
 
-    # CORS - Allow all local development ports
+    # CORS - Allow all local development ports (IPv4 and IPv6)
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",  # Tenant Portal
         "http://localhost:3001",  # Dashboard UI
@@ -40,6 +40,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
         "http://127.0.0.1:3002",
+        "http://[::1]:3000",  # IPv6 localhost
+        "http://[::1]:3001",
+        "http://[::1]:3002",
     ]
 
     # Sessions + OIDC SSO for admin
@@ -49,6 +52,13 @@ class Settings(BaseSettings):
     OIDC_CLIENT_SECRET: Optional[str] = None
     OIDC_REDIRECT_URL: Optional[str] = None
 
-    model_config = SettingsConfigDict(env_file=".env")
+    # Logging Configuration
+    LOG_ENABLED: bool = True  # Set to False to disable all logging
+    LOG_LEVEL: str = "INFO"  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+    # LLM System Prompt (managed via LLM Management service, synced to .env)
+    LLM_SYSTEM_PROMPT: Optional[str] = None
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
