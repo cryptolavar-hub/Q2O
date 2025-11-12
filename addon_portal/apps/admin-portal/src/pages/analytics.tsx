@@ -6,7 +6,9 @@ import { AdminHeader } from '../components/AdminHeader';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { StatCard } from '../design-system';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+// Use relative URLs to leverage Next.js proxy (avoids IPv6 issues)
+// Next.js proxy rewrites /api/* and /admin/api/* to http://127.0.0.1:8080
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '';
 
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState('7d');

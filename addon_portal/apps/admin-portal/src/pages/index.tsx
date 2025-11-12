@@ -7,7 +7,9 @@ import { Navigation } from '@/components/Navigation';
 import { Button, Card, StatCard } from '@/design-system';
 import { AdminHeader } from '../components/AdminHeader';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+// Use relative URLs to leverage Next.js proxy (avoids IPv6 issues)
+// Next.js proxy rewrites /api/* and /admin/api/* to http://127.0.0.1:8080
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '';
 
 interface TrendMetric {
   direction: 'up' | 'down';
