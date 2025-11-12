@@ -17,7 +17,21 @@ from .settings import settings
 
 
 class JsonLogFormatter(logging.Formatter):
-    """Format log records using a structured JSON schema."""
+    """Format log records using a structured JSON schema.
+    
+    When logger.info("msg", extra={"key": "value"}) is called, Python's logging module
+    merges the extra dictionary directly into record.__dict__, not into record.extra.
+    This formatter extracts custom attributes (those not in standard LogRecord) and
+    includes them in the JSON output.
+    """
+
+    # Standard LogRecord attributes that should not be included as extra fields
+    _STANDARD_ATTRS = {
+        "name", "msg", "args", "created", "filename", "funcName", "levelname", "levelno",
+        "lineno", "module", "msecs", "message", "pathname", "process", "processName",
+        "relativeCreated", "thread", "threadName", "exc_info", "exc_text", "stack_info",
+        "getMessage",
+    }
 
     def format(self, record: logging.LogRecord) -> str:  # noqa: D401 - custom format doc
         base_record: Dict[str, Any] = {
@@ -30,8 +44,16 @@ class JsonLogFormatter(logging.Formatter):
         if record.exc_info:
             base_record["exception"] = self.formatException(record.exc_info)
 
-        if hasattr(record, "extra") and isinstance(record.extra, dict):
-            base_record.update(record.extra)  # type: ignore[arg-type]
+        # Extract custom attributes (extra fields) from record.__dict__
+        # These are attributes that were passed via extra={} parameter
+        custom_attrs = {
+            key: value
+            for key, value in record.__dict__.items()
+            if key not in self._STANDARD_ATTRS and not key.startswith("_")
+        }
+        
+        if custom_attrs:
+            base_record.update(custom_attrs)
 
         return json.dumps(base_record, ensure_ascii=False)
 
