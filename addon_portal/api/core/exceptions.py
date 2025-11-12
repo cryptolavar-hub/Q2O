@@ -76,13 +76,23 @@ def register_exception_handlers(app: FastAPI) -> None:
     """
 
     @app.exception_handler(BusinessLogicError)
-    async def _handle_business_error(_: Request, exc: BusinessLogicError) -> JSONResponse:
+    async def _handle_business_error(request: Request, exc: BusinessLogicError) -> JSONResponse:
+        # Skip OPTIONS requests - let CORS middleware handle them
+        if request.method == "OPTIONS":
+            LOGGER.info(f"Skipping BusinessLogicError for OPTIONS request to {request.url.path}")
+            from starlette.responses import Response
+            return Response(status_code=200)
         LOGGER.error("business_logic_error", extra={"error": _build_error_payload(exc)})
         return JSONResponse(status_code=int(exc.status_code), content=_build_error_payload(exc))
 
     @app.exception_handler(Exception)
-    async def _handle_unexpected_error(_: Request, exc: Exception) -> JSONResponse:
-        LOGGER.error("unexpected_error", extra={"exception": str(exc)})
+    async def _handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        # Skip OPTIONS requests - let CORS middleware handle them
+        if request.method == "OPTIONS":
+            LOGGER.info(f"Skipping Exception for OPTIONS request to {request.url.path}: {type(exc).__name__}: {str(exc)}")
+            from starlette.responses import Response
+            return Response(status_code=200)
+        LOGGER.error("unexpected_error", extra={"exception": str(exc), "path": request.url.path, "method": request.method})
         return JSONResponse(
             status_code=int(HTTPStatus.INTERNAL_SERVER_ERROR),
             content={

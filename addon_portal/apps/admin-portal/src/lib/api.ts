@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+// Use relative URLs to leverage Next.js proxy (avoids IPv6 issues)
+// Next.js proxy rewrites /api/* and /admin/api/* to http://127.0.0.1:8080
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '';
 
 export interface GenerateCodesRequest {
   tenant_slug: string;
@@ -144,13 +146,28 @@ export async function getTenants(params: TenantQueryParams = {}): Promise<Tenant
   if (params.sortDirection) query.set('sort_direction', params.sortDirection);
 
   const url = `${API_BASE}/admin/api/tenants${query.toString() ? `?${query.toString()}` : ''}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error('Failed to fetch tenants');
-  }
+  
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      let errorDetail = 'Failed to fetch tenants';
+      try {
+        const errorData = await response.json();
+        errorDetail = errorData.detail || errorData.message || errorDetail;
+      } catch (e) {
+        errorDetail = `Server returned ${response.status}: ${response.statusText}`;
+      }
+      throw new Error(errorDetail);
+    }
 
-  const data = await response.json();
-  return tenantCollectionSchema.parse(data);
+    const data = await response.json();
+    return tenantCollectionSchema.parse(data);
+  } catch (error) {
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Cannot connect to API server. Please ensure the backend is running on port 8080.');
+    }
+    throw error;
+  }
 }
 
 // Revoke activation code
@@ -188,21 +205,61 @@ export interface AddTenantRequest {
 }
 
 export async function addTenant(data: AddTenantRequest): Promise<Tenant> {
-  const response = await fetch(`${API_BASE}/admin/api/tenants`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  });
+  const url = `${API_BASE}/admin/api/tenants`;
+  console.log('Creating tenant at:', url, 'with payload:', data);
   
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to create tenant');
-  }
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    
+    console.log('Response status:', response.status, response.statusText);
+    
+    if (!response.ok) {
+      let errorDetail = 'Failed to create tenant';
+      try {
+        const errorData = await response.json();
+        errorDetail = errorData.detail || errorData.message || errorDetail;
+        console.error('API error response:', errorData);
+        
+        // Handle specific error codes
+        if (response.status === 409) {
+          // Conflict - slug already exists
+          if (errorData.detail && typeof errorData.detail === 'string') {
+            if (errorData.detail.includes('slug')) {
+              errorDetail = `A tenant with this slug already exists. Please choose a different slug.`;
+            } else {
+              errorDetail = errorData.detail;
+            }
+          } else {
+            errorDetail = 'A tenant with this slug already exists. Please choose a different slug.';
+          }
+        }
+      } catch (e) {
+        const text = await response.text();
+        console.error('API error text:', text);
+        if (response.status === 409) {
+          errorDetail = 'A tenant with this slug already exists. Please choose a different slug.';
+        } else {
+          errorDetail = text || `Server returned ${response.status}: ${response.statusText}`;
+        }
+      }
+      throw new Error(errorDetail);
+    }
 
-  const payload = await response.json();
-  return tenantSchema.parse(payload);
+    const payload = await response.json();
+    console.log('Tenant created successfully:', payload);
+    return tenantSchema.parse(payload);
+  } catch (error) {
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Cannot connect to API server. Please ensure the backend is running on port 8080.');
+    }
+    throw error;
+  }
 }
 
 // Edit tenant
@@ -225,11 +282,85 @@ export async function editTenant(slug: string, data: EditTenantRequest): Promise
   });
   
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to update tenant');
+    let errorDetail = `Failed to update tenant (${response.status})`;
+    try {
+      const error = await response.json();
+      errorDetail = error.detail || error.message || errorDetail;
+    } catch (e) {
+      errorDetail = `${errorDetail}: ${response.statusText}`;
+    }
+    throw new Error(errorDetail);
   }
 
   const payload = await response.json();
   return tenantSchema.parse(payload);
+}
+
+// Get tenant deletion impact
+export interface TenantDeletionImpact {
+  tenant: {
+    id: number;
+    name: string;
+    slug: string;
+  };
+  activationCodes: {
+    total: number;
+    active: number;
+    revoked: number;
+  };
+  devices: {
+    total: number;
+    active: number;
+    revoked: number;
+  };
+  subscriptions: {
+    total: number;
+  };
+  usageEvents: {
+    total: number;
+  };
+  usageRollups: {
+    total: number;
+  };
+  llmProjects: {
+    total: number;
+  };
+  llmAgents: {
+    total: number;
+  };
+}
+
+export async function getTenantDeletionImpact(slug: string): Promise<TenantDeletionImpact> {
+  const response = await fetch(`${API_BASE}/admin/api/tenants/${slug}/deletion-impact`);
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || 'Failed to fetch deletion impact');
+  }
+
+  const data = await response.json();
+  // Map snake_case to camelCase
+  return {
+    tenant: data.tenant,
+    activationCodes: data.activation_codes,
+    devices: data.devices,
+    subscriptions: data.subscriptions,
+    usageEvents: data.usage_events,
+    usageRollups: data.usage_rollups,
+    llmProjects: data.llm_projects,
+    llmAgents: data.llm_agents,
+  };
+}
+
+// Delete tenant
+export async function deleteTenant(slug: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/admin/api/tenants/${slug}`, {
+    method: 'DELETE',
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || 'Failed to delete tenant');
+  }
 }
 

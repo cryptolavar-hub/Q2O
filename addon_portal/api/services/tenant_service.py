@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Iterable, Optional, Sequence
 
-from sqlalchemy import asc, desc, func, select
+from sqlalchemy import asc, delete, desc, func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -197,7 +197,7 @@ def update_tenant(session: Session, slug: str, payload: TenantUpdatePayload) -> 
         select(Tenant)
         .options(joinedload(Tenant.subscriptions).joinedload(Subscription.plan))
         .where(Tenant.slug == slug)
-    ).scalar_one_or_none()
+    ).unique().scalar_one_or_none()
 
     if tenant is None:
         raise TenantNotFoundError("Tenant not found.", detail={"slug": slug})
@@ -251,8 +251,129 @@ def get_tenant_by_slug(session: Session, slug: str) -> TenantResponse:
     return _load_subscription_details(tenant)
 
 
+def get_tenant_deletion_impact(session: Session, slug: str) -> dict:
+    """Get a summary of all records that will be deleted with a tenant.
+
+    Args:
+        session: Active database session.
+        slug: Tenant slug.
+
+    Returns:
+        Dictionary with counts of related records.
+
+    Raises:
+        TenantNotFoundError: If the tenant does not exist.
+    """
+    from ..models.licensing import (
+        ActivationCode,
+        Device,
+        Subscription,
+        UsageEvent,
+        MonthlyUsageRollup,
+    )
+    from ..models.llm_config import LLMProjectConfig, LLMAgentConfig
+
+    tenant = session.execute(select(Tenant).where(Tenant.slug == slug)).scalar_one_or_none()
+    if tenant is None:
+        raise TenantNotFoundError("Tenant not found.", detail={"slug": slug})
+
+    tenant_id = tenant.id
+
+    # Count related records
+    activation_codes_count = session.execute(
+        select(func.count(ActivationCode.id)).where(ActivationCode.tenant_id == tenant_id)
+    ).scalar_one() or 0
+
+    active_codes_count = session.execute(
+        select(func.count(ActivationCode.id)).where(
+            ActivationCode.tenant_id == tenant_id,
+            ActivationCode.revoked_at.is_(None),
+        )
+    ).scalar_one() or 0
+
+    devices_count = session.execute(
+        select(func.count(Device.id)).where(Device.tenant_id == tenant_id)
+    ).scalar_one() or 0
+
+    active_devices_count = session.execute(
+        select(func.count(Device.id)).where(
+            Device.tenant_id == tenant_id,
+            Device.is_revoked == False,
+        )
+    ).scalar_one() or 0
+
+    subscriptions_count = session.execute(
+        select(func.count(Subscription.id)).where(Subscription.tenant_id == tenant_id)
+    ).scalar_one() or 0
+
+    usage_events_count = session.execute(
+        select(func.count(UsageEvent.id)).where(UsageEvent.tenant_id == tenant_id)
+    ).scalar_one() or 0
+
+    usage_rollups_count = session.execute(
+        select(func.count(MonthlyUsageRollup.id)).where(MonthlyUsageRollup.tenant_id == tenant_id)
+    ).scalar_one() or 0
+
+    # Check for LLM projects associated with tenant (by client_name matching tenant name or domain)
+    llm_projects_count = 0
+    llm_agents_count = 0
+    if tenant.name:
+        llm_projects_count = session.execute(
+            select(func.count(LLMProjectConfig.id)).where(
+                func.lower(LLMProjectConfig.client_name) == func.lower(tenant.name)
+            )
+        ).scalar_one() or 0
+
+        if llm_projects_count > 0:
+            # Get project IDs to count agents
+            project_ids = session.execute(
+                select(LLMProjectConfig.project_id).where(
+                    func.lower(LLMProjectConfig.client_name) == func.lower(tenant.name)
+                )
+            ).scalars().all()
+            if project_ids:
+                llm_agents_count = session.execute(
+                    select(func.count(LLMAgentConfig.id)).where(
+                        LLMAgentConfig.project_id.in_(project_ids)
+                    )
+                ).scalar_one() or 0
+
+    return {
+        "tenant": {
+            "id": tenant.id,
+            "name": tenant.name,
+            "slug": tenant.slug,
+        },
+        "activation_codes": {
+            "total": activation_codes_count,
+            "active": active_codes_count,
+            "revoked": activation_codes_count - active_codes_count,
+        },
+        "devices": {
+            "total": devices_count,
+            "active": active_devices_count,
+            "revoked": devices_count - active_devices_count,
+        },
+        "subscriptions": {"total": subscriptions_count},
+        "usage_events": {"total": usage_events_count},
+        "usage_rollups": {"total": usage_rollups_count},
+        "llm_projects": {"total": llm_projects_count},
+        "llm_agents": {"total": llm_agents_count},
+    }
+
+
 def delete_tenant(session: Session, slug: str) -> None:
-    """Permanently remove a tenant.
+    """Permanently remove a tenant and all related records.
+
+    Deletion order (to avoid foreign key constraint violations):
+    1. Revoke all active activation codes
+    2. Revoke all active devices
+    3. Delete usage events and rollups
+    4. Delete subscriptions
+    5. Delete activation codes
+    6. Delete devices
+    7. Delete LLM project configs and agent configs (if associated)
+    8. Finally delete the tenant
 
     Args:
         session: Active database session.
@@ -262,15 +383,86 @@ def delete_tenant(session: Session, slug: str) -> None:
         TenantNotFoundError: If the tenant does not exist.
         InvalidOperationError: If the delete fails.
     """
+    from datetime import datetime
+    from ..models.licensing import (
+        ActivationCode,
+        Device,
+        Subscription,
+        UsageEvent,
+        MonthlyUsageRollup,
+    )
+    from ..models.llm_config import LLMProjectConfig, LLMAgentConfig
 
     tenant = session.execute(select(Tenant).where(Tenant.slug == slug)).scalar_one_or_none()
     if tenant is None:
         raise TenantNotFoundError("Tenant not found.", detail={"slug": slug})
 
+    tenant_id = tenant.id
+    now = datetime.utcnow()
+
     try:
+        # Step 1: Revoke all active activation codes
+        session.execute(
+            update(ActivationCode)
+            .where(ActivationCode.tenant_id == tenant_id, ActivationCode.revoked_at.is_(None))
+            .values(revoked_at=now)
+        )
+        LOGGER.info("revoked_activation_codes", extra={"tenantId": tenant_id})
+
+        # Step 2: Revoke all active devices
+        session.execute(
+            update(Device)
+            .where(Device.tenant_id == tenant_id, Device.is_revoked == False)
+            .values(is_revoked=True)
+        )
+        LOGGER.info("revoked_devices", extra={"tenantId": tenant_id})
+
+        # Step 3: Delete usage events and rollups
+        session.execute(delete(UsageEvent).where(UsageEvent.tenant_id == tenant_id))
+        session.execute(delete(MonthlyUsageRollup).where(MonthlyUsageRollup.tenant_id == tenant_id))
+        LOGGER.info("deleted_usage_records", extra={"tenantId": tenant_id})
+
+        # Step 4: Delete subscriptions
+        session.execute(delete(Subscription).where(Subscription.tenant_id == tenant_id))
+        LOGGER.info("deleted_subscriptions", extra={"tenantId": tenant_id})
+
+        # Step 5: Delete activation codes
+        session.execute(delete(ActivationCode).where(ActivationCode.tenant_id == tenant_id))
+        LOGGER.info("deleted_activation_codes", extra={"tenantId": tenant_id})
+
+        # Step 6: Delete devices
+        session.execute(delete(Device).where(Device.tenant_id == tenant_id))
+        LOGGER.info("deleted_devices", extra={"tenantId": tenant_id})
+
+        # Step 7: Delete LLM project configs and agent configs (if associated with tenant)
+        if tenant.name:
+            # Find projects by client_name matching tenant name
+            project_ids = session.execute(
+                select(LLMProjectConfig.project_id).where(
+                    func.lower(LLMProjectConfig.client_name) == func.lower(tenant.name)
+                )
+            ).scalars().all()
+
+            if project_ids:
+                # Delete agent configs first (due to FK constraint)
+                session.execute(
+                    delete(LLMAgentConfig).where(LLMAgentConfig.project_id.in_(project_ids))
+                )
+                # Then delete project configs
+                session.execute(
+                    delete(LLMProjectConfig).where(LLMProjectConfig.project_id.in_(project_ids))
+                )
+                LOGGER.info(
+                    "deleted_llm_configs",
+                    extra={"tenantId": tenant_id, "projectsDeleted": len(project_ids)},
+                )
+
+        # Step 8: Finally delete the tenant
         session.delete(tenant)
         session.commit()
+        LOGGER.info("tenant_deleted", extra={"tenantId": tenant_id, "slug": slug})
+
     except SQLAlchemyError as exc:
         session.rollback()
-        LOGGER.error("tenant_delete_failed", extra={"tenantId": tenant.id, "error": str(exc)})
+        LOGGER.error("tenant_delete_failed", extra={"tenantId": tenant_id, "error": str(exc)})
         raise InvalidOperationError("Failed to delete tenant due to a database error.") from exc

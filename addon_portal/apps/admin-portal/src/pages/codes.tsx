@@ -5,6 +5,7 @@ import { Navigation } from '../components/Navigation';
 import { AdminHeader } from '../components/AdminHeader';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { getCodes, generateCodes, revokeCode, type ActivationCode } from '../lib/api';
+import { getTenants, type Tenant } from '../lib/api';
 
 export default function CodesPage() {
   const [allCodes, setAllCodes] = useState<ActivationCode[]>([]);
@@ -16,11 +17,27 @@ export default function CodesPage() {
   const [showQRCode, setShowQRCode] = useState<string | null>(null);
   const [generatedCodes, setGeneratedCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [loadingTenants, setLoadingTenants] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load codes
+  // Load codes and tenants
   useEffect(() => {
     loadCodes();
+    loadTenants();
   }, []);
+
+  const loadTenants = async () => {
+    try {
+      setLoadingTenants(true);
+      const response = await getTenants({ page: 1, pageSize: 100 });
+      setTenants(response.items);
+    } catch (error) {
+      console.error('Error loading tenants:', error);
+    } finally {
+      setLoadingTenants(false);
+    }
+  };
 
   const loadCodes = async () => {
     try {
@@ -61,11 +78,17 @@ export default function CodesPage() {
   const handleGenerateCodes = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMessage(null);
     
     const formData = new FormData(e.currentTarget);
     try {
+      const tenantSlug = formData.get('tenant_slug') as string;
+      if (!tenantSlug) {
+        throw new Error('Please select a tenant');
+      }
+
       const codes = await generateCodes({
-        tenant_slug: formData.get('tenant_slug') as string,
+        tenant_slug: tenantSlug,
         count: Number(formData.get('count')),
         ttl_days: formData.get('ttl_days') ? Number(formData.get('ttl_days')) : undefined,
         label: formData.get('label') as string || undefined,
@@ -76,7 +99,9 @@ export default function CodesPage() {
       setShowGenerateModal(false);
       await loadCodes(); // Reload codes list
     } catch (error) {
-      alert('Error generating codes: ' + error);
+      const errorMsg = error instanceof Error ? error.message : 'Error generating codes';
+      setErrorMessage(errorMsg);
+      console.error('Error generating codes:', error);
     } finally {
       setLoading(false);
     }
@@ -361,7 +386,10 @@ export default function CodesPage() {
       {showGenerateModal && (
         <div 
           className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setShowGenerateModal(false)}
+          onClick={() => {
+            setShowGenerateModal(false);
+            setErrorMessage(null);
+          }}
         >
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -371,19 +399,31 @@ export default function CodesPage() {
           >
             <h3 className="text-2xl font-bold text-gray-900 mb-6">Generate Activation Codes</h3>
             
+            {errorMessage && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm text-red-800">{errorMessage}</p>
+              </div>
+            )}
+
             <form onSubmit={handleGenerateCodes} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Tenant *</label>
                 <select 
                   name="tenant_slug" 
                   required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  disabled={loadingTenants}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
-                  <option value="">Select tenant...</option>
-                  <option value="demo">Demo Consulting</option>
-                  <option value="acme">Acme Corp</option>
-                  <option value="techsolutions">Tech Solutions</option>
+                  <option value="">{loadingTenants ? 'Loading tenants...' : 'Select tenant...'}</option>
+                  {tenants.map(tenant => (
+                    <option key={tenant.slug} value={tenant.slug}>
+                      {tenant.name} ({tenant.slug})
+                    </option>
+                  ))}
                 </select>
+                {tenants.length === 0 && !loadingTenants && (
+                  <p className="mt-1 text-sm text-amber-600">No tenants available. Create a tenant first.</p>
+                )}
               </div>
               
               <div className="grid grid-cols-2 gap-4">

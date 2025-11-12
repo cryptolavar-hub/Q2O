@@ -89,4 +89,5 @@ class ActivationCode(Base):
     use_count = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     revoked_at = Column(DateTime, nullable=True)
+    tenant = relationship("Tenant", backref="activation_codes")
     __table_args__ = (Index("ix_activation_codes_tenant", "tenant_id"),)

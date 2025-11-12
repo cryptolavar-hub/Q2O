@@ -453,23 +453,24 @@ print(result.workspace_path)`
           </div>
         </div>
 
-        {/* System Prompt (Read-Only) */}
+        {/* System Prompt */}
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            🖥️ System Prompt (Read-Only)
+            🖥️ System Prompt
           </h2>
-          <div className="bg-gray-100 rounded-lg shadow-sm p-6 border border-gray-300">
+          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
             <div className="mb-3">
-              <span className="text-sm font-semibold text-gray-700">SYSTEM PROMPT - {systemPrompt?.hostname}</span>
+              <span className="text-sm font-semibold text-gray-700">SYSTEM PROMPT - {systemPrompt?.hostname || 'localhost'}</span>
+              <p className="text-xs text-gray-500 mt-1">
+                This prompt applies to all agents and projects. Edit via the{' '}
+                <a href="/llm/prompts" className="text-blue-600 hover:underline">Prompt Management</a> page.
+              </p>
             </div>
             <textarea
               readOnly
-              value={systemPrompt?.prompt || ''}
-              className="w-full h-32 bg-white border border-gray-300 rounded px-4 py-3 text-sm text-gray-700 font-mono resize-none cursor-not-allowed"
+              value={systemPrompt?.prompt || 'No system prompt configured.'}
+              className="w-full min-h-[200px] bg-gray-50 border border-gray-300 rounded px-4 py-3 text-sm text-gray-700 font-mono resize-none cursor-not-allowed whitespace-pre-wrap"
             />
-            <p className="mt-2 text-xs text-gray-500">
-              System-level prompts are configured via .env file on each host machine. Contact system administrator to modify.
-            </p>
           </div>
         </div>
 

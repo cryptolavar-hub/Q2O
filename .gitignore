@@ -154,3 +154,7 @@ python*.exe
 # Next.js build output
 .next/
 *.next
+
+# Log files (keep logs directory structure)
+logs/*.log
+!logs/.gitkeep

@@ -11,6 +11,9 @@ import { Navigation } from '@/components/Navigation';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { Card, Button } from '@/design-system';
 
+// Use relative URLs to leverage Next.js proxy (avoids IPv6 issues)
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '';
+
 interface SystemConfig {
   primaryProvider: string;
   secondaryProvider: string;
@@ -56,6 +59,7 @@ export default function PromptManagement() {
   const [editingAgent, setEditingAgent] = useState<{ projectId: string; agentType: string } | null>(null);
   const [newProjectId, setNewProjectId] = useState('');
   const [newClientName, setNewClientName] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const agentTypes = [
     { id: 'coder', name: 'CoderAgent', description: 'Backend services and APIs' },
@@ -73,23 +77,58 @@ export default function PromptManagement() {
   const fetchAllData = async () => {
     try {
       setLoading(true);
+      setError(null);
       
       // Fetch system configuration
-      const systemRes = await fetch('/api/llm/system');
+      const systemRes = await fetch(`${API_BASE}/api/llm/system`);
       if (systemRes.ok) {
         const systemData = await systemRes.json();
         setSystemConfig(systemData);
+      } else {
+        console.warn('Failed to fetch system config:', systemRes.status);
+        // Set default system config if endpoint fails
+        setSystemConfig({
+          primaryProvider: 'gemini',
+          secondaryProvider: 'openai',
+          tertiaryProvider: 'anthropic',
+          systemPrompt: 'You are a helpful AI assistant specialized in software development.',
+          geminiModel: 'gemini-1.5-pro',
+          openaiModel: 'gpt-4-turbo',
+          anthropicModel: 'claude-3-opus',
+          temperature: 0.7,
+          maxTokens: 4096,
+          monthlyBudget: 1000,
+          dailyBudget: 50,
+        });
       }
 
       // Fetch projects
-      const projectsRes = await fetch('/api/llm/projects?page_size=100');
+      const projectsRes = await fetch(`${API_BASE}/api/llm/projects?page_size=100`);
       if (projectsRes.ok) {
         const projectsData = await projectsRes.json();
         setProjects(projectsData.items || []);
+      } else {
+        console.warn('Failed to fetch projects:', projectsRes.status);
+        setProjects([]);
       }
     } catch (error) {
       console.error('Failed to fetch prompts:', error);
-      alert('Failed to load configuration. Please refresh the page.');
+      setError('Failed to load configuration. Please check your connection and try again.');
+      // Set defaults to allow page to render
+      setSystemConfig({
+        primaryProvider: 'gemini',
+        secondaryProvider: 'openai',
+        tertiaryProvider: 'anthropic',
+        systemPrompt: 'You are a helpful AI assistant specialized in software development.',
+        geminiModel: 'gemini-1.5-pro',
+        openaiModel: 'gpt-4-turbo',
+        anthropicModel: 'claude-3-opus',
+        temperature: 0.7,
+        maxTokens: 4096,
+        monthlyBudget: 1000,
+        dailyBudget: 50,
+      });
+      setProjects([]);
     } finally {
       setLoading(false);
     }
@@ -99,7 +138,7 @@ export default function PromptManagement() {
     if (!systemConfig) return;
 
     try {
-      const response = await fetch('/api/llm/system', {
+      const response = await fetch(`${API_BASE}/api/llm/system`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -124,14 +163,23 @@ export default function PromptManagement() {
       });
 
       if (response.ok) {
-        alert('✅ System prompt saved! Restart services for changes to take effect.');
+        const data = await response.json();
+        alert('✅ System prompt saved successfully! Restart services for changes to take effect.');
         await fetchAllData();
       } else {
-        const error = await response.json();
-        alert(`❌ Failed to save: ${error.detail || 'Unknown error'}`);
+        let errorMessage = `Failed to save (${response.status}): ${response.statusText}`;
+        try {
+          const error = await response.json();
+          errorMessage = error.detail || error.message || errorMessage;
+        } catch (e) {
+          // Response is not JSON
+        }
+        alert(`❌ ${errorMessage}`);
       }
     } catch (error) {
-      alert('❌ Error saving system prompt');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('System prompt save error:', error);
+      alert(`❌ Error saving system prompt: ${errorMessage}`);
     }
   };
 
@@ -140,7 +188,7 @@ export default function PromptManagement() {
     if (!project) return;
 
     try {
-      const response = await fetch(`/api/llm/projects/${projectId}`, {
+      const response = await fetch(`${API_BASE}/api/llm/projects/${projectId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -175,7 +223,7 @@ export default function PromptManagement() {
     };
 
     try {
-      const response = await fetch(`/api/llm/projects/${projectId}/agents/${agentType}`, {
+      const response = await fetch(`${API_BASE}/api/llm/projects/${projectId}/agents/${agentType}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -209,10 +257,11 @@ export default function PromptManagement() {
     }
 
     try {
-      const response = await fetch(`/api/llm/projects/${newProjectId}`, {
-        method: 'PUT',
+      const response = await fetch(`${API_BASE}/api/llm/projects`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          projectId: newProjectId,
           clientName: newClientName,
           description: '',
           customInstructions: '',
@@ -265,13 +314,28 @@ export default function PromptManagement() {
     }));
   };
 
-  if (loading || !systemConfig) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <AdminHeader title="Prompt Management" />
         <Navigation />
         <div className="flex items-center justify-center h-96">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!systemConfig) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <AdminHeader title="Prompt Management" />
+        <Navigation />
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <p className="text-red-600 mb-4">Failed to load configuration</p>
+            <Button onClick={fetchAllData}>Retry</Button>
+          </div>
         </div>
       </div>
     );
@@ -284,6 +348,15 @@ export default function PromptManagement() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Breadcrumb items={[{ label: 'LLM Management', href: '/llm' }, { label: 'Prompts' }]} />
+
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-red-800">{error}</p>
+              <button onClick={() => setError(null)} className="text-red-600 hover:text-red-800">×</button>
+            </div>
+          </div>
+        )}
 
         <button
           onClick={() => router.push('/llm')}
@@ -350,11 +423,12 @@ export default function PromptManagement() {
             </div>
 
             <textarea
-              value={systemConfig.systemPrompt}
+              value={systemConfig.systemPrompt || ''}
               onChange={(e) => setSystemConfig({ ...systemConfig, systemPrompt: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-              rows={12}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm whitespace-pre-wrap"
+              rows={15}
               placeholder="Enter system-level prompt that applies to all agents..."
+              style={{ minHeight: '300px' }}
             />
 
             <div className="mt-4 flex justify-end">
