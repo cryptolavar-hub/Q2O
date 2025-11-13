@@ -52,7 +52,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activityDateRange, setActivityDateRange] = useState<'7d' | '30d' | '90d'>('7d');
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
-  const [activationTrend, setActivationTrend] = useState<Array<{date: string; codes: number; projects: number; devices: number}>>([]);
+  const [activationTrend, setActivationTrend] = useState<Array<{date: string; codes: number; projects: number; devices: number; cumulativeCodes?: number; cumulativeProjects?: number; cumulativeDevices?: number}>>([]);
   const [projectDeviceDistribution, setProjectDeviceDistribution] = useState<{
     projects: {active: number; total: number};
     devices: {active: number; revoked: number; total: number};
@@ -131,7 +131,28 @@ export default function AdminDashboard() {
         throw new Error('Failed to load activation trend');
       }
       const data = await response.json();
-      setActivationTrend(data.trend || []);
+      
+      // Transform daily counts to cumulative totals for better visualization
+      const rawTrend = data.trend || [];
+      let runningCodes = 0;
+      let runningProjects = 0;
+      let runningDevices = 0;
+      const processedTrend = rawTrend.map((entry: any) => {
+        runningCodes += entry.codes || 0;
+        runningProjects += entry.projects || 0;
+        runningDevices += entry.devices || 0;
+        return {
+          date: entry.date,
+          codes: entry.codes || 0,
+          projects: entry.projects || 0,
+          devices: entry.devices || 0,
+          cumulativeCodes: runningCodes,
+          cumulativeProjects: runningProjects,
+          cumulativeDevices: runningDevices,
+        };
+      });
+      
+      setActivationTrend(processedTrend);
     } catch (error) {
       console.error('Error fetching activation trend:', error);
       setActivationTrend([]);
@@ -352,11 +373,20 @@ export default function AdminDashboard() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-xl font-semibold text-gray-900">Activation Trends</h3>
-                <p className="text-sm text-gray-500">Daily codes generated vs projects/devices activated.</p>
+                <p className="text-sm text-gray-500">30-day cumulative totals for codes, projects, and devices.</p>
               </div>
-              <Button size="sm" variant="ghost" onClick={() => router.push('/analytics')}>
-                View Full Analytics
-              </Button>
+              <div className="flex items-center gap-3">
+                {activationTrend.length > 0 && (
+                  <div className="text-sm text-gray-600">
+                    <span className="font-semibold text-purple-600">
+                      {activationTrend[activationTrend.length - 1]?.cumulativeCodes || 0}
+                    </span> codes total
+                  </div>
+                )}
+                <Button size="sm" variant="ghost" onClick={() => router.push('/analytics')}>
+                  View Full Analytics
+                </Button>
+              </div>
             </div>
             {isLoadingCharts ? (
               <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
@@ -378,9 +408,9 @@ export default function AdminDashboard() {
                       }} 
                     />
                     <Legend />
-                    <Line type="monotone" dataKey="codes" stroke="#9B59B6" strokeWidth={2} name="Codes Generated" />
-                    <Line type="monotone" dataKey="projects" stroke="#4CAF50" strokeWidth={2} name="Projects Activated" />
-                    <Line type="monotone" dataKey="devices" stroke="#3498DB" strokeWidth={2} name="Devices Activated" />
+                    <Line type="monotone" dataKey="cumulativeCodes" stroke="#9B59B6" strokeWidth={2} name="Codes Generated (Total)" />
+                    <Line type="monotone" dataKey="cumulativeProjects" stroke="#FF6B9D" strokeWidth={2} name="Projects Activated (Total)" />
+                    <Line type="monotone" dataKey="cumulativeDevices" stroke="#4CAF50" strokeWidth={2} name="Devices Activated (Total)" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
