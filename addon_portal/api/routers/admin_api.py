@@ -286,19 +286,6 @@ async def get_activation_trend(
         # Convert to server timezone and extract date
         return utc_to_server_tz(dt_utc).date()
     
-    # Debug: Log total codes found and sample dates
-    if all_codes:
-        sample_code = all_codes[0]
-        sample_date = _get_date_in_server_tz(sample_code.created_at)
-        LOGGER.info("activation_trend_debug", extra={
-            "total_codes": len(all_codes),
-            "sample_code_created_at": str(sample_code.created_at),
-            "sample_code_date_in_server_tz": str(sample_date),
-            "server_timezone": str(get_server_timezone()),
-            "now_in_server_tz": str(now),
-            "start_date": str(start_date),
-        })
-    
     trend_data = []
     current_date = start_date
     
@@ -447,21 +434,6 @@ async def get_analytics(
             "devices": devices_count
         })
         current_date += timedelta(days=1)
-    
-    # Debug logging (after building activation_trend)
-    LOGGER.info("analytics_date_range_debug", extra={
-        "date_range": date_range,
-        "start_date_normalized": str(start_date_normalized),
-        "start_date_only": str(start_date_only),
-        "now_date_only": str(now_date_only),
-        "total_codes_in_db": len(all_codes_for_trend),
-        "filtered_codes_count": len(filtered_codes),
-        "total_devices_in_db": len(all_devices_for_trend),
-        "filtered_devices_count": len(filtered_devices),
-        "activation_trend_length": len(activation_trend),
-        "activation_trend_sample": activation_trend[:3] if len(activation_trend) > 0 else [],
-        "total_codes_in_trend": sum(item["codes"] for item in activation_trend),
-    })
     
     # Tenant usage (current usage vs quota) - with project filtering
     tenant_usage = []

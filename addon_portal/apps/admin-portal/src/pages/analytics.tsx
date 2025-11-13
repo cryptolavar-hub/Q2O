@@ -18,7 +18,7 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [analyticsData, setAnalyticsData] = useState<{
-    activationTrend: Array<{date: string; codes: number; devices: number}>;
+    activationTrend: Array<{date: string; codes: number; devices: number; cumulativeCodes?: number; cumulativeDevices?: number}>;
     tenantUsage: Array<{tenant: string; usage: number; quota: number}>;
     subscriptionDistribution: Array<{name: string; value: number; color: string}>;
     summaryStats: {
@@ -70,10 +70,27 @@ export default function AnalyticsPage() {
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
-        console.log(`[Analytics] Date range: ${dateRange}, Activation trend length:`, data.activationTrend?.length || 0);
-        console.log(`[Analytics] Total codes in trend:`, data.activationTrend?.reduce((sum: number, item: any) => sum + (item.codes || 0), 0) || 0);
-        console.log(`[Analytics] Sample trend data:`, data.activationTrend?.slice(0, 3));
-        setAnalyticsData(data);
+        
+        // Transform daily counts to cumulative totals for better visualization
+        const rawTrend = data.activationTrend || [];
+        let runningCodes = 0;
+        let runningDevices = 0;
+        const processedTrend = rawTrend.map((entry: any) => {
+          runningCodes += entry.codes || 0;
+          runningDevices += entry.devices || 0;
+          return {
+            date: entry.date,
+            codes: entry.codes || 0,  // Keep daily for reference
+            devices: entry.devices || 0,
+            cumulativeCodes: runningCodes,
+            cumulativeDevices: runningDevices,
+          };
+        });
+        
+        setAnalyticsData({
+          ...data,
+          activationTrend: processedTrend,
+        });
       } else {
         console.error('Failed to fetch analytics');
       }
@@ -120,7 +137,16 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               {/* Activation Trend */}
               <div className="bg-white rounded-2xl p-6 shadow-lg">
-                <h3 className="text-xl font-bold text-gray-900 mb-6">📈 Activation Trends</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-900">📈 Activation Trends</h3>
+                  {analyticsData.activationTrend.length > 0 && (
+                    <div className="text-sm text-gray-600">
+                      <span className="font-semibold text-purple-600">
+                        {analyticsData.activationTrend[analyticsData.activationTrend.length - 1]?.cumulativeCodes || 0}
+                      </span> codes total
+                    </div>
+                  )}
+                </div>
                 {analyticsData.activationTrend.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300} key={`trend-${dateRange}`}>
                     <LineChart data={analyticsData.activationTrend}>
@@ -136,8 +162,8 @@ export default function AnalyticsPage() {
                         }} 
                       />
                       <Legend />
-                      <Line type="monotone" dataKey="codes" stroke="#9B59B6" strokeWidth={3} name="Codes Generated" />
-                      <Line type="monotone" dataKey="devices" stroke="#4CAF50" strokeWidth={3} name="Devices Activated" />
+                      <Line type="monotone" dataKey="cumulativeCodes" stroke="#9B59B6" strokeWidth={3} name="Codes Generated (Total)" />
+                      <Line type="monotone" dataKey="cumulativeDevices" stroke="#4CAF50" strokeWidth={3} name="Devices Activated (Total)" />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
