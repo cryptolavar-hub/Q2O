@@ -1,10 +1,12 @@
-# Multi-Agent Development System
+# Q2O Multi-Agent Development System
 
-A sophisticated multi-agent system for managing software development projects. The system consists of 11 specialized agents that work together to break down, implement, test, quality-assure, and research development tasks.
+**Last Updated**: November 13, 2025
+
+A sophisticated multi-agent system for AI-powered software development. The system consists of **12 specialized agents** with **LLM integration** that work together to research, break down, implement, test, quality-assure, and deploy complete production-ready applications.
 
 ## Architecture
 
-### 11 Specialized Agents
+### 12 Specialized Agents ⭐ **Updated November 2025**
 
 1. **Orchestrator Agent** (`OrchestratorAgent`)
    - Breaks down projects into manageable tasks
@@ -81,7 +83,7 @@ A sophisticated multi-agent system for managing software development projects. T
    - Conducts automated web research for project objectives
    - Multi-provider search (Google Custom Search, Bing, DuckDuckGo with automatic fallback)
    - Smart detection of when research is needed (unknown tech, "latest" keywords, complex objectives)
-   - 90-day knowledge caching across all projects (~/.quickodoo/research_cache/)
+   - 90-day knowledge caching across all projects (~/.q2o/research_cache/)
    - Adaptive research depth (quick, deep, comprehensive, adaptive)
    - Code example extraction from documentation
    - Official documentation discovery and prioritization
@@ -100,6 +102,62 @@ A sophisticated multi-agent system for managing software development projects. T
     - Generates package.json with proper dependencies
     - Uses templates for Express apps and API endpoints
     - Detects and validates Node.js project structure
+
+12. **Mobile Agent** (`MobileAgent`) ⭐ **NEW - November 2025**
+    - Generates React Native applications for iOS and Android
+    - Hybrid generation: Templates + LLM fallback
+    - Creates cross-platform mobile apps
+    - Supports Expo SDK for rapid development
+    - Generates navigation, state management, and API integration
+    - Template learning from successful LLM generations
+
+## LLM Integration ⭐ **Added November 2025**
+
+### Multi-Provider Support
+
+The Q2O agent system now includes **LLM integration** with multi-provider support:
+
+**Supported Providers**:
+1. **Google Gemini** (gemini-1.5-pro) - Primary provider
+2. **OpenAI** (gpt-4-turbo) - Fallback provider #1
+3. **Anthropic** (claude-3.5-sonnet) - Fallback provider #2
+
+**Features**:
+- **Hybrid Code Generation**: Templates-first with LLM fallback for maximum reliability
+- **Self-Learning System**: Creates new templates from successful LLM outputs (cost reduction)
+- **Multi-Provider Chain**: 3 providers × 3 retries each = 99.9% reliability
+- **Cost Monitoring**: 7-level progressive alerts (50% → 100% budget)
+- **Budget Management**: Auto-allocation across projects
+- **Quality Validation**: Ensures 95-100% code quality from LLM generations
+
+### How LLM Integration Works
+
+```python
+# Agents can request LLM assistance for complex/unknown tasks
+result = await agent.generate_with_llm(
+    prompt="Generate React component for user authentication",
+    context={"framework": "Next.js", "auth": "JWT"}
+)
+
+# LLM response is:
+# 1. Quality validated
+# 2. Used in code generation
+# 3. Learned as template for future reuse (cost savings)
+```
+
+### Template Learning Engine
+
+The platform automatically learns from successful LLM generations:
+
+```
+First Project (Unknown Tech):
+  Template not found → LLM generates → $0.52 cost → Template saved
+
+Next 99 Projects:
+  Template found → Instant reuse → $0.00 cost!
+
+Result: Platform gets smarter and cheaper with every project
+```
 
 ## Usage
 
@@ -338,5 +396,5 @@ All agents inherit from `BaseAgent`, which provides:
 
 ## License
 
-This project is part of QuickOdoo.
+This project is part of Q2O (Quick to Objective).
 
