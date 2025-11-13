@@ -1,17 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
 from ..deps import get_db
 from ..models.licensing import Tenant, MonthlyUsageRollup, Subscription
+from ..utils.timezone_utils import now_in_server_tz
 
 router = APIRouter(prefix="/usage", tags=["usage"])
 
 @router.get("/{tenant_slug}")
 def get_usage(tenant_slug: str, db: Session = Depends(get_db)):
+    """Get tenant usage statistics for current month in server timezone."""
     tenant = db.query(Tenant).filter_by(slug=tenant_slug).first()
     if not tenant:
         raise HTTPException(404, "tenant not found")
-    today = datetime.utcnow()
+    # Use configured server timezone for date calculations
+    today = now_in_server_tz()
     roll = db.query(MonthlyUsageRollup).filter_by(tenant_id=tenant.id, year=today.year, month=today.month).first()
     runs = roll.runs if roll else 0
     sub = db.query(Subscription).filter_by(tenant_id=tenant.id).first()

@@ -22,6 +22,7 @@ from ..schemas.llm import (
 )
 from ..services.llm_config_service import (
     create_project,
+    delete_project,
     get_project,
     get_system_config,
     list_projects,
@@ -120,6 +121,24 @@ async def update_agent_configuration(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Agent type is required.")
 
     return update_agent_prompt(db, project_id, sanitized_agent_type, payload)
+
+
+@router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project_endpoint(
+    project_id: str,
+    db: Session = Depends(get_db),
+):
+    """Delete an LLM project configuration (admin only - no tenant scoping)."""
+
+    LOGGER.info('delete_project_request', extra={"projectId": project_id})
+    try:
+        delete_project(db, project_id, tenant_id=None)  # Admin can delete any project
+    except Exception as e:
+        LOGGER.error('delete_project_error', extra={"error": str(e), "projectId": project_id})
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found or could not be deleted",
+        )
 
 
 @router.get("/stats")

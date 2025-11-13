@@ -72,6 +72,27 @@ const tenantCollectionSchema = z.object({
 export type Tenant = z.infer<typeof tenantSchema>;
 export interface TenantPage extends z.infer<typeof tenantCollectionSchema> {}
 
+export interface Plan {
+  id: number;
+  name: string;
+  stripePriceId: string;
+  monthlyRunQuota: number;
+}
+
+export interface PlansResponse {
+  plans: Plan[];
+}
+
+export async function getPlans(): Promise<Plan[]> {
+  const url = `${API_BASE}/admin/api/plans`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Failed to fetch subscription plans');
+  }
+  const data: PlansResponse = await response.json();
+  return data.plans;
+}
+
 export interface TenantQueryParams {
   page?: number;
   pageSize?: number;
@@ -223,29 +244,71 @@ export async function addTenant(data: AddTenantRequest): Promise<Tenant> {
       let errorDetail = 'Failed to create tenant';
       try {
         const errorData = await response.json();
-        errorDetail = errorData.detail || errorData.message || errorDetail;
         console.error('API error response:', errorData);
+        
+        // Extract error message properly - handle different response formats
+        if (typeof errorData === 'string') {
+          errorDetail = errorData;
+        } else if (errorData.detail) {
+          // FastAPI returns {detail: "message"} or {detail: ["validation errors"]}
+          if (typeof errorData.detail === 'string') {
+            errorDetail = errorData.detail;
+          } else if (Array.isArray(errorData.detail)) {
+            // Validation errors array
+            errorDetail = errorData.detail.map((err: any) => {
+              if (typeof err === 'string') return err;
+              if (err.msg) return `${err.loc?.join('.') || 'Field'}: ${err.msg}`;
+              return JSON.stringify(err);
+            }).join('; ');
+          } else {
+            errorDetail = JSON.stringify(errorData.detail);
+          }
+        } else if (errorData.message) {
+          errorDetail = errorData.message;
+        } else {
+          errorDetail = JSON.stringify(errorData);
+        }
         
         // Handle specific error codes
         if (response.status === 409) {
-          // Conflict - slug already exists
-          if (errorData.detail && typeof errorData.detail === 'string') {
-            if (errorData.detail.includes('slug')) {
-              errorDetail = `A tenant with this slug already exists. Please choose a different slug.`;
-            } else {
-              errorDetail = errorData.detail;
-            }
-          } else {
+          if (errorDetail.includes('slug')) {
             errorDetail = 'A tenant with this slug already exists. Please choose a different slug.';
+          } else if (!errorDetail.includes('already exists')) {
+            errorDetail = 'A tenant with this slug already exists. Please choose a different slug.';
+          }
+        } else if (response.status === 400) {
+          // Business logic error (e.g., plan not found)
+          if (errorDetail.includes('plan') || errorDetail.includes('Plan')) {
+            // Extract plan name from error if available
+            const planMatch = errorDetail.match(/"plan":\s*"([^"]+)"/);
+            if (planMatch) {
+              errorDetail = `Subscription plan "${planMatch[1]}" not found. Please select a valid plan (Starter, Pro, or Enterprise).`;
+            } else {
+              errorDetail = 'Invalid subscription plan. Please select a valid plan (Starter, Pro, or Enterprise).';
+            }
+          }
+        } else if (response.status === 422) {
+          // Validation error - errorDetail already contains the validation messages
+          if (!errorDetail || errorDetail === 'Failed to create tenant') {
+            errorDetail = 'Invalid input. Please check all required fields are filled correctly.';
           }
         }
       } catch (e) {
-        const text = await response.text();
-        console.error('API error text:', text);
+        // Failed to parse JSON - try text
+        try {
+          const text = await response.text();
+          console.error('API error text:', text);
+          if (text) {
+            errorDetail = text.length > 200 ? text.substring(0, 200) + '...' : text;
+          } else {
+            errorDetail = `Server returned ${response.status}: ${response.statusText}`;
+          }
+        } catch (textError) {
+          errorDetail = `Server returned ${response.status}: ${response.statusText}`;
+        }
+        
         if (response.status === 409) {
           errorDetail = 'A tenant with this slug already exists. Please choose a different slug.';
-        } else {
-          errorDetail = text || `Server returned ${response.status}: ${response.statusText}`;
         }
       }
       throw new Error(errorDetail);

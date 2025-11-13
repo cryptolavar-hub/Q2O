@@ -1,318 +1,252 @@
 import React, { useState } from 'react';
-import { apiBase, getBranding, getUsage } from '../lib/api';
+import { Navigation } from '../components/Navigation';
+import { Breadcrumb } from '../components/Breadcrumb';
 import { BrandingPreview } from '../components/BrandingPreview';
 import { UsageMeter } from '../components/UsageMeter';
+import { getBranding, getUsage, generateCodes, type Branding, type Usage } from '../lib/api';
 
 export default function Home() {
   const [tenantSlug, setTenantSlug] = useState('');
-  const [branding, setBranding] = useState<any>(null);
-  const [usage, setUsage] = useState<any>(null);
-  const [codesJustCreated, setCodesJustCreated] = useState<string | null>(null);
+  const [branding, setBranding] = useState<Branding | null>(null);
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [generatedCodes, setGeneratedCodes] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   async function refreshAll() {
-    if (!tenantSlug) return;
-    try { setBranding(await getBranding(tenantSlug)); } catch {}
-    try { setUsage(await getUsage(tenantSlug)); } catch {}
+    if (!tenantSlug.trim()) {
+      setError('Please enter a tenant slug');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const [brandingData, usageData] = await Promise.all([
+        getBranding(tenantSlug),
+        getUsage(tenantSlug),
+      ]);
+      setBranding(brandingData);
+      setUsage(usageData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load tenant data');
+      setBranding(null);
+      setUsage(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function genCodes(evt: React.FormEvent<HTMLFormElement>) {
-    evt.preventDefault();
-    const form = new FormData(evt.currentTarget);
-    const payload = {
-      tenant_slug: String(form.get('tenant_slug')),
-      count: Number(form.get('count') || 1),
-      ttl_days: form.get('ttl_days') ? Number(form.get('ttl_days')) : undefined,
-      label: form.get('label') ? String(form.get('label')) : undefined,
-      max_uses: form.get('max_uses') ? Number(form.get('max_uses')) : undefined,
-    } as any;
-    const r = await fetch(`${apiBase}/admin/codes/generate`, { method:'POST', body: new URLSearchParams(Object.entries(payload).map(([k,v])=>[k,String(v)])) });
-    if (r.redirected) {
-      const url = new URL(r.url);
-      const created = url.searchParams.get('created');
-      setCodesJustCreated(created);
+  async function handleGenerateCodes(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!tenantSlug.trim()) {
+      setError('Please enter a tenant slug first');
+      return;
+    }
+
+    setIsGenerating(true);
+    setError(null);
+    setGeneratedCodes([]);
+
+    try {
+      const form = e.currentTarget;
+      const formData = new FormData(form);
+      const count = Number(formData.get('count') || 5);
+      const ttlDays = formData.get('ttl_days') ? Number(formData.get('ttl_days')) : undefined;
+      const label = formData.get('label') ? String(formData.get('label')) : undefined;
+      const maxUses = formData.get('max_uses') ? Number(formData.get('max_uses')) : 1;
+
+      const result = await generateCodes(tenantSlug, count, {
+        ttlDays,
+        label,
+        maxUses,
+      });
+
+      if (result.success && result.codes) {
+        setGeneratedCodes(result.codes);
+        // Refresh usage after generating codes
+        try {
+          const usageData = await getUsage(tenantSlug);
+          setUsage(usageData);
+        } catch (err) {
+          // Ignore usage refresh errors
+        }
+      } else {
+        setError(result.message || 'Failed to generate codes');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate codes');
+    } finally {
+      setIsGenerating(false);
     }
   }
 
   return (
-    <div style={{ 
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #FF6B9D 0%, #C44569 25%, #9B59B6 50%, #8E44AD 75%, #6C3483 100%)',
-      padding: '48px 16px',
-      fontFamily: 'system-ui, -apple-system, sans-serif'
-    }}>
-      <div style={{ maxWidth: 920, margin: '0 auto' }}>
-        <h1 style={{ 
-          color: '#FFFFFF', 
-          fontSize: '2.5rem', 
-          fontWeight: '700',
-          marginBottom: '32px',
-          textAlign: 'center',
-          textShadow: '0 2px 4px rgba(0,0,0,0.1)'
-        }}>
-          Q2O Tenant Portal
-        </h1>
-        
-        <section style={{ 
-          background: '#FFFFFF', 
-          borderRadius: 16, 
-          padding: 32, 
-          marginBottom: 24,
-          boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
-        }}>
-          <form onSubmit={(e)=>{e.preventDefault(); refreshAll();}}>
-            <label style={{ 
-              display: 'block',
-              color: '#2C3E50',
-              fontSize: '1rem',
-              fontWeight: '600',
-              marginBottom: 12
-            }}>
-              Tenant slug:
-            </label>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <input 
-                value={tenantSlug} 
-                onChange={e=>setTenantSlug(e.target.value)} 
-                placeholder="e.g., demo, mycompany" 
-                style={{
-                  flex: 1,
-                  padding: '12px 16px',
-                  border: '2px solid #E0E0E0',
-                  borderRadius: 8,
-                  fontSize: '1rem',
-                  outline: 'none',
-                  transition: 'border-color 0.3s'
-                }}
-                onFocus={(e) => e.target.style.borderColor = '#9B59B6'}
-                onBlur={(e) => e.target.style.borderColor = '#E0E0E0'}
-              />
-              <button 
-                onClick={refreshAll} 
-                style={{ 
-                  padding: '12px 32px',
-                  background: 'linear-gradient(135deg, #4CAF50 0%, #45A049 100%)',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: 8,
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)',
-                  transition: 'transform 0.2s, box-shadow 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(76, 175, 80, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(76, 175, 80, 0.3)';
-                }}
-              >
-                Load Demo
-              </button>
-            </div>
-          </form>
-        </section>
+    <div className="min-h-screen bg-gradient-to-br from-pink-500 via-purple-500 to-indigo-600">
+      <Navigation />
 
-      {branding && (
-        <section style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:24, marginBottom: 24 }}>
-          <div style={{ 
-            background:'#FFFFFF', 
-            borderRadius:16, 
-            padding:32,
-            boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
-          }}>
-            <h3 style={{ 
-              color: '#2C3E50', 
-              fontSize: '1.5rem', 
-              fontWeight: '700', 
-              marginBottom: 20 
-            }}>
-              Branding
-            </h3>
-            <BrandingPreview {...branding} />
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Breadcrumb items={[{ label: 'Dashboard' }]} />
+
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4 drop-shadow-lg">
+              Q2O Tenant Portal
+            </h1>
+            <p className="text-white/90 text-lg">
+              Manage your tenant branding, usage, and activation codes
+            </p>
           </div>
-          <div style={{ 
-            background:'#FFFFFF', 
-            borderRadius:16, 
-            padding:32,
-            boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
-          }}>
-            <h3 style={{ 
-              color: '#2C3E50', 
-              fontSize: '1.5rem', 
-              fontWeight: '700', 
-              marginBottom: 20 
-            }}>
-              Generate Activation Codes
-            </h3>
-            <form onSubmit={genCodes}>
-              <input type="hidden" name="tenant_slug" value={tenantSlug} />
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', color: '#555', fontWeight: '600', marginBottom: 8 }}>
-                  Count 
-                  <input 
-                    name="count" 
-                    type="number" 
-                    defaultValue={5} 
-                    min={1} 
-                    max={100} 
-                    style={{ 
-                      display: 'block', 
-                      width: '100%', 
-                      marginTop: 4,
-                      padding: '10px 12px', 
-                      border: '2px solid #E0E0E0', 
-                      borderRadius: 8,
-                      fontSize: '1rem'
-                    }} 
-                  />
-                </label>
+
+          {/* Tenant Selection */}
+          <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+            <form onSubmit={(e) => { e.preventDefault(); refreshAll(); }}>
+              <label className="block text-gray-700 text-sm font-semibold mb-3">
+                Tenant Slug
+              </label>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={tenantSlug}
+                  onChange={(e) => setTenantSlug(e.target.value)}
+                  placeholder="e.g., demo, mycompany"
+                  className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors text-base"
+                  disabled={loading}
+                />
+                <button
+                  type="submit"
+                  disabled={loading || !tenantSlug.trim()}
+                  className="px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold rounded-lg hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                >
+                  {loading ? 'Loading...' : 'Load Tenant'}
+                </button>
               </div>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', color: '#555', fontWeight: '600', marginBottom: 8 }}>
-                  TTL (days) 
-                  <input 
-                    name="ttl_days" 
-                    type="number" 
-                    placeholder="optional" 
-                    style={{ 
-                      display: 'block', 
-                      width: '100%', 
-                      marginTop: 4,
-                      padding: '10px 12px', 
-                      border: '2px solid #E0E0E0', 
-                      borderRadius: 8,
-                      fontSize: '1rem'
-                    }} 
-                  />
-                </label>
-              </div>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', color: '#555', fontWeight: '600', marginBottom: 8 }}>
-                  Max uses 
-                  <input 
-                    name="max_uses" 
-                    type="number" 
-                    defaultValue={1} 
-                    min={1} 
-                    style={{ 
-                      display: 'block', 
-                      width: '100%', 
-                      marginTop: 4,
-                      padding: '10px 12px', 
-                      border: '2px solid #E0E0E0', 
-                      borderRadius: 8,
-                      fontSize: '1rem'
-                    }} 
-                  />
-                </label>
-              </div>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', color: '#555', fontWeight: '600', marginBottom: 8 }}>
-                  Label 
-                  <input 
-                    name="label" 
-                    placeholder="onboard" 
-                    style={{ 
-                      display: 'block', 
-                      width: '100%', 
-                      marginTop: 4,
-                      padding: '10px 12px', 
-                      border: '2px solid #E0E0E0', 
-                      borderRadius: 8,
-                      fontSize: '1rem'
-                    }} 
-                  />
-                </label>
-              </div>
-              <button 
-                type="submit"
-                style={{ 
-                  width: '100%',
-                  padding: '12px',
-                  background: 'linear-gradient(135deg, #4CAF50 0%, #45A049 100%)',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: 8,
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)',
-                  transition: 'transform 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-              >
-                Generate
-              </button>
             </form>
-            {codesJustCreated && (
-              <div style={{ 
-                marginTop:16, 
-                background:'linear-gradient(135deg, #27AE60 0%, #229954 100%)', 
-                padding:16, 
-                borderRadius:12,
-                boxShadow: '0 4px 12px rgba(39, 174, 96, 0.3)'
-              }}>
-                <strong style={{ color: '#FFFFFF', display: 'block', marginBottom: 8 }}>
-                  Codes created (copy now, shown once):
-                </strong>
-                <pre style={{ 
-                  background: 'rgba(255,255,255,0.2)', 
-                  padding: 12, 
-                  borderRadius: 8,
-                  color: '#FFFFFF',
-                  fontSize: '0.9rem',
-                  overflowX: 'auto'
-                }}>
-                  {codesJustCreated}
-                </pre>
+
+            {error && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-700 text-sm font-medium">{error}</p>
               </div>
             )}
           </div>
-        </section>
-      )}
 
-      {usage && (
-        <section style={{ 
-          background:'#FFFFFF', 
-          borderRadius:16, 
-          padding:32, 
-          marginTop:24,
-          boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
-        }}>
-          <h3 style={{ 
-            color: '#2C3E50', 
-            fontSize: '1.5rem', 
-            fontWeight: '700', 
-            marginBottom: 20 
-          }}>
-            Usage (this month)
-          </h3>
-          <UsageMeter used={usage.runs} quota={usage.quota || 1} />
-          <div style={{ 
-            marginTop:16, 
-            color: '#555', 
-            fontSize: '1rem',
-            fontWeight: '500'
-          }}>
-            Plan: <strong>{usage.plan || '—'}</strong> • {usage.runs}/{usage.quota} runs
-          </div>
-        </section>
-      )}
+          {/* Branding and Code Generation */}
+          {branding && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* Branding Preview */}
+              <div className="bg-white rounded-2xl shadow-xl p-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-4">Branding</h3>
+                <BrandingPreview {...branding} />
+              </div>
 
-      <footer style={{ 
-        marginTop:48, 
-        textAlign: 'center',
-        color: 'rgba(255,255,255,0.8)',
-        fontSize: '0.9rem',
-        paddingBottom: 32
-      }}>
-        Q2O Tenant Portal • Powered by agents that build everything
-      </footer>
-      </div>
+              {/* Generate Codes */}
+              <div className="bg-white rounded-2xl shadow-xl p-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-4">Generate Activation Codes</h3>
+                <form onSubmit={handleGenerateCodes}>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-gray-700 text-sm font-semibold mb-2">
+                        Count
+                      </label>
+                      <input
+                        name="count"
+                        type="number"
+                        defaultValue={5}
+                        min={1}
+                        max={100}
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
+                        disabled={isGenerating}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 text-sm font-semibold mb-2">
+                        TTL (days) <span className="text-gray-400 font-normal">(optional)</span>
+                      </label>
+                      <input
+                        name="ttl_days"
+                        type="number"
+                        placeholder="Leave empty for no expiration"
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
+                        disabled={isGenerating}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 text-sm font-semibold mb-2">
+                        Max Uses
+                      </label>
+                      <input
+                        name="max_uses"
+                        type="number"
+                        defaultValue={1}
+                        min={1}
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
+                        disabled={isGenerating}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 text-sm font-semibold mb-2">
+                        Label <span className="text-gray-400 font-normal">(optional)</span>
+                      </label>
+                      <input
+                        name="label"
+                        type="text"
+                        placeholder="e.g., onboard"
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
+                        disabled={isGenerating}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isGenerating}
+                      className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold rounded-lg hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    >
+                      {isGenerating ? 'Generating...' : 'Generate Codes'}
+                    </button>
+                  </div>
+                </form>
+
+                {generatedCodes.length > 0 && (
+                  <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg">
+                    <strong className="block text-green-800 mb-2 text-sm font-semibold">
+                      Codes Generated (copy now, shown once):
+                    </strong>
+                    <pre className="bg-white/80 p-3 rounded-lg text-sm text-gray-800 overflow-x-auto font-mono">
+                      {generatedCodes.join('\n')}
+                    </pre>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(generatedCodes.join('\n'));
+                        alert('Codes copied to clipboard!');
+                      }}
+                      className="mt-3 px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      Copy All Codes
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Usage Meter */}
+          {usage && (
+            <div className="bg-white rounded-2xl shadow-xl p-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Usage (This Month)</h3>
+              <UsageMeter used={usage.runs} quota={usage.quota || 1} />
+              <div className="mt-4 text-gray-600 text-base">
+                <strong>Plan:</strong> {usage.plan || '—'} • {usage.runs}/{usage.quota} Project Runs
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <footer className="mt-12 text-center text-white/80 text-sm pb-6">
+            <p>Q2O Tenant Portal • Powered by agents that build everything</p>
+          </footer>
+        </div>
+      </main>
     </div>
   );
 }

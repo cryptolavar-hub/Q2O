@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     LOG_ENABLED: bool = True  # Set to False to disable all logging
     LOG_LEVEL: str = "INFO"  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
 
+    # Timezone Configuration
+    # Format: "UTC-5", "UTC+3", "America/New_York", "Europe/London", etc.
+    # Used for date calculations in dashboards and analytics
+    # Default: UTC (no offset)
+    TIME_ZONE: str = "UTC"  # Server timezone for date calculations
+
     # LLM System Prompt (managed via LLM Management service, synced to .env)
     LLM_SYSTEM_PROMPT: Optional[str] = None
 

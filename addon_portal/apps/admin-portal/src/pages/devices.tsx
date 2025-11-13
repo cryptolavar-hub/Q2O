@@ -4,6 +4,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Navigation } from '../components/Navigation';
 import { AdminHeader } from '../components/AdminHeader';
 import { Breadcrumb } from '../components/Breadcrumb';
+import { Footer } from '../components/Footer';
 import { getDevices, revokeDevice, type Device } from '../lib/api';
 
 export default function DevicesPage() {
@@ -189,6 +190,7 @@ export default function DevicesPage() {
           )}
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

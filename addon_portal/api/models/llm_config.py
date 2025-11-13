@@ -65,11 +65,15 @@ class LLMProjectConfig(Base):
     """
     Project-level LLM configuration.
     One record per client project.
+    Scoped to tenant for security and access control.
     """
     __tablename__ = "llm_project_config"
     
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(String(100), unique=True, index=True, nullable=False)
+    
+    # Tenant scoping (NULL = admin-only access, for backward compatibility)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
     
     # Project information
     client_name = Column(String(255), nullable=False)
@@ -92,6 +96,12 @@ class LLMProjectConfig(Base):
     # Project status
     is_active = Column(Boolean, default=True)
     priority = Column(String(20), default="normal")  # low, normal, high, critical
+    project_status = Column(String(20), default="active")  # active, pending, completed, paused
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Activation code used to activate this project (one code = one project activation)
+    activation_code_id = Column(Integer, ForeignKey("activation_codes.id", ondelete="SET NULL"), nullable=True)
     
     # Metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -99,6 +109,8 @@ class LLMProjectConfig(Base):
     created_by = Column(String(100))
     
     # Relationships
+    tenant = relationship("Tenant", foreign_keys=[tenant_id])
+    activation_code = relationship("ActivationCode", foreign_keys=[activation_code_id])
     agent_configs = relationship("LLMAgentConfig", back_populates="project", cascade="all, delete-orphan")
     
     # Indexes

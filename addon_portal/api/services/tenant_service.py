@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from ..core.exceptions import InvalidOperationError, PlanNotFoundError, TenantConflictError, TenantNotFoundError
 from ..core.logging import get_logger
 from ..models.licensing import Plan, Subscription, SubscriptionState, Tenant
+from .activation_code_service import generate_codes
 from ..schemas.tenant import (
     SortDirection,
     TenantCollectionResponse,
@@ -180,11 +181,51 @@ def create_tenant(session: Session, payload: TenantCreatePayload) -> TenantRespo
     session.add(subscription)
 
     try:
+        # Log tenant creation event BEFORE committing (so it's part of the same transaction)
+        try:
+            from ..services.event_service import log_tenant_created
+            log_tenant_created(
+                session=session,
+                tenant_id=new_tenant.id,
+                tenant_name=new_tenant.name,
+            )
+        except Exception as e:
+            # Event logging failed - log error but don't fail tenant creation
+            LOGGER.error("event_logging_failed", extra={"error": str(e), "event": "tenant_created"})
+        
+        # Commit everything together (tenant, subscription, and event)
         session.commit()
     except SQLAlchemyError as exc:
         session.rollback()
         LOGGER.error("tenant_creation_failed", extra={"tenantId": new_tenant.id, "error": str(exc)})
         raise InvalidOperationError("Tenant creation failed due to a database error.") from exc
+    
+    # Auto-generate 10% of plan quota activation codes
+    try:
+        quota = plan.monthly_run_quota
+        code_count = max(1, int(quota * 0.1))  # 10% of quota, minimum 1 code
+        generated_codes = generate_codes(
+            session=session,
+            tenant_id=new_tenant.id,
+            count=code_count,
+            label="Auto-generated on tenant creation",
+            max_uses=1,  # One code = one project activation
+        )
+        LOGGER.info(
+            "tenant_auto_codes_generated",
+            extra={
+                "tenant_id": new_tenant.id,
+                "tenant_slug": new_tenant.slug,
+                "code_count": code_count,
+                "plan_quota": quota,
+            },
+        )
+    except Exception as exc:
+        # Log but don't fail tenant creation if code generation fails
+        LOGGER.warning(
+            "tenant_auto_code_generation_failed",
+            extra={"tenant_id": new_tenant.id, "error": str(exc)},
+        )
 
     session.refresh(new_tenant)
     return _load_subscription_details(new_tenant)
@@ -225,12 +266,39 @@ def update_tenant(session: Session, slug: str, payload: TenantUpdatePayload) -> 
         else:
             subscription.plan_id = plan.id
 
+    # Track changes for event logging
+    changes = {}
+    if payload.name is not None and payload.name != tenant.name:
+        changes["name"] = {"old": tenant.name, "new": payload.name}
+    if payload.logo_url is not None:
+        changes["logo_url"] = {"old": tenant.logo_url, "new": str(payload.logo_url)}
+    if payload.primary_color is not None:
+        changes["primary_color"] = {"old": tenant.primary_color, "new": payload.primary_color}
+    if payload.domain is not None:
+        changes["domain"] = {"old": tenant.domain, "new": payload.domain}
+    if payload.usage_quota is not None:
+        changes["usage_quota"] = {"old": tenant.usage_quota, "new": payload.usage_quota}
+    
     try:
         session.commit()
     except SQLAlchemyError as exc:
         session.rollback()
         LOGGER.error("tenant_update_failed", extra={"tenantId": tenant.id, "error": str(exc)})
         raise InvalidOperationError("Tenant update failed due to a database error.") from exc
+
+    # Log tenant update event (gracefully handle if table doesn't exist)
+    if changes:
+        try:
+            from ..services.event_service import log_tenant_updated
+            log_tenant_updated(
+                session=session,
+                tenant_id=tenant.id,
+                tenant_name=tenant.name,
+                changes=changes,
+            )
+        except Exception as e:
+            # Event logging failed (table might not exist) - log warning but don't fail tenant update
+            LOGGER.warning("event_logging_failed", extra={"error": str(e), "event": "tenant_updated"})
 
     session.refresh(tenant)
     return _load_subscription_details(tenant)
@@ -457,6 +525,19 @@ def delete_tenant(session: Session, slug: str) -> None:
                     extra={"tenantId": tenant_id, "projectsDeleted": len(project_ids)},
                 )
 
+        # Log tenant deletion event BEFORE deleting (so we have tenant info)
+        # Gracefully handle if table doesn't exist
+        try:
+            from ..services.event_service import log_tenant_deleted
+            log_tenant_deleted(
+                session=session,
+                tenant_id=tenant_id,
+                tenant_name=tenant.name,
+            )
+        except Exception as e:
+            # Event logging failed (table might not exist) - log warning but don't fail tenant deletion
+            LOGGER.warning("event_logging_failed", extra={"error": str(e), "event": "tenant_deleted"})
+        
         # Step 8: Finally delete the tenant
         session.delete(tenant)
         session.commit()

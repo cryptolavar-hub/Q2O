@@ -10,7 +10,9 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 
 from ..deps import get_db
-from ..models.licensing import ActivationCode, Device, Tenant, SubscriptionState
+from ..models.licensing import ActivationCode, Device, Tenant, SubscriptionState, Plan
+from ..models.llm_config import LLMProjectConfig
+from ..models.events import PlatformEvent, EventType, EventSeverity
 from ..schemas.tenant import (
     SortDirection,
     TenantCollectionResponse,
@@ -19,6 +21,7 @@ from ..schemas.tenant import (
     TenantSortField,
     TenantUpdatePayload,
 )
+from ..schemas.plan import PlanResponse, PlanCollectionResponse
 from ..services.tenant_service import create_tenant, delete_tenant, get_tenant_by_slug, list_tenants, update_tenant
 from ..core.logging import get_logger
 from ..core.exceptions import TenantNotFoundError
@@ -36,11 +39,25 @@ LOGGER = get_logger(__name__)
 async def get_dashboard_stats(db: Session = Depends(get_db)):
     """Get dashboard statistics for the main admin page."""
     
+    from ..utils.timezone_utils import now_in_server_tz, utc_to_server_tz
+    from datetime import timezone as tz
+    now_tz = now_in_server_tz()
+    
     # Count activation codes by status
     all_codes = db.query(ActivationCode).all()
     total_codes = len(all_codes)
-    active_codes = sum(1 for c in all_codes if c.revoked_at is None and (c.expires_at is None or c.expires_at > datetime.now()) and c.use_count < c.max_uses)
-    expired_codes = sum(1 for c in all_codes if c.expires_at and c.expires_at <= datetime.now())
+    # Convert timezone-naive expires_at (stored as UTC) to server timezone for comparison
+    def _convert_expires_at(expires_at):
+        """Convert timezone-naive expires_at (UTC) to server timezone."""
+        if expires_at is None:
+            return None
+        if expires_at.tzinfo is None:
+            # Assume UTC (as stored in database)
+            return utc_to_server_tz(expires_at.replace(tzinfo=tz.utc))
+        return utc_to_server_tz(expires_at)
+    
+    active_codes = sum(1 for c in all_codes if c.revoked_at is None and (c.expires_at is None or _convert_expires_at(c.expires_at) > now_tz) and c.use_count < c.max_uses)
+    expired_codes = sum(1 for c in all_codes if c.expires_at and _convert_expires_at(c.expires_at) <= now_tz)
     revoked_codes = sum(1 for c in all_codes if c.revoked_at is not None)
     
     # Count devices
@@ -65,29 +82,30 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     used_codes = sum(1 for c in all_codes if c.used_at is not None)
     success_rate = (used_codes / total_codes * 100) if total_codes > 0 else 0
     
-    # Calculate trends (this week vs last week)
-    now = datetime.now()
+    # Calculate trends (this week vs last week) using configured server timezone
+    from ..utils.timezone_utils import now_in_server_tz, utc_to_server_tz
+    now = now_in_server_tz()
     week_ago = now - timedelta(days=7)
     two_weeks_ago = now - timedelta(days=14)
     
-    # Codes created this week vs last week
-    codes_this_week = sum(1 for c in all_codes if c.created_at >= week_ago)
-    codes_last_week = sum(1 for c in all_codes if two_weeks_ago <= c.created_at < week_ago)
+    # Codes created this week vs last week (compare in server timezone)
+    codes_this_week = sum(1 for c in all_codes if utc_to_server_tz(c.created_at) >= week_ago)
+    codes_last_week = sum(1 for c in all_codes if two_weeks_ago <= utc_to_server_tz(c.created_at) < week_ago)
     codes_trend = ((codes_this_week - codes_last_week) / codes_last_week * 100) if codes_last_week > 0 else (100 if codes_this_week > 0 else 0)
     
     # Devices activated this week vs last week
-    devices_this_week = sum(1 for d in all_devices if d.created_at >= week_ago)
-    devices_last_week = sum(1 for d in all_devices if two_weeks_ago <= d.created_at < week_ago)
+    devices_this_week = sum(1 for d in all_devices if utc_to_server_tz(d.created_at) >= week_ago)
+    devices_last_week = sum(1 for d in all_devices if two_weeks_ago <= utc_to_server_tz(d.created_at) < week_ago)
     devices_trend = ((devices_this_week - devices_last_week) / devices_last_week * 100) if devices_last_week > 0 else (100 if devices_this_week > 0 else 0)
     
     # Tenants created this week vs last week
-    tenants_this_week = sum(1 for t in all_tenants if t.created_at >= week_ago)
-    tenants_last_week = sum(1 for t in all_tenants if two_weeks_ago <= t.created_at < week_ago)
+    tenants_this_week = sum(1 for t in all_tenants if utc_to_server_tz(t.created_at) >= week_ago)
+    tenants_last_week = sum(1 for t in all_tenants if two_weeks_ago <= utc_to_server_tz(t.created_at) < week_ago)
     tenants_trend = ((tenants_this_week - tenants_last_week) / tenants_last_week * 100) if tenants_last_week > 0 else (100 if tenants_this_week > 0 else 0)
     
     # Success rate trend (this week vs last week)
-    codes_used_this_week = sum(1 for c in all_codes if c.used_at and c.used_at >= week_ago)
-    codes_used_last_week = sum(1 for c in all_codes if c.used_at and two_weeks_ago <= c.used_at < week_ago)
+    codes_used_this_week = sum(1 for c in all_codes if c.used_at and utc_to_server_tz(c.used_at) >= week_ago)
+    codes_used_last_week = sum(1 for c in all_codes if c.used_at and two_weeks_ago <= utc_to_server_tz(c.used_at) < week_ago)
     success_this_week = (codes_used_this_week / codes_this_week * 100) if codes_this_week > 0 else 0
     success_last_week = (codes_used_last_week / codes_last_week * 100) if codes_last_week > 0 else 0
     success_trend = success_this_week - success_last_week
@@ -124,19 +142,235 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/recent-activities")
+async def get_recent_activities(
+    db: Session = Depends(get_db),
+    days: int = Query(7, ge=1, le=90, description="Number of days to look back")
+):
+    """Get recent activities from event log (database-backed event tracking).
+    
+    Returns all platform events (Major and Minor) from the event log.
+    Events are categorized and include all platform changes.
+    
+    If the platform_events table doesn't exist yet (migration not run),
+    returns empty list instead of failing.
+    """
+    
+    from datetime import timedelta
+    from sqlalchemy.exc import ProgrammingError, OperationalError
+    from ..utils.timezone_utils import now_in_server_tz
+    
+    try:
+        from ..models.events import PlatformEvent, EventType, EventSeverity
+        
+        # Use configured server timezone for date calculations
+        now = now_in_server_tz()
+        start_date = now - timedelta(days=days)
+        
+        # Fetch events from event log
+        events = db.query(PlatformEvent).filter(
+            PlatformEvent.created_at >= start_date
+        ).order_by(PlatformEvent.created_at.desc()).limit(50).all()
+    except (ProgrammingError, OperationalError) as e:
+        # Table doesn't exist yet - return empty list
+        # This happens if migration 006 hasn't been run
+        LOGGER.warning("platform_events table not found, returning empty activities", extra={"error": str(e)})
+        return {"activities": []}
+    
+    # Map event types to icons and backdrops (using string values since event_type/severity are now strings)
+    event_icons = {
+        EventType.TENANT_CREATED.value: "👥",
+        EventType.TENANT_UPDATED.value: "✏️",
+        EventType.TENANT_DELETED.value: "🗑️",
+        EventType.PROJECT_CREATED.value: "🚀",
+        EventType.PROJECT_UPDATED.value: "📝",
+        EventType.PROJECT_DELETED.value: "❌",
+        EventType.CODE_GENERATED.value: "🔑",
+        EventType.CODE_REVOKED.value: "🔒",
+        EventType.CODE_ACTIVATED.value: "✅",
+        EventType.DEVICE_ENROLLED.value: "📱",
+        EventType.DEVICE_REVOKED.value: "🚫",
+        EventType.USER_LOGIN.value: "🔐",
+        EventType.USER_LOGOUT.value: "👋",
+        EventType.SESSION_CREATED.value: "🎫",
+        EventType.SESSION_EXPIRED.value: "⏰",
+        EventType.CONFIG_UPDATED.value: "⚙️",
+    }
+    
+    event_backdrops = {
+        EventSeverity.MAJOR.value: {
+            EventType.TENANT_CREATED.value: "bg-rose-100 text-rose-600",
+            EventType.TENANT_UPDATED.value: "bg-blue-100 text-blue-600",
+            EventType.TENANT_DELETED.value: "bg-red-100 text-red-600",
+            EventType.PROJECT_CREATED.value: "bg-green-100 text-green-600",
+            EventType.PROJECT_UPDATED.value: "bg-blue-100 text-blue-600",
+            EventType.PROJECT_DELETED.value: "bg-red-100 text-red-600",
+            EventType.CODE_GENERATED.value: "bg-indigo-100 text-indigo-600",
+            EventType.CODE_REVOKED.value: "bg-amber-100 text-amber-600",
+        },
+        EventSeverity.MINOR.value: {
+            EventType.CODE_ACTIVATED.value: "bg-emerald-100 text-emerald-600",
+            EventType.DEVICE_ENROLLED.value: "bg-emerald-100 text-emerald-600",
+            EventType.DEVICE_REVOKED.value: "bg-amber-100 text-amber-600",
+            EventType.USER_LOGIN.value: "bg-purple-100 text-purple-600",
+            EventType.USER_LOGOUT.value: "bg-gray-100 text-gray-600",
+            EventType.SESSION_CREATED.value: "bg-blue-100 text-blue-600",
+            EventType.SESSION_EXPIRED.value: "bg-yellow-100 text-yellow-600",
+            EventType.CONFIG_UPDATED.value: "bg-cyan-100 text-cyan-600",
+        }
+    }
+    
+    activities = []
+    for event in events:
+        # event.event_type and event.severity are now strings, not enums
+        icon = event_icons.get(event.event_type, "📋")
+        backdrop = event_backdrops.get(event.severity, {}).get(event.event_type, "bg-gray-100 text-gray-600")
+        
+        # Get tenant name from relationship or metadata
+        tenant_name = event.actor_name or (event.tenant.name if event.tenant else "Unknown")
+        if event.tenant_id and not tenant_name:
+            tenant = db.query(Tenant).filter(Tenant.id == event.tenant_id).first()
+            tenant_name = tenant.name if tenant else "Unknown"
+        
+        activities.append({
+            "type": event.event_type,  # Already a string, no .value needed
+            "icon": icon,
+            "action": event.title,
+            "tenant": tenant_name,
+            "timestamp": event.created_at.isoformat() if event.created_at else None,
+            "backdrop": backdrop,
+            "severity": event.severity,  # Already a string, no .value needed
+            "metadata": event.event_metadata or {},
+        })
+    
+    # Sort by timestamp (most recent first) and limit to 20
+    activities.sort(key=lambda x: x["timestamp"] or "", reverse=True)
+    return {"activities": activities[:20]}
+
+
+@router.get("/activation-trend")
+async def get_activation_trend(
+    db: Session = Depends(get_db),
+    days: int = Query(30, ge=7, le=365, description="Number of days for trend")
+):
+    """Get activation trend data for dashboard chart (codes generated vs projects/devices activated)."""
+    
+    from datetime import timedelta, timezone as tz
+    from sqlalchemy import func, and_
+    from ..models.llm_config import LLMProjectConfig
+    from ..utils.timezone_utils import now_in_server_tz, utc_to_server_tz, get_server_timezone
+    
+    # Use configured server timezone for date calculations
+    now = now_in_server_tz()
+    start_date = now - timedelta(days=days)
+    
+    # Fetch all codes, projects, and devices (we'll filter by date in Python for reliability)
+    all_codes = db.query(ActivationCode).all()
+    all_projects = db.query(LLMProjectConfig).filter(
+        LLMProjectConfig.activation_code_id.isnot(None)
+    ).all()
+    all_devices = db.query(Device).filter(
+        Device.is_revoked == False
+    ).all()
+    
+    # Helper function to convert timezone-naive datetime (assumed UTC) to server timezone date
+    def _get_date_in_server_tz(dt):
+        """Convert timezone-naive datetime (assumed UTC) to server timezone and return date."""
+        if dt is None:
+            return None
+        # If naive, assume UTC (as stored in database)
+        if dt.tzinfo is None:
+            dt_utc = dt.replace(tzinfo=tz.utc)
+        else:
+            dt_utc = dt
+        # Convert to server timezone and extract date
+        return utc_to_server_tz(dt_utc).date()
+    
+    trend_data = []
+    current_date = start_date
+    
+    while current_date <= now:
+        date_str = current_date.strftime('%b %d')
+        date_only = current_date.date()
+        
+        # Codes generated on this date (count ALL codes, regardless of source - Admin Portal or Tenant Dashboard)
+        codes_count = sum(1 for c in all_codes if _get_date_in_server_tz(c.created_at) == date_only)
+        
+        # Projects activated on this date (using activation codes)
+        projects_count = sum(1 for p in all_projects if _get_date_in_server_tz(p.created_at) == date_only)
+        
+        # Devices activated on this date
+        devices_count = sum(1 for d in all_devices if _get_date_in_server_tz(d.created_at) == date_only)
+        
+        trend_data.append({
+            "date": date_str,
+            "codes": codes_count,
+            "projects": projects_count,
+            "devices": devices_count,
+        })
+        
+        current_date += timedelta(days=1)
+    
+    return {"trend": trend_data}
+
+
+@router.get("/project-device-distribution")
+async def get_project_device_distribution(db: Session = Depends(get_db)):
+    """Get distribution of projects and devices for dashboard chart.
+    
+    Shows ALL projects (not just activated ones) to match Analytics page.
+    """
+    
+    from ..models.llm_config import LLMProjectConfig
+    
+    # Count ALL active projects (not just activated with codes)
+    active_projects = db.query(LLMProjectConfig).filter(
+        LLMProjectConfig.is_active == True
+    ).count()
+    
+    # Count total projects
+    total_projects = db.query(LLMProjectConfig).count()
+    
+    # Count active devices
+    active_devices = db.query(Device).filter(Device.is_revoked == False).count()
+    
+    # Count revoked devices
+    revoked_devices = db.query(Device).filter(Device.is_revoked == True).count()
+    
+    return {
+        "projects": {
+            "active": active_projects,
+            "total": total_projects,
+        },
+        "devices": {
+            "active": active_devices,
+            "revoked": revoked_devices,
+            "total": active_devices + revoked_devices,
+        }
+    }
+
+
 @router.get("/analytics")
 async def get_analytics(
     db: Session = Depends(get_db),
-    date_range: str = Query("7d", regex="^(today|7d|30d|90d|1y)$")
+    date_range: str = Query("7d", regex="^(today|7d|30d|90d|1y)$"),
+    project_filter: Optional[str] = Query(None, description="Filter by project: 'latest', 'top10', or specific project_id")
 ):
     """Get analytics data for charts and metrics."""
     
-    from datetime import datetime, timedelta
-    from sqlalchemy import func, and_
+    from datetime import timedelta
+    from sqlalchemy import func, and_, desc, text
     from ..models.licensing import Plan, Subscription, SubscriptionState
+    from ..models.llm_config import LLMProjectConfig
+    from ..utils.timezone_utils import now_in_server_tz, get_postgresql_timezone_string
     
-    # Calculate date range
-    now = datetime.now()
+    # Calculate date range using configured server timezone
+    now = now_in_server_tz()
+    tz_str = get_postgresql_timezone_string()
+    
+    # Calculate start_date based on date_range
+    # For "today", start at midnight of today
+    # For other ranges, go back N days from now
     if date_range == "today":
         start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif date_range == "7d":
@@ -148,17 +382,52 @@ async def get_analytics(
     else:  # 1y
         start_date = now - timedelta(days=365)
     
+    # Get start_date as date (for filtering) - normalize to start of day
+    start_date_normalized = start_date.replace(hour=0, minute=0, second=0, microsecond=0) if date_range != "today" else start_date
+    start_date_only = start_date_normalized.date()
+    now_date_only = now.date()
+    
     # Activation trends (daily codes generated and devices activated)
+    # Fetch all codes and devices, filter by date in Python for reliability
+    from datetime import timezone as tz
+    from ..utils.timezone_utils import utc_to_server_tz
+    all_codes_for_trend = db.query(ActivationCode).all()
+    all_devices_for_trend = db.query(Device).all()
+    
+    # Helper function to convert timezone-naive datetime (assumed UTC) to server timezone date
+    def _get_date_in_server_tz_analytics(dt):
+        """Convert timezone-naive datetime (assumed UTC) to server timezone and return date."""
+        if dt is None:
+            return None
+        # If naive, assume UTC (as stored in database)
+        if dt.tzinfo is None:
+            dt_utc = dt.replace(tzinfo=tz.utc)
+        else:
+            dt_utc = dt
+        # Convert to server timezone and extract date
+        return utc_to_server_tz(dt_utc).date()
+    
+    # Filter codes and devices to only those within the date range
+    filtered_codes = [
+        c for c in all_codes_for_trend 
+        if _get_date_in_server_tz_analytics(c.created_at) is not None 
+        and start_date_only <= _get_date_in_server_tz_analytics(c.created_at) <= now_date_only
+    ]
+    filtered_devices = [
+        d for d in all_devices_for_trend 
+        if _get_date_in_server_tz_analytics(d.created_at) is not None 
+        and start_date_only <= _get_date_in_server_tz_analytics(d.created_at) <= now_date_only
+    ]
+    
+    # Build daily trend data
     activation_trend = []
-    current_date = start_date
+    current_date = start_date_normalized
     while current_date <= now:
         date_str = current_date.strftime('%b %d')
-        codes_count = db.query(ActivationCode).filter(
-            func.date(ActivationCode.created_at) == current_date.date()
-        ).count()
-        devices_count = db.query(Device).filter(
-            func.date(Device.created_at) == current_date.date()
-        ).count()
+        date_only = current_date.date()
+        # Count codes and devices for this specific date
+        codes_count = sum(1 for c in filtered_codes if _get_date_in_server_tz_analytics(c.created_at) == date_only)
+        devices_count = sum(1 for d in filtered_devices if _get_date_in_server_tz_analytics(d.created_at) == date_only)
         activation_trend.append({
             "date": date_str,
             "codes": codes_count,
@@ -166,9 +435,31 @@ async def get_analytics(
         })
         current_date += timedelta(days=1)
     
-    # Tenant usage (current usage vs quota)
+    # Tenant usage (current usage vs quota) - with project filtering
     tenant_usage = []
     all_tenants = db.query(Tenant).all()
+    
+    # Get projects based on filter
+    project_filter_query = db.query(LLMProjectConfig)
+    
+    if project_filter == "latest":
+        # Get latest project only
+        latest_project = db.query(LLMProjectConfig).order_by(LLMProjectConfig.created_at.desc()).first()
+        if latest_project:
+            project_filter_query = db.query(LLMProjectConfig).filter(LLMProjectConfig.id == latest_project.id)
+        else:
+            project_filter_query = db.query(LLMProjectConfig).filter(False)  # No projects
+    elif project_filter == "top10":
+        # Get top 10 most recent projects
+        project_filter_query = db.query(LLMProjectConfig).order_by(LLMProjectConfig.created_at.desc()).limit(10)
+    elif project_filter and project_filter.startswith("project:"):
+        # Specific project ID
+        project_id = project_filter.replace("project:", "")
+        project_filter_query = db.query(LLMProjectConfig).filter(LLMProjectConfig.project_id == project_id)
+    
+    filtered_projects = project_filter_query.all() if project_filter else None
+    filtered_project_ids = {p.project_id for p in filtered_projects} if filtered_projects else None
+    
     for tenant in all_tenants:
         # Get active subscription
         active_sub = None
@@ -178,16 +469,36 @@ async def get_analytics(
                 break
         
         if active_sub and active_sub.plan:
-            # Calculate usage (simplified - you may want to track actual usage)
-            usage = db.query(Device).filter(
-                and_(Device.tenant_id == tenant.id, Device.is_revoked == False)
-            ).count()
+            # Calculate usage based on projects (if filter applied) or devices
+            if filtered_project_ids:
+                # Count projects for this tenant that match filter
+                tenant_projects = db.query(LLMProjectConfig).filter(
+                    and_(
+                        LLMProjectConfig.tenant_id == tenant.id,
+                        LLMProjectConfig.project_id.in_(filtered_project_ids)
+                    )
+                ).count()
+                usage = tenant_projects
+            else:
+                # Default: count devices (for backward compatibility)
+                usage = db.query(Device).filter(
+                    and_(Device.tenant_id == tenant.id, Device.is_revoked == False)
+                ).count()
+            
             quota = active_sub.plan.monthly_run_quota or 0
-            tenant_usage.append({
-                "tenant": tenant.name or tenant.slug,
-                "usage": usage,
-                "quota": quota
-            })
+            
+            # Only include if usage > 0 or if no filter (show all tenants)
+            if usage > 0 or not project_filter:
+                tenant_usage.append({
+                    "tenant": tenant.name or tenant.slug,
+                    "usage": usage,
+                    "quota": quota
+                })
+    
+    # Sort by usage descending and limit if needed
+    tenant_usage.sort(key=lambda x: x["usage"], reverse=True)
+    if not project_filter or project_filter == "top10":
+        tenant_usage = tenant_usage[:10]  # Top 10
     
     # Subscription distribution
     subscription_distribution = []
@@ -247,7 +558,7 @@ async def get_analytics(
     retention_rate = (active_tenants_30d / total_tenants * 100) if total_tenants > 0 else 0
     
     return {
-        "activationTrend": activation_trend[-7:] if len(activation_trend) > 7 else activation_trend,  # Last 7 days
+        "activationTrend": activation_trend,  # Return full trend based on date_range filter
         "tenantUsage": tenant_usage[:10],  # Top 10 tenants
         "subscriptionDistribution": subscription_distribution,
         "summaryStats": {
@@ -320,6 +631,34 @@ async def get_tenants(
         sort_field=sort_field,
         sort_direction=sort_direction,
     )
+
+
+@router.get("/plans", response_model=PlanCollectionResponse)
+async def get_plans(db: Session = Depends(get_db)) -> PlanCollectionResponse:
+    """Get all available subscription plans from the database.
+    
+    This endpoint provides the single source of truth for subscription plans.
+    Frontend should use this to populate plan dropdowns dynamically.
+    """
+    try:
+        plans = db.query(Plan).order_by(Plan.monthly_run_quota.asc()).all()
+        return PlanCollectionResponse(
+            plans=[
+                PlanResponse(
+                    id=plan.id,
+                    name=plan.name,
+                    stripe_price_id=plan.stripe_price_id,
+                    monthly_run_quota=plan.monthly_run_quota,
+                )
+                for plan in plans
+            ]
+        )
+    except Exception as e:
+        LOGGER.error("failed_to_fetch_plans", extra={"error": str(e)})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch subscription plans."
+        )
 
 
 @router.post("/tenants", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
@@ -509,6 +848,29 @@ async def generate_codes_json(data: ActivationCodeGenerate, db: Session = Depend
         db.add(new_code)
         generated_codes.append(code_plain)
     
+    # Log event for code generation BEFORE committing (so it's part of the same transaction)
+    try:
+        from ..services.event_service import log_code_generated
+        if generated_codes:
+            # Flush to get code IDs before committing
+            db.flush()
+            # Get the first code ID (representing the batch)
+            first_code = db.query(ActivationCode).filter(
+                ActivationCode.code_plain == generated_codes[0]
+            ).first()
+            if first_code:
+                log_code_generated(
+                    session=db,
+                    code_id=first_code.id,
+                    tenant_id=tenant.id,
+                    tenant_name=tenant.name,
+                    code_count=data.count,
+                )
+    except Exception as e:
+        # Event logging failed - log error but don't fail code generation
+        LOGGER.error("event_logging_failed", extra={"error": str(e), "event": "code_generated"})
+    
+    # Commit codes and event together
     db.commit()
     
     return {
@@ -529,6 +891,23 @@ async def delete_code(code_id: int, db: Session = Depends(get_db)):
     
     # Mark as revoked instead of deleting
     code.revoked_at = datetime.now()
+    
+    # Log event for code revocation BEFORE committing (so it's part of the same transaction)
+    try:
+        from ..services.event_service import log_code_revoked
+        tenant = db.query(Tenant).filter(Tenant.id == code.tenant_id).first()
+        if tenant:
+            log_code_revoked(
+                session=db,
+                code_id=code.id,
+                tenant_id=tenant.id,
+                tenant_name=tenant.name,
+            )
+    except Exception as e:
+        # Event logging failed - log error but don't fail code revocation
+        LOGGER.error("event_logging_failed", extra={"error": str(e), "event": "code_revoked"})
+    
+    # Commit code revocation and event together
     db.commit()
     
     return {

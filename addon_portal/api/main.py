@@ -6,7 +6,7 @@ from .core.settings import settings
 from .core.exceptions import register_exception_handlers
 from .core.logging import configure_logging, get_logger
 from .middleware.cors_options import CORSOptionsMiddleware
-from .routers import authz, licenses, billing_stripe, admin_pages, auth_sso, usage, llm_management, admin_api
+from .routers import authz, licenses, billing_stripe, admin_pages, auth_sso, usage, llm_management, admin_api, tenant_api
 
 # Configure logging first
 configure_logging()
@@ -38,6 +38,7 @@ base_app.include_router(usage.router)
 base_app.include_router(admin_pages.router)
 base_app.include_router(llm_management.router)  # LLM Management Dashboard API
 base_app.include_router(admin_api.router)  # Admin Portal JSON API (Tenants, Codes, Devices)
+base_app.include_router(tenant_api.router)  # Tenant API (Authentication & Project Management)
 
 base_app.mount("/static", StaticFiles(directory="api/static"), name="static")
 

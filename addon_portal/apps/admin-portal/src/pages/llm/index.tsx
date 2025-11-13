@@ -8,6 +8,7 @@ import { useRouter } from 'next/router';
 import { AdminHeader } from '@/components/AdminHeader';
 import { Navigation } from '@/components/Navigation';
 import { Breadcrumb } from '@/components/Breadcrumb';
+import { Footer } from '@/components/Footer';
 
 interface LLMStats {
   totalCalls: number;
@@ -435,6 +436,7 @@ export default function LLMOverview() {
         </div>
         )}
       </div>
+      <Footer />
     </div>
   );
 }

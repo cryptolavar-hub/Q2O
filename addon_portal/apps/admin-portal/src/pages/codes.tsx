@@ -4,6 +4,7 @@ import QRCode from 'qrcode.react';
 import { Navigation } from '../components/Navigation';
 import { AdminHeader } from '../components/AdminHeader';
 import { Breadcrumb } from '../components/Breadcrumb';
+import { Footer } from '../components/Footer';
 import { getCodes, generateCodes, revokeCode, type ActivationCode } from '../lib/api';
 import { getTenants, type Tenant } from '../lib/api';
 
@@ -494,6 +495,7 @@ export default function CodesPage() {
           </motion.div>
         </div>
       )}
+      <Footer />
     </div>
   );
 }

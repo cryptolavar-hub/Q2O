@@ -4,6 +4,7 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { Navigation } from '../components/Navigation';
 import { AdminHeader } from '../components/AdminHeader';
 import { Breadcrumb } from '../components/Breadcrumb';
+import { Footer } from '../components/Footer';
 import { StatCard } from '../design-system';
 
 // Use relative URLs to leverage Next.js proxy (avoids IPv6 issues)
@@ -12,8 +13,20 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '';
 
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState('7d');
+  const [projectFilter, setProjectFilter] = useState<string>('all');
+  const [availableProjects, setAvailableProjects] = useState<Array<{project_id: string; client_name: string}>>([]);
   const [loading, setLoading] = useState(true);
-  const [analyticsData, setAnalyticsData] = useState({
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState<{
+    activationTrend: Array<{date: string; codes: number; devices: number; cumulativeCodes?: number; cumulativeDevices?: number}>;
+    tenantUsage: Array<{tenant: string; usage: number; quota: number}>;
+    subscriptionDistribution: Array<{name: string; value: number; color: string}>;
+    summaryStats: {
+      totalRevenue: number;
+      avgUsageRate: number;
+      retentionRate: number;
+    };
+  }>({
     activationTrend: [],
     tenantUsage: [],
     subscriptionDistribution: [],
@@ -25,16 +38,59 @@ export default function AnalyticsPage() {
   });
 
   useEffect(() => {
+    fetchAvailableProjects();
+  }, []);
+
+  useEffect(() => {
     fetchAnalytics();
-  }, [dateRange]);
+  }, [dateRange, projectFilter]);
+
+  const fetchAvailableProjects = async () => {
+    try {
+      setLoadingProjects(true);
+      const response = await fetch(`${API_BASE}/api/llm/projects?page=1&page_size=100`);
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableProjects(data.items?.map((p: any) => ({ project_id: p.projectId, client_name: p.clientName })) || []);
+      }
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
 
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/admin/api/analytics?date_range=${dateRange}`);
+      let url = `${API_BASE}/admin/api/analytics?date_range=${dateRange}`;
+      if (projectFilter && projectFilter !== 'all') {
+        url += `&project_filter=${encodeURIComponent(projectFilter)}`;
+      }
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
-        setAnalyticsData(data);
+        
+        // Transform daily counts to cumulative totals for better visualization
+        const rawTrend = data.activationTrend || [];
+        let runningCodes = 0;
+        let runningDevices = 0;
+        const processedTrend = rawTrend.map((entry: any) => {
+          runningCodes += entry.codes || 0;
+          runningDevices += entry.devices || 0;
+          return {
+            date: entry.date,
+            codes: entry.codes || 0,  // Keep daily for reference
+            devices: entry.devices || 0,
+            cumulativeCodes: runningCodes,
+            cumulativeDevices: runningDevices,
+          };
+        });
+        
+        setAnalyticsData({
+          ...data,
+          activationTrend: processedTrend,
+        });
       } else {
         console.error('Failed to fetch analytics');
       }
@@ -81,9 +137,18 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               {/* Activation Trend */}
               <div className="bg-white rounded-2xl p-6 shadow-lg">
-                <h3 className="text-xl font-bold text-gray-900 mb-6">📈 Activation Trends</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-900">📈 Activation Trends</h3>
+                  {analyticsData.activationTrend.length > 0 && (
+                    <div className="text-sm text-gray-600">
+                      <span className="font-semibold text-purple-600">
+                        {analyticsData.activationTrend[analyticsData.activationTrend.length - 1]?.cumulativeCodes || 0}
+                      </span> codes total
+                    </div>
+                  )}
+                </div>
                 {analyticsData.activationTrend.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={300} key={`trend-${dateRange}`}>
                     <LineChart data={analyticsData.activationTrend}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                       <XAxis dataKey="date" stroke="#6B7280" style={{ fontSize: 12 }} />
@@ -97,8 +162,8 @@ export default function AnalyticsPage() {
                         }} 
                       />
                       <Legend />
-                      <Line type="monotone" dataKey="codes" stroke="#9B59B6" strokeWidth={3} name="Codes Generated" />
-                      <Line type="monotone" dataKey="devices" stroke="#4CAF50" strokeWidth={3} name="Devices Activated" />
+                      <Line type="monotone" dataKey="cumulativeCodes" stroke="#9B59B6" strokeWidth={3} name="Codes Generated (Total)" />
+                      <Line type="monotone" dataKey="cumulativeDevices" stroke="#4CAF50" strokeWidth={3} name="Devices Activated (Total)" />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
@@ -150,8 +215,45 @@ export default function AnalyticsPage() {
             </div>
 
             {/* Tenant Usage Bar Chart */}
-            <div className="bg-white rounded-2xl p-6 shadow-lg mb-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-6">💼 Tenant Usage Overview</h3>
+            <div id="tenant-usage-chart" className="bg-white rounded-2xl p-6 shadow-lg mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <h3 className="text-xl font-bold text-gray-900">💼 Tenant Usage Overview</h3>
+                <div className="flex items-center gap-3">
+                  <label htmlFor="project-filter" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                    Filter by Project:
+                  </label>
+                  <select
+                    id="project-filter"
+                    value={projectFilter}
+                    onChange={(e) => {
+                      e.preventDefault();
+                      const newValue = e.target.value;
+                      setProjectFilter(newValue);
+                      // Scroll to chart smoothly without page reload
+                      const chartElement = document.getElementById('tenant-usage-chart');
+                      if (chartElement) {
+                        chartElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }
+                    }}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 min-w-[200px]"
+                    disabled={loadingProjects}
+                  >
+                    <option value="all">All Projects</option>
+                    <option value="latest">Latest Project</option>
+                    <option value="top10">Top 10 Projects</option>
+                    {availableProjects.length > 0 && (
+                      <>
+                        <option disabled>──────────</option>
+                        {availableProjects.map((project) => (
+                          <option key={project.project_id} value={`project:${project.project_id}`}>
+                            {project.client_name} ({project.project_id})
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
               {analyticsData.tenantUsage.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={analyticsData.tenantUsage}>
@@ -173,7 +275,7 @@ export default function AnalyticsPage() {
                 </ResponsiveContainer>
               ) : (
                 <div className="flex items-center justify-center h-64 text-gray-400">
-                  <p>No tenant usage data available</p>
+                  <p>No tenant usage data available{projectFilter !== 'all' ? ' for selected project filter' : ''}</p>
                 </div>
               )}
             </div>
@@ -202,6 +304,7 @@ export default function AnalyticsPage() {
             </div>
           </>
         )}
+        <Footer />
       </main>
     </div>
   );
