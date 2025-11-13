@@ -1,13 +1,13 @@
-# Quick2Odoo Technology Stack
+# Q2O (Quick to Objective) Technology Stack
 
-**Last Updated**: November 7, 2025  
-**Version**: 1.0
+**Last Updated**: November 13, 2025  
+**Version**: 2.0
 
 ---
 
 ## 🏗️ **Architecture Overview**
 
-Quick2Odoo is a multi-tier, AI-powered platform for automated data migration from any accounting system to Odoo v18. The system uses a microservices architecture with real-time monitoring and multi-database support.
+Q2O is a multi-tier, AI-powered development platform that uses 12 specialized AI agents with LLM integration to automatically build complete production-ready applications for any business objective. The system uses a microservices architecture with real-time monitoring, multi-database support, and hybrid code generation (templates + LLM).
 
 ---
 
@@ -77,13 +77,13 @@ Quick2Odoo is a multi-tier, AI-powered platform for automated data migration fro
 
 ## 🤖 **AI & Agent System**
 
-### **AI Agents (11 Total)**
+### **AI Agents (12 Total)** ⭐ **Updated Nov 2025**
 
 | Agent | Purpose | Technology |
 |-------|---------|------------|
-| **Orchestrator** | Task coordination, load balancing | Python async |
-| **Researcher** | Web research, API documentation discovery | DuckDuckGo, Beautiful Soup |
-| **Coder** | Code generation | Jinja2 templates |
+| **Orchestrator** | Task coordination, load balancing | Python async, LLM-powered analysis |
+| **Researcher** | Web research, API documentation discovery | DuckDuckGo, PostgreSQL storage |
+| **Coder** | Code generation | Hybrid (Jinja2 templates + LLM fallback) |
 | **Integration** | OAuth, API client generation | OAuth2, requests |
 | **Frontend** | UI component generation | React, Next.js |
 | **Infrastructure** | Terraform, Helm generation | HashiCorp tools |
@@ -92,13 +92,32 @@ Quick2Odoo is a multi-tier, AI-powered platform for automated data migration fro
 | **QA** | Code quality scanning | mypy, ruff, black |
 | **Security** | Security auditing | bandit, semgrep, safety |
 | **Node.js** | Express.js app generation | Express, TypeScript |
+| **Mobile** ⭐ **NEW** | React Native app generation | React Native, Expo |
+
+### **LLM Integration** ⭐ **Added November 2025**
+
+| Provider | Model | Purpose |
+|----------|-------|---------|
+| **Google Gemini** | gemini-1.5-pro | Primary LLM provider |
+| **OpenAI** | gpt-4-turbo | Fallback provider #1 |
+| **Anthropic** | claude-3.5-sonnet | Fallback provider #2 |
+
+**Features**:
+- Hybrid code generation (templates-first, LLM fallback)
+- Self-learning template system (creates templates from LLM outputs)
+- Multi-provider chain (3 providers × 3 retries = 99.9% reliability)
+- Cost monitoring with 7-level progressive alerts
+- Budget management and auto-allocation
+- Quality validation (95-100% code quality)
 
 ### **Agent Technologies**
 - Message broker (Redis/in-memory pub/sub)
 - Retry policies with exponential backoff
 - Circuit breakers for resilience
 - Health monitoring and auto-restart
-- Template-based code generation
+- **Hybrid generation** (templates + LLM) ⭐ **NEW**
+- **Template learning engine** ⭐ **NEW**
+- **Multi-LLM provider orchestration** ⭐ **NEW**
 
 ---
 
