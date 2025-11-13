@@ -155,10 +155,16 @@ def list_projects(
     page: int,
     page_size: int,
     search: Optional[str] = None,
+    tenant_id: Optional[int] = None,  # Filter by tenant (None = all tenants, for admin)
 ) -> ProjectCollectionResponse:
-    """Return paginated project configurations with optional search filter."""
+    """Return paginated project configurations with optional search filter and tenant scoping."""
 
     stmt = select(LLMProjectConfig).options(selectinload(LLMProjectConfig.agent_configs))
+    
+    # Tenant scoping: filter by tenant_id if provided
+    if tenant_id is not None:
+        stmt = stmt.where(LLMProjectConfig.tenant_id == tenant_id)
+    
     if search:
         pattern = f"%{search.strip().lower()}%"
         stmt = stmt.where(func.lower(LLMProjectConfig.client_name).like(pattern))
@@ -183,12 +189,22 @@ def list_projects(
     )
 
 
-def get_project(session: Session, project_id: str) -> ProjectResponse:
-    project = session.execute(
+def get_project(
+    session: Session,
+    project_id: str,
+    tenant_id: Optional[int] = None,  # Verify tenant ownership (None = admin can access any)
+) -> ProjectResponse:
+    stmt = (
         select(LLMProjectConfig)
         .options(selectinload(LLMProjectConfig.agent_configs))
         .where(LLMProjectConfig.project_id == project_id)
-    ).scalar_one_or_none()
+    )
+    
+    # Tenant scoping: verify ownership if tenant_id provided
+    if tenant_id is not None:
+        stmt = stmt.where(LLMProjectConfig.tenant_id == tenant_id)
+    
+    project = session.execute(stmt).scalar_one_or_none()
 
     if project is None:
         raise ConfigurationError('Project not found.', detail={'projectId': project_id})
@@ -200,6 +216,7 @@ def create_project(
     session: Session,
     payload: ProjectCreatePayload,
     *,
+    tenant_id: Optional[int] = None,  # Set tenant_id for tenant-scoped projects
     created_by: str = 'admin-ui',
 ) -> ProjectResponse:
     """Create a new project-level configuration."""
@@ -222,6 +239,7 @@ def create_project(
         custom_instructions=payload.custom_instructions,
         is_active=payload.is_active,
         priority=payload.priority,
+        tenant_id=tenant_id,  # Set tenant scoping
         created_by=created_by,
     )
 
@@ -248,14 +266,21 @@ def update_project(
     session: Session,
     project_id: str,
     payload: ProjectUpdatePayload,
+    tenant_id: Optional[int] = None,  # Verify tenant ownership (None = admin can update any)
 ) -> ProjectResponse:
     """Update project-level configuration values."""
 
-    project = session.execute(
+    stmt = (
         select(LLMProjectConfig)
         .options(selectinload(LLMProjectConfig.agent_configs))
         .where(LLMProjectConfig.project_id == project_id)
-    ).scalar_one_or_none()
+    )
+    
+    # Tenant scoping: verify ownership if tenant_id provided
+    if tenant_id is not None:
+        stmt = stmt.where(LLMProjectConfig.tenant_id == tenant_id)
+    
+    project = session.execute(stmt).scalar_one_or_none()
 
     if project is None:
         raise ConfigurationError('Project not found.', detail={'projectId': project_id})
@@ -290,6 +315,33 @@ def update_project(
 
     session.refresh(project)
     return _serialize_project(project)
+
+
+def delete_project(
+    session: Session,
+    project_id: str,
+    tenant_id: Optional[int] = None,  # Verify tenant ownership (None = admin can delete any)
+) -> None:
+    """Delete a project configuration."""
+
+    stmt = select(LLMProjectConfig).where(LLMProjectConfig.project_id == project_id)
+    
+    # Tenant scoping: verify ownership if tenant_id provided
+    if tenant_id is not None:
+        stmt = stmt.where(LLMProjectConfig.tenant_id == tenant_id)
+    
+    project = session.execute(stmt).scalar_one_or_none()
+
+    if project is None:
+        raise ConfigurationError('Project not found.', detail={'projectId': project_id})
+
+    try:
+        session.delete(project)
+        session.commit()
+    except SQLAlchemyError as exc:
+        session.rollback()
+        LOGGER.error('project_deletion_failed', extra={'projectId': project_id, 'error': str(exc)})
+        raise InvalidOperationError('Failed to delete project configuration.') from exc
 
 
 def update_agent_prompt(

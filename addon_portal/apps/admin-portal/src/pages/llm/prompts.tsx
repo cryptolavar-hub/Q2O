@@ -9,6 +9,7 @@ import { useRouter } from 'next/router';
 import { AdminHeader } from '@/components/AdminHeader';
 import { Navigation } from '@/components/Navigation';
 import { Breadcrumb } from '@/components/Breadcrumb';
+import { Footer } from '@/components/Footer';
 import { Card, Button } from '@/design-system';
 
 // Use relative URLs to leverage Next.js proxy (avoids IPv6 issues)
@@ -57,8 +58,6 @@ export default function PromptManagement() {
   const [activeTab, setActiveTab] = useState<'system' | 'agent' | 'project'>('system');
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [editingAgent, setEditingAgent] = useState<{ projectId: string; agentType: string } | null>(null);
-  const [newProjectId, setNewProjectId] = useState('');
-  const [newClientName, setNewClientName] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const agentTypes = [
@@ -250,39 +249,6 @@ export default function PromptManagement() {
     }
   };
 
-  const createNewProject = async () => {
-    if (!newProjectId || !newClientName) {
-      alert('Please enter both Project ID and Client Name');
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE}/api/llm/projects`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: newProjectId,
-          clientName: newClientName,
-          description: '',
-          customInstructions: '',
-          isActive: true,
-          priority: 'normal',
-        }),
-      });
-
-      if (response.ok) {
-        alert(`✅ Project ${newClientName} created!`);
-        setNewProjectId('');
-        setNewClientName('');
-        await fetchAllData();
-      } else {
-        const error = await response.json();
-        alert(`❌ Failed to create: ${error.detail || 'Unknown error'}`);
-      }
-    } catch (error) {
-      alert('❌ Error creating project');
-    }
-  };
 
   const updateProjectField = (projectId: string, field: keyof ProjectConfig, value: any) => {
     setProjects(prev => prev.map(p => 
@@ -343,7 +309,7 @@ export default function PromptManagement() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <AdminHeader title="Advanced Prompt Management" subtitle="Customize system, project, and agent prompts" />
+      <AdminHeader title="Agent Prompts Management" subtitle="Assign and manage agent-specific prompts for projects" />
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -367,12 +333,11 @@ export default function PromptManagement() {
 
         {/* Info Banner */}
         <Card className="mb-6 bg-blue-50 border-blue-200">
-          <h4 className="font-semibold text-blue-900 mb-2">🎯 3-Level Prompt Cascade</h4>
+          <h4 className="font-semibold text-blue-900 mb-2">🎯 Agent Prompts for Projects</h4>
           <div className="text-sm text-blue-800 space-y-1">
-            <p><strong>System Prompt</strong> → All agents, all projects (baseline)</p>
-            <p><strong>Project Prompts</strong> → Specific client project (ACME Corp, etc.)</p>
-            <p><strong>Agent Prompts</strong> → Specific agent type within a project</p>
-            <p className="pt-2"><strong>Priority</strong>: Agent-specific overrides project, Project overrides system</p>
+            <p><strong>Note:</strong> Projects are created and managed by tenants via the Tenant Dashboard.</p>
+            <p><strong>This page</strong> allows you to assign and customize agent-specific prompts for existing projects.</p>
+            <p className="pt-2"><strong>Agent Prompts</strong> override project-level prompts, which override system prompts.</p>
           </div>
         </Card>
 
@@ -445,34 +410,19 @@ export default function PromptManagement() {
             <Card>
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Project-Specific Prompts</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Agent Prompts Assigned to Projects</h3>
                   <p className="text-sm text-gray-600">
-                    Customize prompts for individual client projects.
+                    Manage agent-specific prompts for existing projects. Projects are created by tenants.
                   </p>
                 </div>
               </div>
 
-              {/* Create New Project */}
-              <div className="grid grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
-                <input
-                  type="text"
-                  placeholder="Project ID (e.g., acme_001)"
-                  value={newProjectId}
-                  onChange={(e) => setNewProjectId(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg"
-                />
-                <input
-                  type="text"
-                  placeholder="Client Name (e.g., ACME Corp)"
-                  value={newClientName}
-                  onChange={(e) => setNewClientName(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg"
-                />
-                <div className="col-span-2">
-                  <Button onClick={createNewProject} variant="primary" size="sm">
-                    + Create Project
-                  </Button>
-                </div>
+              {/* Note: Projects are managed by tenants. This page focuses on Agent Prompts. */}
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Note:</strong> Projects are created and managed by tenants via the Tenant Dashboard. 
+                  This page is for assigning and managing <strong>Agent Prompts</strong> to existing projects.
+                </p>
               </div>
             </Card>
 
@@ -521,14 +471,17 @@ export default function PromptManagement() {
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Client Name
+                            Project Name
                           </label>
                           <input
                             type="text"
                             value={project.clientName}
                             onChange={(e) => updateProjectField(project.projectId, 'clientName', e.target.value)}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                            disabled
+                            title="Project name is managed by the tenant"
                           />
+                          <p className="text-xs text-gray-500 mt-1">Project name is managed by the tenant</p>
                         </div>
 
                         <div>
@@ -681,6 +634,7 @@ export default function PromptManagement() {
           </div>
         )}
       </div>
+      <Footer />
     </div>
   );
 }

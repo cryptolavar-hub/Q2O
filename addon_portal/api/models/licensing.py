@@ -91,3 +91,22 @@ class ActivationCode(Base):
     revoked_at = Column(DateTime, nullable=True)
     tenant = relationship("Tenant", backref="activation_codes")
     __table_args__ = (Index("ix_activation_codes_tenant", "tenant_id"),)
+
+class TenantSession(Base):
+    """Session management for tenant dashboard OTP authentication."""
+    __tablename__ = "tenant_sessions"
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    session_token = Column(String(255), unique=True, nullable=False)
+    otp_code = Column(String(6), nullable=True)
+    otp_expires_at = Column(DateTime(timezone=True), nullable=True)
+    last_activity = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    tenant = relationship("Tenant", backref="sessions")
+    __table_args__ = (
+        Index("idx_session_token", "session_token"),
+        Index("idx_tenant_sessions", "tenant_id"),
+        Index("idx_session_expires", "expires_at"),
+        Index("idx_session_otp", "otp_code", "otp_expires_at"),
+    )

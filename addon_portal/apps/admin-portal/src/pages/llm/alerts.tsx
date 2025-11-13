@@ -8,6 +8,7 @@ import { useRouter } from 'next/router';
 import { AdminHeader } from '@/components/AdminHeader';
 import { Navigation } from '@/components/Navigation';
 import { Breadcrumb } from '@/components/Breadcrumb';
+import { Footer } from '@/components/Footer';
 
 interface Alert {
   id: string;
@@ -238,6 +239,7 @@ export default function LLMAlerts() {
           )}
         </div>
       </div>
+      <Footer />
     </div>
   );
 }

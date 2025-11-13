@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@heroicons/react": "^2.1.1",
     "caniuse-lite": "^1.0.30001754",
     "fund": "^1.0.0",
     "nanoid": "^5.1.6",
@@ -19,6 +20,8 @@
   "devDependencies": {
     "@types/node": "24.10.0",
     "@types/react": "19.2.2",
+    "autoprefixer": "^10.4.16",
+    "tailwindcss": "^3.4.0",
     "typescript": "5.6.3"
   }
 }

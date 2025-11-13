@@ -1,11 +1,14 @@
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
+import { formatDistanceToNow } from 'date-fns';
+import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { Navigation } from '@/components/Navigation';
 import { Button, Card, StatCard } from '@/design-system';
 import { AdminHeader } from '../components/AdminHeader';
+import { Footer } from '../components/Footer';
 
 // Use relative URLs to leverage Next.js proxy (avoids IPv6 issues)
 // Next.js proxy rewrites /api/* and /admin/api/* to http://127.0.0.1:8080
@@ -34,11 +37,30 @@ interface DashboardStats {
   };
 }
 
+interface RecentActivity {
+  type: string;
+  icon: string;
+  action: string;
+  tenant: string;
+  timestamp: string | null;
+  backdrop: string;
+  metadata: Record<string, any>;
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activityDateRange, setActivityDateRange] = useState<'7d' | '30d' | '90d'>('7d');
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
+  const [activationTrend, setActivationTrend] = useState<Array<{date: string; codes: number; projects: number; devices: number}>>([]);
+  const [projectDeviceDistribution, setProjectDeviceDistribution] = useState<{
+    projects: {active: number; total: number};
+    devices: {active: number; revoked: number; total: number};
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingActivities, setIsLoadingActivities] = useState(false);
+  const [isLoadingCharts, setIsLoadingCharts] = useState(false);
+  const [isLoadingDistribution, setIsLoadingDistribution] = useState(false);
 
   useEffect(() => {
     const fetchDashboardStats = async () => {
@@ -74,7 +96,66 @@ export default function AdminDashboard() {
     };
 
     fetchDashboardStats();
+    fetchRecentActivities();
+    fetchActivationTrend();
+    fetchProjectDeviceDistribution();
   }, []);
+
+  useEffect(() => {
+    fetchRecentActivities();
+  }, [activityDateRange]);
+
+  const fetchRecentActivities = async () => {
+    try {
+      setIsLoadingActivities(true);
+      const days = activityDateRange === '7d' ? 7 : activityDateRange === '30d' ? 30 : 90;
+      const response = await fetch(`${API_BASE}/admin/api/recent-activities?days=${days}`);
+      if (!response.ok) {
+        throw new Error('Failed to load recent activities');
+      }
+      const data = await response.json();
+      setRecentActivities(data.activities || []);
+    } catch (error) {
+      console.error('Error fetching recent activities:', error);
+      setRecentActivities([]);
+    } finally {
+      setIsLoadingActivities(false);
+    }
+  };
+
+  const fetchActivationTrend = async () => {
+    try {
+      setIsLoadingCharts(true);
+      const response = await fetch(`${API_BASE}/admin/api/activation-trend?days=30`);
+      if (!response.ok) {
+        throw new Error('Failed to load activation trend');
+      }
+      const data = await response.json();
+      setActivationTrend(data.trend || []);
+    } catch (error) {
+      console.error('Error fetching activation trend:', error);
+      setActivationTrend([]);
+    } finally {
+      setIsLoadingCharts(false);
+    }
+  };
+
+  const fetchProjectDeviceDistribution = async () => {
+    try {
+      setIsLoadingDistribution(true);
+      const response = await fetch(`${API_BASE}/admin/api/project-device-distribution`);
+      if (!response.ok) {
+        throw new Error('Failed to load distribution');
+      }
+      const data = await response.json();
+      setProjectDeviceDistribution(data);
+    } catch (error) {
+      console.error('Error fetching distribution:', error);
+      setProjectDeviceDistribution(null);
+    } finally {
+      setIsLoadingDistribution(false);
+    }
+  };
 
   const metrics = useMemo(() => {
     if (!stats) {
@@ -143,15 +224,21 @@ export default function AdminDashboard() {
     [],
   );
 
-  const activityFeed = useMemo(
-    () => [
-      { icon: '🔑', action: 'Generated 5 activation codes', tenant: 'Demo Consulting', time: '2 hours ago', backdrop: 'bg-indigo-100 text-indigo-600' },
-      { icon: '📱', action: 'Device authorized', tenant: 'Acme Corp', time: '4 hours ago', backdrop: 'bg-emerald-100 text-emerald-600' },
-      { icon: '👥', action: 'New tenant created', tenant: 'Tech Solutions', time: '1 day ago', backdrop: 'bg-rose-100 text-rose-600' },
-      { icon: '🔒', action: 'Device revoked', tenant: 'Demo Consulting', time: '2 days ago', backdrop: 'bg-amber-100 text-amber-600' },
-    ],
-    [],
-  );
+  const activityFeed = useMemo(() => {
+    return recentActivities.map((activity) => {
+      const timeAgo = activity.timestamp
+        ? formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })
+        : 'Unknown';
+      
+      return {
+        icon: activity.icon,
+        action: activity.action,
+        tenant: activity.tenant,
+        time: timeAgo,
+        backdrop: activity.backdrop,
+      };
+    });
+  }, [recentActivities]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -230,22 +317,32 @@ export default function AdminDashboard() {
             </div>
 
             <div className="space-y-3">
-              {activityFeed.map((activity, index) => (
-                <motion.div
-                  key={`${activity.action}-${activity.time}`}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white/80 px-4 py-3 transition-shadow duration-200 hover:shadow-md"
-                  initial={{ opacity: 0, x: -12 }}
-                  transition={{ delay: index * 0.05 }}
-                >
-                  <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl text-xl ${activity.backdrop}`}>{activity.icon}</div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-gray-900">{activity.action}</p>
-                    <p className="text-sm text-gray-500">{activity.tenant}</p>
-                  </div>
-                  <span className="text-xs font-medium uppercase tracking-wide text-gray-400">{activity.time}</span>
-                </motion.div>
-              ))}
+              {isLoadingActivities ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                </div>
+              ) : activityFeed.length > 0 ? (
+                activityFeed.map((activity, index) => (
+                  <motion.div
+                    key={`${activity.action}-${activity.time}-${index}`}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white/80 px-4 py-3 transition-shadow duration-200 hover:shadow-md"
+                    initial={{ opacity: 0, x: -12 }}
+                    transition={{ delay: index * 0.05 }}
+                  >
+                    <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl text-xl ${activity.backdrop}`}>{activity.icon}</div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900">{activity.action}</p>
+                      <p className="text-sm text-gray-500">{activity.tenant}</p>
+                    </div>
+                    <span className="text-xs font-medium uppercase tracking-wide text-gray-400">{activity.time}</span>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="flex items-center justify-center py-8 text-gray-400">
+                  <p>No recent activities found</p>
+                </div>
+              )}
             </div>
           </Card>
         </section>
@@ -255,45 +352,122 @@ export default function AdminDashboard() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-xl font-semibold text-gray-900">Activation Trends</h3>
-                <p className="text-sm text-gray-500">Daily activation codes generated across tenants.</p>
+                <p className="text-sm text-gray-500">Daily codes generated vs projects/devices activated.</p>
               </div>
-              <Button size="sm" variant="ghost">
-                Export
+              <Button size="sm" variant="ghost" onClick={() => router.push('/analytics')}>
+                View Full Analytics
               </Button>
             </div>
-            <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
-              <div className="text-center">
-                <div className="mb-4 text-6xl">📈</div>
-                <p className="font-medium text-gray-600">Recharts area graph coming in Task 1.7</p>
-                <p className="text-xs text-gray-400">Shows generated vs redeemed codes</p>
+            {isLoadingCharts ? (
+              <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
               </div>
-            </div>
+            ) : activationTrend.length > 0 ? (
+              <div className="mt-6">
+                <ResponsiveContainer width="100%" height={256}>
+                  <LineChart data={activationTrend}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                    <XAxis dataKey="date" stroke="#6B7280" style={{ fontSize: 12 }} />
+                    <YAxis stroke="#6B7280" style={{ fontSize: 12 }} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        background: 'white', 
+                        border: '1px solid #E5E7EB', 
+                        borderRadius: 8,
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                      }} 
+                    />
+                    <Legend />
+                    <Line type="monotone" dataKey="codes" stroke="#9B59B6" strokeWidth={2} name="Codes Generated" />
+                    <Line type="monotone" dataKey="projects" stroke="#4CAF50" strokeWidth={2} name="Projects Activated" />
+                    <Line type="monotone" dataKey="devices" stroke="#3498DB" strokeWidth={2} name="Devices Activated" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
+                <p>No activation data available</p>
+              </div>
+            )}
           </Card>
 
           <Card className="p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-xl font-semibold text-gray-900">Device Distribution</h3>
-                <p className="text-sm text-gray-500">Snapshot of active vs. revoked devices.</p>
+                <h3 className="text-xl font-semibold text-gray-900">Project/Device Distribution</h3>
+                <p className="text-sm text-gray-500">Active projects and devices breakdown.</p>
               </div>
-              <Button size="sm" variant="ghost">
-                View Devices
+              <Button size="sm" variant="ghost" onClick={() => router.push('/devices')}>
+                View Details
               </Button>
             </div>
-            <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
-              <div className="text-center">
-                <div className="mb-4 text-6xl">📱</div>
-                <p className="font-medium text-gray-600">Pie chart placeholder</p>
-                <p className="text-xs text-gray-400">Breakdown by platform & status</p>
+            {isLoadingDistribution ? (
+              <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
               </div>
-            </div>
+            ) : projectDeviceDistribution && (
+              projectDeviceDistribution.projects.active > 0 || 
+              projectDeviceDistribution.devices.active > 0 || 
+              projectDeviceDistribution.devices.revoked > 0
+            ) ? (
+              <div className="mt-6">
+                <ResponsiveContainer width="100%" height={256}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Active Projects', value: projectDeviceDistribution.projects.active, color: '#4CAF50' },
+                        { name: 'Active Devices', value: projectDeviceDistribution.devices.active, color: '#9B59B6' },
+                        { name: 'Revoked Devices', value: projectDeviceDistribution.devices.revoked, color: '#FF6B9D' },
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {[
+                        { name: 'Active Projects', value: projectDeviceDistribution.projects.active, color: '#4CAF50' },
+                        { name: 'Active Devices', value: projectDeviceDistribution.devices.active, color: '#9B59B6' },
+                        { name: 'Revoked Devices', value: projectDeviceDistribution.devices.revoked, color: '#FF6B9D' },
+                      ].map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="mt-4 flex justify-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500" />
+                    <span className="text-sm font-medium text-gray-700">
+                      Projects: {projectDeviceDistribution.projects.active} active
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-purple-500" />
+                    <span className="text-sm font-medium text-gray-700">
+                      Devices: {projectDeviceDistribution.devices.active} active
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-pink-500" />
+                    <span className="text-sm font-medium text-gray-700">
+                      Revoked: {projectDeviceDistribution.devices.revoked}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
+                <p>No project/device data available</p>
+              </div>
+            )}
           </Card>
         </section>
 
-        <footer className="mt-12 pb-6 text-center text-sm text-gray-500">
-          <p>Q2O Licensing Admin Portal • Multi-tenant command center</p>
-          <p className="mt-1 text-xs text-gray-400">Powered by Quick to Objective Agents</p>
-        </footer>
+        <Footer />
       </main>
     </div>
   );

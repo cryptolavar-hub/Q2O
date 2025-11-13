@@ -4,16 +4,19 @@ import { Breadcrumb } from '@/components/Breadcrumb';
 import { Navigation } from '@/components/Navigation';
 import { Badge, Button, Card } from '@/design-system';
 import { AdminHeader } from '../components/AdminHeader';
+import { Footer } from '../components/Footer';
 import {
   addTenant,
   deleteTenant,
   editTenant,
   getTenantDeletionImpact,
   getTenants,
+  getPlans,
   type AddTenantRequest,
   type EditTenantRequest,
   type Tenant,
   type TenantDeletionImpact,
+  type Plan,
   type TenantPage,
   type TenantQueryParams,
 } from '../lib/api';
@@ -38,11 +41,8 @@ const STATUS_BADGE_VARIANT: Record<string, { className: string; label: string }>
   none: { className: 'bg-slate-100 text-slate-600 border-slate-200', label: 'No Subscription' },
 };
 
-const PLAN_OPTIONS = [
-  { value: 'Starter', label: 'Starter · 10 migrations / month' },
-  { value: 'Professional', label: 'Professional · 50 migrations / month' },
-  { value: 'Enterprise', label: 'Enterprise · 200 migrations / month' },
-];
+// Plans are now fetched dynamically from the database via API
+// This ensures consistency and scalability - no hardcoded plans!
 
 interface ModalState {
   visible: boolean;
@@ -76,6 +76,8 @@ export default function TenantsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletionImpact, setDeletionImpact] = useState<TenantDeletionImpact | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(false);
 
   const loadTenants = useCallback(async (params: TenantQueryParams) => {
     setIsLoading(true);
@@ -98,6 +100,25 @@ export default function TenantsPage() {
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  // Load plans from database (single source of truth)
+  useEffect(() => {
+    const loadPlans = async () => {
+      setIsLoadingPlans(true);
+      try {
+        const fetchedPlans = await getPlans();
+        setPlans(fetchedPlans);
+        console.log('✅ Plans loaded from database:', fetchedPlans);
+      } catch (error) {
+        console.error('❌ Failed to load plans:', error);
+        // Fallback to empty array - form will still work but dropdown will be empty
+        setPlans([]);
+      } finally {
+        setIsLoadingPlans(false);
+      }
+    };
+    void loadPlans();
   }, []);
 
   useEffect(() => {
@@ -140,7 +161,7 @@ export default function TenantsPage() {
         logoUrl: (formData.get('logoUrl') as string | null) || undefined,
         primaryColor: (formData.get('primaryColor') as string | null) || '#875A7B',
         domain: (formData.get('domain') as string | null)?.trim() || undefined,
-        subscriptionPlan: (formData.get('subscriptionPlan') as string) || 'Starter',
+        subscriptionPlan: (formData.get('subscriptionPlan') as string) || plans[0]?.name || '',
         usageQuota: Number(formData.get('usageQuota')) || 10,
       };
 
@@ -413,15 +434,22 @@ export default function TenantsPage() {
                 Subscription Plan *
                 <select
                   className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
-                  defaultValue={selectedTenant?.subscription.planName ?? PLAN_OPTIONS[0]?.value ?? 'Starter'}
+                  defaultValue={selectedTenant?.subscription.planName ?? plans[0]?.name ?? ''}
                   name="subscriptionPlan"
                   required
+                  disabled={isLoadingPlans || plans.length === 0}
                 >
-                  {PLAN_OPTIONS.map((plan) => (
-                    <option key={plan.value} value={plan.value}>
-                      {plan.label}
-                    </option>
-                  ))}
+                  {isLoadingPlans ? (
+                    <option value="">Loading plans...</option>
+                  ) : plans.length === 0 ? (
+                    <option value="">No plans available</option>
+                  ) : (
+                    plans.map((plan) => (
+                      <option key={plan.id} value={plan.name}>
+                        {plan.name} · {plan.monthlyRunQuota} Project Runs/Month
+                      </option>
+                    ))
+                  )}
                 </select>
               </label>
               <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
@@ -769,6 +797,7 @@ export default function TenantsPage() {
           </Card>
         </div>
       )}
+      <Footer />
     </div>
   );
 }

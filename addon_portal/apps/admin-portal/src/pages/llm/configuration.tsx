@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { AdminHeader } from '../../components/AdminHeader';
 import { Navigation } from '../../components/Navigation';
 import { Breadcrumb } from '@/components/Breadcrumb';
+import { Footer } from '@/components/Footer';
 import { useRouter } from 'next/router';
 
 interface APIKey {
@@ -41,6 +42,8 @@ export default function ConfigureLLM() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [copiedSample, setCopiedSample] = useState<string | null>(null);
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchConfiguration();
@@ -85,18 +88,29 @@ export default function ConfigureLLM() {
       }
 
       // Fetch project prompts from database
-      const promptsRes = await fetch('/api/llm/projects');
+      const promptsRes = await fetch('/api/llm/projects?page_size=100');
       if (promptsRes.ok) {
         const promptsData = await promptsRes.json();
+        // Also fetch tenants to get proper tenant names
+        const tenantsRes = await fetch('/admin/api/tenants?page_size=100');
+        let tenantsMap: Record<number, string> = {};
+        if (tenantsRes.ok) {
+          const tenantsData = await tenantsRes.json();
+          tenantsMap = (tenantsData.items || []).reduce((acc: Record<number, string>, t: any) => {
+            acc[t.id] = t.name || t.slug || '';
+            return acc;
+          }, {});
+        }
+        
         const formattedPrompts: ProjectPrompt[] = (promptsData.items || []).map((p: any) => ({
           id: p.projectId || p.id?.toString() || '',
           projectName: p.clientName || p.projectName || 'Unknown Project',
-          tenantName: p.clientName || p.tenantName || '',
+          tenantName: p.tenantId ? (tenantsMap[p.tenantId] || `Tenant ${p.tenantId}`) : (p.tenantName || 'Admin'),
           label: p.description || p.label || '',
           projectPrompt: p.customInstructions || p.projectPrompt || '',
-          agentPrompts: (p.agentPrompts || []).map((a: any) => ({
-            agentType: a.agentType,
-            prompt: a.customPrompt || a.prompt || ''
+          agentPrompts: (p.agentConfigs || p.agentPrompts || []).map((a: any) => ({
+            agentType: a.agentType || a.agent_type || 'unknown',
+            prompt: a.customPrompt || a.custom_instructions || a.prompt || ''
           }))
         }));
         setProjectPrompts(formattedPrompts);
@@ -131,6 +145,41 @@ export default function ConfigureLLM() {
       newExpanded.add(id);
     }
     setExpandedRows(newExpanded);
+  };
+
+  const handleDeleteProject = async (projectId: string, projectName: string) => {
+    if (!confirm(`Are you sure you want to delete project "${projectName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingProjectId(projectId);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch(`/api/llm/projects/${projectId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        let errorDetail = 'Failed to delete project';
+        try {
+          const errorData = await response.json();
+          errorDetail = errorData.detail || errorData.message || errorDetail;
+        } catch (e) {
+          errorDetail = `Server returned ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorDetail);
+      }
+
+      // Refresh the list
+      await fetchConfiguration();
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unable to delete project.';
+      setErrorMessage(errorMsg);
+    } finally {
+      setDeletingProjectId(null);
+    }
   };
 
   const filteredPrompts = projectPrompts.filter(prompt => {
@@ -323,11 +372,38 @@ print(result.workspace_path)`
           </div>
         </div>
 
-        {/* Project & Agent Prompts Management */}
+          {/* Project & Agent Prompts Management */}
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
             📝 Project & Agent Prompts
           </h2>
+          
+          {/* Error Message */}
+          {errorMessage && (
+            <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-red-800">Error</p>
+                  <p className="text-sm text-red-700 mt-1">{errorMessage}</p>
+                </div>
+                <div className="ml-auto pl-3">
+                  <button
+                    onClick={() => setErrorMessage(null)}
+                    className="text-red-400 hover:text-red-600"
+                  >
+                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Search and Filter */}
           <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200 mb-6">
@@ -409,8 +485,19 @@ print(result.workspace_path)`
                           </button>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <button className="text-blue-600 hover:text-blue-800 mr-3">Edit</button>
-                          <button className="text-red-600 hover:text-red-800">Delete</button>
+                          <button 
+                            onClick={() => router.push(`/llm/prompts?project=${prompt.id}`)}
+                            className="text-blue-600 hover:text-blue-800 mr-3"
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteProject(prompt.id, prompt.projectName)}
+                            disabled={deletingProjectId === prompt.id}
+                            className="text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {deletingProjectId === prompt.id ? 'Deleting...' : 'Delete'}
+                          </button>
                         </td>
                       </tr>
                       {expandedRows.has(prompt.id) && (
@@ -447,7 +534,10 @@ print(result.workspace_path)`
           </div>
 
           <div className="mt-4">
-            <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
+            <button 
+              onClick={() => router.push('/llm/prompts')}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+            >
               + Add New Project Prompt
             </button>
           </div>
@@ -475,6 +565,7 @@ print(result.workspace_path)`
         </div>
 
       </div>
+      <Footer />
     </div>
   );
 }

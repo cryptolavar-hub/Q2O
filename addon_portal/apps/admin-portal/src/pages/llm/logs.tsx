@@ -8,6 +8,7 @@ import { useRouter } from 'next/router';
 import { AdminHeader } from '@/components/AdminHeader';
 import { Navigation } from '@/components/Navigation';
 import { Breadcrumb } from '@/components/Breadcrumb';
+import { Footer } from '@/components/Footer';
 
 interface LLMLog {
   id: string;
@@ -244,6 +245,7 @@ export default function LLMLogs() {
           )}
         </div>
       </div>
+      <Footer />
     </div>
   );
 }

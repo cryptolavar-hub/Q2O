@@ -1,6 +1,7 @@
 import React from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { Header } from '../components/Header';
+import { Breadcrumb } from '../components/Breadcrumb';
 import { ProjectOverview } from '../components/ProjectOverview';
 import { StatCard } from '../components/StatCard';
 import { AgentCard } from '../components/AgentCard';
@@ -52,6 +53,8 @@ export default function Dashboard() {
       />
 
       <main className="container mx-auto px-6 py-8">
+        <Breadcrumb items={[{ label: 'Multi-Agent Dashboard' }]} />
+
         {/* Project Overview */}
         <ProjectOverview project={project} />
 
