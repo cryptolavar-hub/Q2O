@@ -112,23 +112,26 @@ if "%DB_DSN%"=="" (
 )
 
 REM Parse connection details from DB_DSN: postgresql+psycopg://user:password@host:port/database
-for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[2] } else { Write-Output 'ERROR' }"') do (
+REM Use robust parsing that handles special characters in passwords (:, @, etc.)
+REM Strategy: Find the LAST @ (separates credentials from host), then split by FIRST : (separates user from password)
+REM This works because: password can contain : or @, but host cannot contain @, and port is always numeric
+for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; $parts = $dsn -replace '^[^:]+://', ''; $atPos = $parts.LastIndexOf('@'); if ($atPos -lt 0) { 'ERROR' } else { $userPass = $parts.Substring(0, $atPos); $colonPos = $userPass.IndexOf(':'); if ($colonPos -lt 0) { 'ERROR' } else { $userPass.Substring($colonPos + 1) } }"') do (
     set DB_PASSWORD=%%a
 )
 
-for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[1] } else { Write-Output 'ERROR' }"') do (
+for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; $parts = $dsn -replace '^[^:]+://', ''; $atPos = $parts.LastIndexOf('@'); if ($atPos -lt 0) { 'ERROR' } else { $userPass = $parts.Substring(0, $atPos); $colonPos = $userPass.IndexOf(':'); if ($colonPos -lt 0) { $userPass } else { $userPass.Substring(0, $colonPos) } }"') do (
     set DB_USER=%%a
 )
 
-for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[3] } else { Write-Output 'ERROR' }"') do (
+for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; $parts = $dsn -replace '^[^:]+://', ''; $atPos = $parts.LastIndexOf('@'); if ($atPos -lt 0) { 'ERROR' } else { $afterAt = $parts.Substring($atPos + 1); if ($afterAt -match '^([^:]+):(\d+)/(.+)$') { $matches[1] } else { 'ERROR' } }"') do (
     set DB_HOST=%%a
 )
 
-for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[4] } else { Write-Output 'ERROR' }"') do (
+for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; $parts = $dsn -replace '^[^:]+://', ''; $atPos = $parts.LastIndexOf('@'); if ($atPos -lt 0) { 'ERROR' } else { $afterAt = $parts.Substring($atPos + 1); if ($afterAt -match '^([^:]+):(\d+)/(.+)$') { $matches[2] } else { 'ERROR' } }"') do (
     set DB_PORT=%%a
 )
 
-for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[5] } else { Write-Output 'ERROR' }"') do (
+for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; $parts = $dsn -replace '^[^:]+://', ''; $atPos = $parts.LastIndexOf('@'); if ($atPos -lt 0) { 'ERROR' } else { $afterAt = $parts.Substring($atPos + 1); if ($afterAt -match '^([^:]+):(\d+)/(.+)$') { $matches[3] } else { 'ERROR' } }"') do (
     set DB_NAME=%%a
 )
 
