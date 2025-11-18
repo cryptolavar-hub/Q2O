@@ -25,9 +25,11 @@ wheels/
 *.egg
 
 # EXCEPTION: Allow TypeScript lib directories in Next.js apps
-!addon_portal/apps/*/src/lib/
+# These negations work because they're more specific than the lib/ pattern above
+!**/src/lib/
+!addon_portal/apps/**/src/lib/
 !mobile/src/lib/
-!web/*/src/lib/
+!web/**/src/lib/
 
 # PyInstaller
 *.manifest
