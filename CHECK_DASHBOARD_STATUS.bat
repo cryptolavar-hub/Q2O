@@ -80,40 +80,69 @@ if %PSQL_FOUND% EQU 0 (
     goto :end
 )
 
-REM Database connection settings (hardcoded defaults)
-set DB_HOST=localhost
-set DB_PORT=5432
-set DB_NAME=q2o
-set DB_USER=q2o_user
-set DB_PASSWORD=Q2OPostgres2025!
+REM Database connection settings - MUST be read from .env file (security requirement)
+REM No hardcoded passwords allowed!
 
-REM Try to read DB_DSN from .env file
-if exist "addon_portal\.env" (
-    REM Use PowerShell to parse DB_DSN properly
-    for /f "delims=" %%a in ('powershell -Command "if (Test-Path 'addon_portal\.env') { Get-Content 'addon_portal\.env' | Where-Object { $_ -match '^DB_DSN=' } | ForEach-Object { $_.Split('=',2)[1] } }"') do (
-        set DB_DSN=%%a
-    )
+REM Check if .env file exists
+if not exist "addon_portal\.env" (
+    echo    ✗ .env file not found in addon_portal directory
+    echo    → Cannot check database without credentials
+    echo    → Create addon_portal\.env with DB_DSN=postgresql+psycopg://user:password@host:port/database
+    goto :end
+)
 
-    REM Parse password from DB_DSN: postgresql+psycopg://user:password@host:port/database
-    for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[2] }"') do (
-        set DB_PASSWORD=%%a
-    )
+REM Initialize variables
+set DB_DSN=
+set DB_HOST=
+set DB_PORT=
+set DB_NAME=
+set DB_USER=
+set DB_PASSWORD=
 
-    for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[1] }"') do (
-        set DB_USER=%%a
-    )
+REM Read DB_DSN from .env file
+for /f "delims=" %%a in ('powershell -Command "if (Test-Path 'addon_portal\.env') { Get-Content 'addon_portal\.env' | Where-Object { $_ -match '^DB_DSN=' } | ForEach-Object { $_.Split('=',2)[1] } }"') do (
+    set DB_DSN=%%a
+)
 
-    for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[3] }"') do (
-        set DB_HOST=%%a
-    )
+REM Verify DB_DSN was found
+if "%DB_DSN%"=="" (
+    echo    ✗ DB_DSN not found in .env file
+    echo    → Add DB_DSN=postgresql+psycopg://user:password@host:port/database to addon_portal\.env
+    goto :end
+)
 
-    for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[4] }"') do (
-        set DB_PORT=%%a
-    )
+REM Parse connection details from DB_DSN: postgresql+psycopg://user:password@host:port/database
+for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[2] } else { Write-Output 'ERROR' }"') do (
+    set DB_PASSWORD=%%a
+)
 
-    for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[5] }"') do (
-        set DB_NAME=%%a
-    )
+for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[1] } else { Write-Output 'ERROR' }"') do (
+    set DB_USER=%%a
+)
+
+for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[3] } else { Write-Output 'ERROR' }"') do (
+    set DB_HOST=%%a
+)
+
+for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[4] } else { Write-Output 'ERROR' }"') do (
+    set DB_PORT=%%a
+)
+
+for /f "delims=" %%a in ('powershell -Command "$dsn='%DB_DSN%'; if ($dsn -match '://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') { $matches[5] } else { Write-Output 'ERROR' }"') do (
+    set DB_NAME=%%a
+)
+
+REM Verify all connection details were parsed successfully
+if "%DB_PASSWORD%"=="ERROR" (
+    echo    ✗ Failed to parse DB_DSN from .env file
+    echo    → DB_DSN format should be: postgresql+psycopg://user:password@host:port/database
+    goto :end
+)
+
+if "%DB_PASSWORD%"=="" (
+    echo    ✗ Password not found in DB_DSN
+    echo    → DB_DSN format should be: postgresql+psycopg://user:password@host:port/database
+    goto :end
 )
 
 REM Set PGPASSWORD environment variable
