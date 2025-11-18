@@ -1,0 +1,17 @@
+# GraphQL dependencies for Multi-Agent Dashboard
+# Add to main requirements.txt when ready to deploy
+
+strawberry-graphql[fastapi]==0.236.0  # Modern GraphQL library for Python
+strawberry-graphql[debug-server]==0.236.0  # GraphiQL playground
+graphql-core>=3.2.0  # Core GraphQL implementation
+
+# For subscriptions (real-time)
+sse-starlette>=1.8.2  # Server-Sent Events for subscriptions
+
+# For DataLoader (batch/cache queries - performance optimization)
+aiodataloader>=0.4.0
+
+# Optional: For Redis caching (production)
+# redis>=5.0.0
+# aioredis>=2.0.0
+
