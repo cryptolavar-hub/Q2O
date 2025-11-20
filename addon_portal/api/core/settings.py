@@ -1,6 +1,11 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import AnyHttpUrl
 from typing import Optional, List
+from pathlib import Path
+
+# .env file is located at project root: C:\Q2O_Combined\.env
+# Using explicit path to ensure it's always found
+ENV_FILE_PATH = Path(r'C:\Q2O_Combined\.env')
 
 class Settings(BaseSettings):
     APP_NAME: str = "Q2O"
@@ -65,6 +70,27 @@ class Settings(BaseSettings):
     # LLM System Prompt (managed via LLM Management service, synced to .env)
     LLM_SYSTEM_PROMPT: Optional[str] = None
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # Email/SMS Configuration for OTP Delivery
+    # SMTP Configuration (for email OTP delivery)
+    SMTP_ENABLED: bool = False  # Set to True to enable email OTP delivery
+    SMTP_HOST: Optional[str] = None  # e.g., smtp.gmail.com
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: Optional[str] = None  # e.g., noreply@q2o.com
+    SMTP_FROM_NAME: str = "Q2O Platform"
+    SMTP_USE_TLS: bool = True
+
+    # SMS Configuration (for SMS/WhatsApp OTP delivery)
+    # TODO: Integrate with Twilio, AWS SNS, or similar service
+    SMS_ENABLED: bool = False
+    SMS_PROVIDER: Optional[str] = None  # 'twilio', 'aws_sns', etc.
+    SMS_API_KEY: Optional[str] = None
+    SMS_API_SECRET: Optional[str] = None
+    SMS_FROM_NUMBER: Optional[str] = None
+
+    # .env file is located at: C:\Q2O_Combined\.env
+    # Using explicit path to ensure it's always found
+    model_config = SettingsConfigDict(env_file=str(ENV_FILE_PATH), extra="ignore")
 
 settings = Settings()

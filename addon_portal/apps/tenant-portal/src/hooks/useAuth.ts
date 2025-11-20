@@ -54,7 +54,7 @@ export function useAuth() {
           isAuthenticated: false,
           isLoading: false,
           session: null,
-          error: null,
+          error: null, // Don't set error for missing/expired tokens - this is expected
         });
         return;
       }
@@ -69,19 +69,28 @@ export function useAuth() {
         error: null,
       });
     } catch (error) {
-      // Session invalid, clear it
+      // Session invalid, clear it silently (don't show error on initial check)
+      // Errors should only be shown for actual login attempts
       setAuthState({
         isAuthenticated: false,
         isLoading: false,
         session: null,
-        error: error instanceof Error ? error.message : 'Session invalid',
+        error: null, // Don't set error on initial auth check - it's expected to fail if not logged in
       });
+      
+      // Clear invalid token from storage
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('tenant_session_token');
+        localStorage.removeItem('tenant_session_expires');
+        localStorage.removeItem('tenant_id');
+        localStorage.removeItem('tenant_slug');
+      }
     }
   }, []);
 
   const refreshAuthIfNeeded = useCallback(async () => {
     const token = getStoredSessionToken();
-    if (!token || !isSessionExpired()) return;
+    if (!token || isSessionExpired()) return; // Fixed: should refresh if NOT expired
 
     try {
       const session = await refreshSession(token);
@@ -119,8 +128,8 @@ export function useAuth() {
         error: null,
       });
 
-      // Redirect to dashboard
-      router.push('/dashboard');
+      // Redirect to projects page (main dashboard)
+      router.push('/projects');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to verify OTP';
       setAuthState((prev) => ({

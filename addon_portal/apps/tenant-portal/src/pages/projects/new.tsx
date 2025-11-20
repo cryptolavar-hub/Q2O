@@ -56,6 +56,12 @@ export default function NewProjectPage() {
       if (errorMessage.includes('Session expired')) {
         await logout();
       }
+      
+      // If project already exists, suggest adding something unique to the name
+      if (errorMessage.includes('already exists') || errorMessage.includes('Project with ID')) {
+        // Error message already suggests choosing a different name
+        // Could add more helpful suggestions here if needed
+      }
     } finally {
       setIsSubmitting(false);
     }

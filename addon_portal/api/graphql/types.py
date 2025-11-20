@@ -67,6 +67,12 @@ class Agent:
     current_task_id: Optional[str]
     last_activity: datetime
     
+    # Alias field for frontend compatibility (agentType -> type)
+    @strawberry.field
+    def agent_type(self) -> AgentType:
+        """Alias for type field (for frontend compatibility)"""
+        return self.type
+    
     # Computed fields (resolved dynamically)
     @strawberry.field
     def success_rate(self) -> float:
@@ -126,6 +132,8 @@ class Project:
     total_tasks: int
     completed_tasks: int
     failed_tasks: int
+    agents: List[Agent] = strawberry.field(default_factory=list)
+    estimated_time_remaining_seconds: Optional[int] = None
     
     # Relationships
     @strawberry.field
@@ -136,14 +144,14 @@ class Project:
         limit: int = 50
     ) -> List[Task]:
         """Get project tasks (filtered, batched)"""
-        loader = info.context["tasks_by_project_loader"]
-        all_tasks = await loader.load(self.id)
-        
-        # Filter by status if provided
-        if status:
-            all_tasks = [t for t in all_tasks if t.status == status]
-        
-        return all_tasks[:limit]
+        loader = info.context.get("tasks_by_project_loader") if info.context else None
+        if loader:
+            all_tasks = await loader.load(self.id)
+            # Filter by status if provided
+            if status:
+                all_tasks = [t for t in all_tasks if t.status == status]
+            return all_tasks[:limit]
+        return []
     
     @strawberry.field
     def success_rate(self) -> float:

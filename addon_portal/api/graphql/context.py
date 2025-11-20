@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from strawberry.fastapi import BaseContext
 
 from .dataloaders import create_dataloaders
-from ..core.database import AsyncSessionLocal
+from ..core.db import AsyncSessionLocal
 from ..core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -20,7 +20,7 @@ class GraphQLContext(BaseContext):
     Context object passed to all GraphQL resolvers
     
     Contains:
-    - db: Database session
+    - db: Database session (async)
     - dataloaders: Batch/cache loaders for performance
     - user: Authenticated user (if any)
     - request: Original FastAPI request
@@ -53,29 +53,32 @@ class GraphQLContext(BaseContext):
 
 
 async def get_graphql_context(
-    request: Request,
+    request: Request = None,
 ) -> GraphQLContext:
     """
     Context factory for GraphQL requests
     
     Creates a new context for each request with:
-    - Fresh database session
+    - Fresh async database session
     - Request-scoped DataLoaders
     - User authentication (from JWT if present)
+    
+    Note: For WebSocket subscriptions, request might be None or have different structure
     """
-    # Create database session
+    # Create async database session
     db = AsyncSessionLocal()
     
     try:
         # Extract user from JWT token (optional)
         user = None
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            # In production, decode JWT and extract user
-            # from ..core.auth import decode_jwt
-            # token = auth_header.split(" ")[1]
-            # user = decode_jwt(token)
-            pass
+        if request:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                # In production, decode JWT and extract user
+                # from ..core.auth import decode_jwt
+                # token = auth_header.split(" ")[1]
+                # user = decode_jwt(token)
+                pass
         
         # Create context
         context = GraphQLContext(
@@ -84,16 +87,18 @@ async def get_graphql_context(
             user=user
         )
         
-        logger.debug(f"Created GraphQL context for request: {request.url.path}")
+        if request:
+            logger.debug(f"Created GraphQL context for request: {request.url.path}")
+        else:
+            logger.debug("Created GraphQL context for WebSocket/subscription")
         
         return context
     
     except Exception as e:
-        logger.error(f"Error creating GraphQL context: {e}")
-        await db.close()
+        logger.error(f"Error creating GraphQL context: {e}", exc_info=True)
+        try:
+            await db.close()
+        except Exception:
+            pass
         raise
-    
-    finally:
-        # Note: Session will be closed by FastAPI after request completes
-        pass
 

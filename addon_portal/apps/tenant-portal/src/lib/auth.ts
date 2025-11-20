@@ -15,8 +15,9 @@ export interface SessionInfo {
 }
 
 export interface OTPResponse {
-  otp_code: string;
+  otp_code: string;  // Always empty - OTP is sent via email/SMS
   expires_in: number;
+  message?: string;  // User-friendly message about OTP delivery
 }
 
 /**

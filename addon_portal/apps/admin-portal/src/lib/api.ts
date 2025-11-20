@@ -53,8 +53,12 @@ const tenantSchema = z.object({
   logoUrl: z.string().url().nullable(),
   primaryColor: z.string().nullable(),
   domain: z.string().nullable(),
+  email: z.string().email().nullable(),
+  phoneNumber: z.string().nullable(),
   usageQuota: z.number().int().nonnegative(),
   usageCurrent: z.number().int().nonnegative(),
+  activationCodesTotal: z.number().int().nonnegative().default(0),
+  activationCodesUsed: z.number().int().nonnegative().default(0),
   createdAt: z.string().min(1),
   subscription: z.object({
     planName: z.string().nullable(),
@@ -126,11 +130,40 @@ export async function generateCodes(data: GenerateCodesRequest): Promise<string[
   }
 }
 
-// Get activation codes (database-backed)
-export async function getCodes(tenantSlug?: string): Promise<ActivationCode[]> {
-  const url = tenantSlug 
-    ? `${API_BASE}/admin/api/codes?tenant_slug=${tenantSlug}`
-    : `${API_BASE}/admin/api/codes`;
+// Get activation codes (database-backed) with pagination
+export interface CodesPage {
+  codes: ActivationCode[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export async function getCodes(
+  tenantSlug?: string,
+  page: number = 1,
+  pageSize: number = 25,
+  status?: string,
+  search?: string
+): Promise<CodesPage> {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    page_size: pageSize.toString(),
+  });
+  
+  if (tenantSlug) {
+    params.append('tenant_slug', tenantSlug);
+  }
+  
+  if (status) {
+    params.append('status', status);
+  }
+  
+  if (search) {
+    params.append('search', search);
+  }
+  
+  const url = `${API_BASE}/admin/api/codes?${params}`;
   
   const response = await fetch(url);
   if (!response.ok) {
@@ -138,7 +171,13 @@ export async function getCodes(tenantSlug?: string): Promise<ActivationCode[]> {
   }
   
   const data = await response.json();
-  return data.codes || [];
+  return {
+    codes: data.codes || [],
+    total: data.total || 0,
+    page: data.page || 1,
+    page_size: data.page_size || pageSize,
+    total_pages: data.total_pages || 1,
+  };
 }
 
 // Get devices (database-backed)
@@ -187,7 +226,17 @@ export async function getTenants(params: TenantQueryParams = {}): Promise<Tenant
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new Error('Cannot connect to API server. Please ensure the backend is running on port 8080.');
     }
-    throw error;
+    // Ensure error is always an Error instance with a string message
+    if (error instanceof Error) {
+      throw error;
+    }
+    // Handle non-Error objects (e.g., from JSON parsing or network errors)
+    const errorMessage = typeof error === 'string' 
+      ? error 
+      : (error && typeof error === 'object' && 'message' in error)
+        ? String(error.message)
+        : JSON.stringify(error);
+    throw new Error(errorMessage || 'An unknown error occurred');
   }
 }
 
@@ -221,6 +270,9 @@ export interface AddTenantRequest {
   logoUrl?: string;
   primaryColor?: string;
   domain?: string;
+  email?: string;
+  phoneNumber?: string;
+  otpDeliveryMethod?: string;
   subscriptionPlan: string;
   usageQuota?: number;
 }
@@ -321,7 +373,17 @@ export async function addTenant(data: AddTenantRequest): Promise<Tenant> {
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new Error('Cannot connect to API server. Please ensure the backend is running on port 8080.');
     }
-    throw error;
+    // Ensure error is always an Error instance with a string message
+    if (error instanceof Error) {
+      throw error;
+    }
+    // Handle non-Error objects (e.g., from JSON parsing or network errors)
+    const errorMessage = typeof error === 'string' 
+      ? error 
+      : (error && typeof error === 'object' && 'message' in error)
+        ? String(error.message)
+        : JSON.stringify(error);
+    throw new Error(errorMessage || 'An unknown error occurred');
   }
 }
 
@@ -331,32 +393,86 @@ export interface EditTenantRequest {
   logoUrl?: string;
   primaryColor?: string;
   domain?: string;
+  email?: string;
+  phoneNumber?: string;
   subscriptionPlan?: string;
   usageQuota?: number;
 }
 
 export async function editTenant(slug: string, data: EditTenantRequest): Promise<Tenant> {
-  const response = await fetch(`${API_BASE}/admin/api/tenants/${slug}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  });
+  const url = `${API_BASE}/admin/api/tenants/${slug}`;
+  console.log('Updating tenant at:', url, 'with payload:', data);
   
-  if (!response.ok) {
-    let errorDetail = `Failed to update tenant (${response.status})`;
-    try {
-      const error = await response.json();
-      errorDetail = error.detail || error.message || errorDetail;
-    } catch (e) {
-      errorDetail = `${errorDetail}: ${response.statusText}`;
+  try {
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    
+    console.log('Response status:', response.status, response.statusText);
+    
+    if (!response.ok) {
+      let errorDetail = 'Failed to update tenant';
+      try {
+        const errorData = await response.json();
+        console.error('API error response:', errorData);
+        
+        // Extract error message properly - handle different response formats
+        if (response.status === 422 && Array.isArray(errorData.detail)) {
+          // FastAPI validation errors return an array
+          const validationErrors = errorData.detail.map((err: any) => {
+            const field = err.loc?.slice(1).join('.') || 'field';
+            return `${field}: ${err.msg || err.type || 'Invalid value'}`;
+          }).join(', ');
+          errorDetail = validationErrors || 'Validation failed';
+        } else if (typeof errorData.detail === 'string') {
+          errorDetail = errorData.detail;
+        } else if (errorData.message) {
+          errorDetail = errorData.message;
+        } else if (typeof errorData === 'string') {
+          errorDetail = errorData;
+        } else {
+          // Try to get text response if JSON parsing fails
+          const text = await response.text().catch(() => '');
+          console.error('API error text:', text);
+          if (text) {
+            errorDetail = text.length > 200 ? text.substring(0, 200) + '...' : text;
+          } else {
+            errorDetail = `Server returned ${response.status}: ${response.statusText}`;
+          }
+        }
+        
+        if (response.status === 409) {
+          errorDetail = 'A tenant with this slug already exists. Please choose a different slug.';
+        }
+      } catch (textError) {
+        errorDetail = `Server returned ${response.status}: ${response.statusText}`;
+      }
+      throw new Error(errorDetail);
     }
-    throw new Error(errorDetail);
-  }
 
-  const payload = await response.json();
-  return tenantSchema.parse(payload);
+    const payload = await response.json();
+    console.log('Tenant updated successfully:', payload);
+    return tenantSchema.parse(payload);
+  } catch (error) {
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Cannot connect to API server. Please ensure the backend is running on port 8080.');
+    }
+    // Ensure error is always an Error instance with a string message
+    if (error instanceof Error) {
+      throw error;
+    }
+    // Handle non-Error objects (e.g., from JSON parsing or network errors)
+    const errorMessage = typeof error === 'string' 
+      ? error 
+      : (error && typeof error === 'object' && 'message' in error)
+        ? String(error.message)
+        : JSON.stringify(error);
+    throw new Error(errorMessage || 'An unknown error occurred');
+  }
 }
 
 // Get tenant deletion impact

@@ -22,6 +22,7 @@ export default function LoginPage() {
   const [tenantSlug, setTenantSlug] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [otpExpiresIn, setOtpExpiresIn] = useState<number | null>(null);
+  const [otpMessage, setOtpMessage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export default function LoginPage() {
     try {
       const response = await generateOTP(tenantSlug.trim());
       setOtpExpiresIn(response.expires_in);
+      setOtpMessage(response.message || 'OTP has been sent to your registered email or phone number.');
       setStep('otp');
       
       // Start countdown timer
@@ -85,10 +87,13 @@ export default function LoginPage() {
     setStep('slug');
     setOtpCode('');
     setOtpExpiresIn(null);
+    setOtpMessage(null);
     setError(null);
   };
 
-  const displayError = error || authError;
+  // Only show errors from actual login attempts, not from initial auth check
+  // authError from useAuth is only set during login operations, not initial checks
+  const displayError = error || (authError && step !== 'slug' ? authError : null);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-500 via-purple-500 to-indigo-600">
@@ -148,6 +153,12 @@ export default function LoginPage() {
             ) : (
               <form onSubmit={handleOTPSubmit}>
                 <div className="space-y-4">
+                  {otpMessage && (
+                    <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-green-700 text-sm font-medium">{otpMessage}</p>
+                    </div>
+                  )}
+                  
                   <div>
                     <label htmlFor="otp-code" className="block text-sm font-semibold text-gray-700 mb-2">
                       OTP Code

@@ -12,10 +12,18 @@ class OTPGenerateRequest(BaseModel):
 
 
 class OTPGenerateResponse(BaseModel):
-    """Response with generated OTP."""
+    """Response after generating OTP.
+    
+    Note: OTP code is NOT included in the response for security reasons.
+    The OTP is sent directly to the tenant's email or phone number.
+    """
 
-    otp_code: str = Field(..., description="6-digit OTP code")
+    otp_code: str = Field("", description="Always empty - OTP is sent via email/SMS, not returned in API")
     expires_in: int = Field(600, description="OTP validity in seconds (10 minutes)")
+    message: str = Field(
+        default="OTP has been sent to your registered email or phone number.",
+        description="User-friendly message about OTP delivery"
+    )
 
 
 class OTPVerifyRequest(BaseModel):

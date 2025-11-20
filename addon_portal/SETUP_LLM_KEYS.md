@@ -11,9 +11,11 @@ The Configuration page at `http://localhost:3002/llm/configuration` is working c
 ### **Step 1: Open the `.env` File**
 
 ```powershell
-cd C:\Q2O_Combined\addon_portal
+cd C:\Q2O_Combined
 notepad .env
 ```
+
+**Note:** The `.env` file is in the project root (`C:\Q2O_Combined\.env`), not in `addon_portal/`.
 
 ### **Step 2: Add These Lines**
 

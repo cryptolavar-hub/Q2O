@@ -7,6 +7,7 @@ Example: If you query 100 tasks and each task loads its project,
 without DataLoader = 101 queries (1 for tasks + 100 for projects)
 with DataLoader = 2 queries (1 for tasks + 1 batched for all projects)
 """
+import asyncio
 from typing import List, Optional, Dict
 from aiodataloader import DataLoader
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -127,41 +128,69 @@ class TasksByProjectLoader(DataLoader):
         """
         logger.debug(f"DataLoader: Batching tasks for {len(project_ids)} projects into 1 query")
         
-        # In production:
-        # result = await self.db.execute(
-        #     select(Task).where(Task.project_id.in_(project_ids))
-        # )
-        # tasks = result.scalars().all()
-        # 
-        # # Group by project_id
-        # tasks_by_project = defaultdict(list)
-        # for task in tasks:
-        #     tasks_by_project[task.project_id].append(task)
-        
+        # Query REAL tasks from database
+        from ..models.agent_tasks import AgentTask
         from .types import Task, TaskStatus, AgentType
-        from datetime import datetime, timedelta
+        from collections import defaultdict
+        from datetime import timezone
         
-        # Mock: Create tasks for each project
-        tasks_by_project = {}
-        for pid in project_ids:
-            tasks_by_project[pid] = [
-                Task(
-                    id=f"task-{pid}-{i}",
-                    project_id=pid,
-                    agent_type=AgentType.CODER if i % 2 == 0 else AgentType.FRONTEND,
-                    title=f"Task {i} for {pid}",
-                    description=f"Description for task {i}",
-                    status=TaskStatus.COMPLETED if i < 3 else TaskStatus.IN_PROGRESS,
-                    priority=1,
-                    created_at=datetime.utcnow() - timedelta(hours=i),
-                    started_at=datetime.utcnow() - timedelta(hours=i-1),
-                    completed_at=datetime.utcnow() if i < 3 else None,
-                    error_message=None
-                )
-                for i in range(1, 6)  # 5 tasks per project
-            ]
+        result = await self.db.execute(
+            select(AgentTask).where(AgentTask.project_id.in_(project_ids))
+            .order_by(AgentTask.created_at.desc())
+        )
+        db_tasks = result.scalars().all()
         
-        # Return in same order as input
+        # Group by project_id and convert to GraphQL Task objects
+        tasks_by_project = defaultdict(list)
+        for db_task in db_tasks:
+            # Map agent_type to AgentType enum
+            try:
+                agent_type_str = db_task.agent_type.upper()
+                agent_type = AgentType[agent_type_str] if agent_type_str in [e.name for e in AgentType] else AgentType.CODER
+            except (KeyError, AttributeError):
+                agent_type = AgentType.CODER
+            
+            # Map status
+            status_map = {
+                'pending': TaskStatus.PENDING,
+                'started': TaskStatus.IN_PROGRESS,
+                'running': TaskStatus.IN_PROGRESS,
+                'completed': TaskStatus.COMPLETED,
+                'failed': TaskStatus.FAILED,
+                'cancelled': TaskStatus.CANCELLED,
+            }
+            task_status = status_map.get(db_task.status, TaskStatus.PENDING)
+            
+            # Ensure timezone-aware datetimes
+            created_at = db_task.created_at
+            if created_at and created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            
+            started_at = db_task.started_at
+            if started_at and started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
+            
+            completed_at = db_task.completed_at
+            if completed_at and completed_at.tzinfo is None:
+                completed_at = completed_at.replace(tzinfo=timezone.utc)
+            
+            task = Task(
+                id=db_task.task_id,
+                project_id=db_task.project_id,
+                agent_type=agent_type,
+                title=db_task.task_name,
+                description=db_task.task_description or "",
+                status=task_status,
+                priority=db_task.priority,
+                created_at=created_at,
+                started_at=started_at,
+                completed_at=completed_at,
+                error_message=db_task.error_message
+            )
+            
+            tasks_by_project[db_task.project_id].append(task)
+        
+        # Return in same order as input (empty list if no tasks)
         return [tasks_by_project.get(pid, []) for pid in project_ids]
 
 
@@ -170,6 +199,8 @@ def create_dataloaders(db: AsyncSession) -> Dict[str, DataLoader]:
     Create all DataLoaders for a GraphQL request context
     
     These are created per-request to ensure proper caching scope.
+    
+    Uses async Session for optimal performance in SaaS platform.
     """
     return {
         "project_loader": ProjectLoader(db),

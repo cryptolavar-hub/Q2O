@@ -43,11 +43,14 @@ export default function EditProjectPage() {
       setError(null);
       const data = await getProject(projectId);
       setProject(data);
+      // Ensure all fields are populated correctly from the mapped data
+      // name should be client_name (project name), client_name should also be client_name (for editing)
+      // objectives should be custom_instructions from backend
       setFormData({
-        name: data.name,
-        client_name: data.client_name || '',
+        name: data.name || data.client_name || '',  // Use name (which is mapped from client_name) or fallback to client_name
+        client_name: data.client_name || data.name || '',  // Preserve original client_name, fallback to name
         description: data.description || '',
-        objectives: data.objectives || '',
+        objectives: data.objectives || '',  // This is mapped from custom_instructions
         status: data.status,
       });
     } catch (err) {
@@ -219,12 +222,16 @@ export default function EditProjectPage() {
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
                     disabled={isSubmitting}
                   >
-                    <option value="pending">Pending</option>
                     <option value="active">Active</option>
-                    <option value="completed">Completed</option>
                     <option value="paused">Paused</option>
-                    <option value="failed">Failed</option>
+                    {/* Note: Backend only supports active/paused. Other statuses (pending, completed, failed) are not persisted. */}
+                    <option value="pending">Pending (maps to Paused)</option>
+                    <option value="completed">Completed (maps to Paused)</option>
+                    <option value="failed">Failed (maps to Paused)</option>
                   </select>
+                  <p className="mt-2 text-sm text-gray-500">
+                    Note: Backend only supports Active and Paused. Other statuses will be saved as Paused.
+                  </p>
                 </div>
 
                 {/* Description */}

@@ -43,8 +43,9 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
 
     def __init__(self, agent_id: str = "coder_main", workspace_path: str = ".", 
                  project_layout: Optional[ProjectLayout] = None,
-                 project_id: Optional[str] = None):
-        super().__init__(agent_id, AgentType.CODER, project_layout)
+                 project_id: Optional[str] = None,
+                 tenant_id: Optional[int] = None):
+        super().__init__(agent_id, AgentType.CODER, project_layout, project_id=project_id, tenant_id=tenant_id)
         self.workspace_path = workspace_path
         self.implemented_files: List[str] = []
         self.template_renderer = get_renderer()

@@ -13,7 +13,7 @@ $Services = @{
     "licensing" = @{
         Name = "Licensing API"
         Port = 8080
-        Command = "uvicorn api.main:app --host :: --port 8080 --reload"
+        Command = "python start_api_windows.py"
         Directory = "addon_portal"
         Type = "python"
     }

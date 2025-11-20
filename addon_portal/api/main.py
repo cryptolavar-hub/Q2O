@@ -1,3 +1,8 @@
+# CRITICAL: Import event loop fix FIRST, before any other imports
+# This must happen before uvicorn creates the event loop
+from . import _event_loop_fix  # noqa: F401, E402
+
+import sys
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -11,6 +16,16 @@ from .routers import authz, licenses, billing_stripe, admin_pages, auth_sso, usa
 # Configure logging first
 configure_logging()
 logger = get_logger(__name__)
+
+# GraphQL router (optional - only if strawberry is installed)
+try:
+    from .graphql import router as graphql_router
+    GRAPHQL_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"GraphQL not available: {e}. Install strawberry-graphql to enable GraphQL API.")
+    graphql_router = None
+    GRAPHQL_AVAILABLE = False
+
 logger.info("Starting Q2O Licensing API...")
 
 # Create base FastAPI app
@@ -40,7 +55,21 @@ base_app.include_router(llm_management.router)  # LLM Management Dashboard API
 base_app.include_router(admin_api.router)  # Admin Portal JSON API (Tenants, Codes, Devices)
 base_app.include_router(tenant_api.router)  # Tenant API (Authentication & Project Management)
 
-base_app.mount("/static", StaticFiles(directory="api/static"), name="static")
+# GraphQL API (only if strawberry is installed)
+if GRAPHQL_AVAILABLE and graphql_router:
+    base_app.include_router(graphql_router)  # GraphQL API for Multi-Agent Dashboard & Status Page
+    logger.info("✓ GraphQL API enabled at /graphql")
+else:
+    logger.warning("⚠ GraphQL API disabled - install strawberry-graphql to enable")
+
+# Mount static files directory if it exists
+import os
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    base_app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    logger.info(f"✓ Static files mounted at /static from {static_dir}")
+else:
+    logger.debug(f"Static directory not found at {static_dir}, skipping static file mounting")
 
 # Wrap with ASGI middleware for OPTIONS handling (runs before everything, at ASGI level)
 logger.info("Registering CORSOptionsMiddleware as ASGI middleware...")

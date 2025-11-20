@@ -23,26 +23,34 @@
 ### **Phase 1: Tenant Portal (Weeks 1-6) - PRIORITY #1**
 
 **Critical Features** (Must Complete First):
-1. **Project Management** (Week 1-2) - CRUD, search, filter
-2. **Payment Overlay** (Week 2) - Payment before code generation
-3. **OTP Authentication** (Week 1) - Secure login
-4. **Device Management** (Week 3) - Registration, tracking
-5. **Downloads** (Week 3) - Software distribution
-6. **Profile & Settings** (Week 4) - Tenant profile, subscription
-7. **UI/UX Polish** (Week 5) - Design system, responsive
-8. **Testing** (Week 6) - Full testing suite
+1. **OTP Authentication** (Week 1) ✅ - Secure login
+2. **Project Management** (Week 1-2) ✅ - CRUD, search, filter
+3. **Subscription Validation** (Week 2) - Only active subscriptions can create/run projects
+4. **Activation Code System** (Week 2-3) - Assignment, quota tracking, self-service generation
+5. **Project Execution** (Week 3) - RUN PROJECT button, main.py integration, folder creation
+6. **Status Page (Tenant View)** (Week 3-4) - All projects with expandable progress bars
+7. **Payment Overlay** (Week 4) - Payment before code generation
+8. **Tenant Profile Page** (Week 4) - Branding, plan details, quota info
+9. **Tenant Billing Page** (Week 5) - Subscription renewal, plan upgrades via Stripe
+10. **Device Management** (Week 5) - Registration, tracking
+11. **Downloads** (Week 5) - Software distribution, project download (zip)
+12. **Auto-Pause on Inactive Subscription** (Week 5) - Pause all projects when subscription inactive
+13. **UI/UX Polish** (Week 6) - Design system, responsive
+14. **Testing** (Week 6) - Full testing suite
 
 ---
 
 ### **Phase 2: Multi-Agent Dashboard (Weeks 7-10) - AFTER Tenant Portal**
 
 **Critical Features**:
-1. **GraphQL Integration** (Week 7) - Apollo Client, queries, subscriptions
-2. **Real-Time Widgets** (Week 8) - Agent activity, task progress, metrics
-3. **Project Management** (Week 8) - Create/view projects in dashboard
-4. **System Metrics** (Week 9) - Performance dashboards, charts
-5. **UI/UX Polish** (Week 9) - Design consistency
-6. **Performance Testing** (Week 10) - Benchmarks, optimization
+1. **GraphQL Integration** (Week 7) ✅ - Apollo Client, queries, subscriptions
+2. **Activation Code Login** (Week 7) - Public endpoint for client access (no OTP)
+3. **Status Page (Client View)** (Week 7-8) - Single project view via activation code
+4. **Project Download** (Week 8) - Zip completed projects for download (7z)
+5. **Real-Time Widgets** (Week 8) - Agent activity, task progress, metrics
+6. **System Metrics** (Week 9) - Performance dashboards, charts
+7. **UI/UX Polish** (Week 9) - Design consistency
+8. **Performance Testing** (Week 10) - Benchmarks, optimization
 
 ---
 
@@ -358,37 +366,51 @@ addon_portal/apps/tenant-portal/src/
 
 ### **WEEK 4: Tenant Portal - Profile, Settings & Usage Dashboard**
 
+**📋 Detailed Roadmap**: See `docs/TENANT_PROFILE_BILLING_ROADMAP.md` for complete implementation details.
+
 #### **Day 1-3: Profile & Settings**
 
 **Tasks**:
 - [ ] Profile page (`/profile`)
-  - [ ] Display tenant info
-  - [ ] Edit profile
-  - [ ] Subscription details
-  - [ ] Billing information
+  - [ ] Display tenant info (name, email, phone, slug)
+  - [ ] Edit profile (name, email, phone, logo, primary color, domain)
+  - [ ] Subscription details (plan, status, quota, usage)
+  - [ ] Activation code quota display
+  - [ ] Branding preview (logo, color)
 - [ ] Settings page (`/settings`)
   - [ ] General settings
   - [ ] Notification preferences
   - [ ] Security settings
+
+**Backend Endpoints**:
+- `GET /api/tenant/profile` - Get profile with subscription and quota
+- `PUT /api/tenant/profile` - Update profile fields
 
 **Files to Create**:
 ```
 addon_portal/apps/tenant-portal/src/
 ├── pages/
 │   ├── profile/
-│   │   ├── index.tsx
-│   │   └── edit.tsx
+│   │   └── index.tsx
 │   └── settings/
 │       └── index.tsx
-└── components/
-    ├── ProfileForm.tsx
-    └── SettingsForm.tsx
+├── components/
+│   ├── ProfileInfoCard.tsx
+│   ├── SubscriptionCard.tsx
+│   ├── QuotaCard.tsx
+│   ├── BrandingPreviewCard.tsx
+│   ├── EditProfileModal.tsx
+│   └── SettingsForm.tsx
+└── lib/
+    └── profile.ts (API client)
 ```
 
 **Testing**:
 - [ ] Profile display works
 - [ ] Profile edit works
 - [ ] Subscription info accurate
+- [ ] Quota meters display correctly
+- [ ] Branding preview works
 - [ ] Settings save correctly
 
 ---
@@ -429,7 +451,72 @@ addon_portal/apps/tenant-portal/src/
 
 ---
 
-### **WEEK 5: Tenant Portal - UI/UX Polish & Design System**
+### **WEEK 5: Tenant Portal - Billing & Activation Code Purchase**
+
+**📋 Detailed Roadmap**: See `docs/TENANT_PROFILE_BILLING_ROADMAP.md` for complete implementation details.
+
+#### **Day 1-3: Billing Page**
+
+**Tasks**:
+- [ ] Billing page (`/billing`)
+  - [ ] Current subscription display (plan, status, next billing date)
+  - [ ] Billing history table (invoices with download)
+  - [ ] Usage & quota meters (project runs, activation codes)
+  - [ ] Plan comparison and upgrade options
+  - [ ] Activation code purchase (if quota exhausted)
+  - [ ] Payment method management
+  - [ ] Auto-renewal toggle
+  - [ ] Cancel subscription (with confirmation)
+
+**Backend Endpoints**:
+- `GET /api/tenant/billing` - Get billing information
+- `GET /api/tenant/billing/invoices` - Get invoice history
+- `POST /api/tenant/billing/upgrade` - Upgrade plan
+- `POST /api/tenant/billing/renew` - Renew subscription
+- `PUT /api/tenant/billing/auto-renewal` - Toggle auto-renewal
+- `POST /api/tenant/billing/cancel` - Cancel subscription
+- `GET /api/tenant/activation-codes/purchase-options` - Get purchase options
+- `POST /api/tenant/activation-codes/purchase` - Purchase codes
+
+**Stripe Integration**:
+- Stripe Checkout for plan upgrades
+- Stripe Payment Intents for code purchases
+- Webhook handlers for subscription updates
+
+**Files to Create**:
+```
+addon_portal/apps/tenant-portal/src/
+├── pages/
+│   └── billing/
+│       └── index.tsx
+├── components/
+│   ├── CurrentSubscriptionCard.tsx
+│   ├── BillingHistoryTable.tsx
+│   ├── UsageQuotaCard.tsx
+│   ├── PlanComparisonCard.tsx
+│   ├── ActivationCodePurchaseCard.tsx
+│   ├── PaymentMethodCard.tsx
+│   ├── UpgradeModal.tsx
+│   └── PurchaseCodesModal.tsx
+└── lib/
+    └── billing.ts (API client)
+```
+
+**Testing**:
+- [ ] Billing data loads correctly
+- [ ] Current subscription displays accurately
+- [ ] Billing history loads with pagination
+- [ ] Invoice download works
+- [ ] Plan upgrade works (Stripe checkout)
+- [ ] Activation code purchase works
+- [ ] Payment method update works
+- [ ] Auto-renewal toggle works
+- [ ] Cancel subscription works
+- [ ] Stripe webhooks process correctly
+
+---
+
+#### **Day 4-5: UI/UX Polish & Design System**
 
 #### **Day 1-5: Complete UI/UX Overhaul**
 

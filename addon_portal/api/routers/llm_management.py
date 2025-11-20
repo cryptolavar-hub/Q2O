@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.logging import get_logger
 from ..deps import get_db
@@ -34,12 +34,18 @@ from ..services.llm_config_service import (
 LOGGER = get_logger(__name__)
 
 try:  # pragma: no cover - optional dependency
+    import sys
+    from pathlib import Path
+    # Add project root to path to import utils
+    project_root = Path(__file__).resolve().parents[3]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
     from utils.llm_service import get_llm_service
     from utils.template_learning_engine import get_template_learning_engine
     from utils.configuration_manager import get_configuration_manager
     LLM_AVAILABLE = True
-except ImportError:
-    LOGGER.warning('llm_components_unavailable')
+except ImportError as e:
+    LOGGER.warning('llm_components_unavailable', extra={"error": str(e)})
     LLM_AVAILABLE = False
 
 
@@ -47,26 +53,26 @@ router = APIRouter(prefix="/api/llm", tags=["llm_management"])
 
 
 @router.get("/system", response_model=SystemConfigResponse)
-async def read_system_configuration(db: Session = Depends(get_db)) -> SystemConfigResponse:
+async def read_system_configuration(db: AsyncSession = Depends(get_db)) -> SystemConfigResponse:
     """Return the persisted system-level LLM configuration."""
 
-    return get_system_config(db)
+    return await get_system_config(db)
 
 
 @router.put("/system", response_model=SystemConfigResponse)
 async def write_system_configuration(
     payload: SystemConfigUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> SystemConfigResponse:
     """Update the system-level LLM configuration and persist the system prompt to .env."""
 
     LOGGER.info('system_config_update_request', extra={"provider": payload.primary_provider.value})
-    return update_system_config(db, payload)
+    return await update_system_config(db, payload)
 
 
 @router.get("/projects", response_model=ProjectCollectionResponse)
 async def list_llm_projects(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     search: Optional[str] = Query(None, max_length=200),
@@ -74,36 +80,36 @@ async def list_llm_projects(
     """Return paginated LLM project configurations."""
 
     LOGGER.info('list_llm_projects', extra={"page": page, "pageSize": page_size, "search": search})
-    return list_projects(db, page=page, page_size=page_size, search=search)
+    return await list_projects(db, page=page, page_size=page_size, search=search)
 
 
 @router.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project_endpoint(
     payload: ProjectCreatePayload,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> ProjectResponse:
     """Create a new LLM project configuration."""
 
     LOGGER.info('create_project_request', extra={'projectId': payload.project_id, 'clientName': payload.client_name})
-    return create_project(db, payload)
+    return await create_project(db, payload)
 
 
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
-async def retrieve_project(project_id: str, db: Session = Depends(get_db)) -> ProjectResponse:
+async def retrieve_project(project_id: str, db: AsyncSession = Depends(get_db)) -> ProjectResponse:
     """Return a single LLM project configuration."""
 
-    return get_project(db, project_id)
+    return await get_project(db, project_id)
 
 
 @router.put("/projects/{project_id}", response_model=ProjectResponse)
 async def update_project_configuration(
     project_id: str,
     payload: ProjectUpdatePayload,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> ProjectResponse:
     """Update project-level metadata and prompt overrides."""
 
-    return update_project(db, project_id, payload)
+    return await update_project(db, project_id, payload)
 
 
 @router.put("/projects/{project_id}/agents/{agent_type}", response_model=AgentPromptResponse)
@@ -111,7 +117,7 @@ async def update_agent_configuration(
     project_id: str,
     agent_type: str,
     payload: AgentPromptUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> AgentPromptResponse:
     """Create or update agent-level prompt overrides for a project."""
 
@@ -120,19 +126,19 @@ async def update_agent_configuration(
     if not sanitized_agent_type:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Agent type is required.")
 
-    return update_agent_prompt(db, project_id, sanitized_agent_type, payload)
+    return await update_agent_prompt(db, project_id, sanitized_agent_type, payload)
 
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project_endpoint(
     project_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete an LLM project configuration (admin only - no tenant scoping)."""
 
     LOGGER.info('delete_project_request', extra={"projectId": project_id})
     try:
-        delete_project(db, project_id, tenant_id=None)  # Admin can delete any project
+        await delete_project(db, project_id, tenant_id=None)  # Admin can delete any project
     except Exception as e:
         LOGGER.error('delete_project_error', extra={"error": str(e), "projectId": project_id})
         raise HTTPException(

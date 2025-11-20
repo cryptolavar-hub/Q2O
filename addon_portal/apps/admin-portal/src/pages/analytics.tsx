@@ -17,8 +17,14 @@ export default function AnalyticsPage() {
   const [availableProjects, setAvailableProjects] = useState<Array<{project_id: string; client_name: string}>>([]);
   const [loading, setLoading] = useState(true);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [isLoadingCharts, setIsLoadingCharts] = useState(false);
+  const [isLoadingDistribution, setIsLoadingDistribution] = useState(false);
+  const [activationTrend, setActivationTrend] = useState<Array<{date: string; codes: number; projects: number; devices: number; cumulativeCodes?: number; cumulativeProjects?: number; cumulativeDevices?: number}>>([]);
+  const [projectDeviceDistribution, setProjectDeviceDistribution] = useState<{
+    projects: {active: number; total: number};
+    devices: {active: number; revoked: number; total: number};
+  } | null>(null);
   const [analyticsData, setAnalyticsData] = useState<{
-    activationTrend: Array<{date: string; codes: number; devices: number; cumulativeCodes?: number; cumulativeDevices?: number}>;
     tenantUsage: Array<{tenant: string; usage: number; quota: number}>;
     subscriptionDistribution: Array<{name: string; value: number; color: string}>;
     summaryStats: {
@@ -27,7 +33,6 @@ export default function AnalyticsPage() {
       retentionRate: number;
     };
   }>({
-    activationTrend: [],
     tenantUsage: [],
     subscriptionDistribution: [],
     summaryStats: {
@@ -39,6 +44,8 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     fetchAvailableProjects();
+    fetchActivationTrend();
+    fetchProjectDeviceDistribution();
   }, []);
 
   useEffect(() => {
@@ -60,6 +67,61 @@ export default function AnalyticsPage() {
     }
   };
 
+  const fetchActivationTrend = async () => {
+    try {
+      setIsLoadingCharts(true);
+      const response = await fetch(`${API_BASE}/admin/api/activation-trend?days=30`);
+      if (!response.ok) {
+        throw new Error('Failed to load activation trend');
+      }
+      const data = await response.json();
+      
+      // Transform daily counts to cumulative totals for better visualization
+      const rawTrend = data.trend || [];
+      let runningCodes = 0;
+      let runningProjects = 0;
+      let runningDevices = 0;
+      const processedTrend = rawTrend.map((entry: any) => {
+        runningCodes += entry.codes || 0;
+        runningProjects += entry.projects || 0;
+        runningDevices += entry.devices || 0;
+        return {
+          date: entry.date,
+          codes: entry.codes || 0,
+          projects: entry.projects || 0,
+          devices: entry.devices || 0,
+          cumulativeCodes: runningCodes,
+          cumulativeProjects: runningProjects,
+          cumulativeDevices: runningDevices,
+        };
+      });
+      
+      setActivationTrend(processedTrend);
+    } catch (error) {
+      console.error('Error fetching activation trend:', error);
+      setActivationTrend([]);
+    } finally {
+      setIsLoadingCharts(false);
+    }
+  };
+
+  const fetchProjectDeviceDistribution = async () => {
+    try {
+      setIsLoadingDistribution(true);
+      const response = await fetch(`${API_BASE}/admin/api/project-device-distribution`);
+      if (!response.ok) {
+        throw new Error('Failed to load distribution');
+      }
+      const data = await response.json();
+      setProjectDeviceDistribution(data);
+    } catch (error) {
+      console.error('Error fetching project/device distribution:', error);
+      setProjectDeviceDistribution(null);
+    } finally {
+      setIsLoadingDistribution(false);
+    }
+  };
+
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
@@ -70,26 +132,14 @@ export default function AnalyticsPage() {
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
-        
-        // Transform daily counts to cumulative totals for better visualization
-        const rawTrend = data.activationTrend || [];
-        let runningCodes = 0;
-        let runningDevices = 0;
-        const processedTrend = rawTrend.map((entry: any) => {
-          runningCodes += entry.codes || 0;
-          runningDevices += entry.devices || 0;
-          return {
-            date: entry.date,
-            codes: entry.codes || 0,  // Keep daily for reference
-            devices: entry.devices || 0,
-            cumulativeCodes: runningCodes,
-            cumulativeDevices: runningDevices,
-          };
-        });
-        
         setAnalyticsData({
-          ...data,
-          activationTrend: processedTrend,
+          tenantUsage: data.tenantUsage || [],
+          subscriptionDistribution: data.subscriptionDistribution || [],
+          summaryStats: data.summaryStats || {
+            totalRevenue: 0,
+            avgUsageRate: 0,
+            retentionRate: 0
+          }
         });
       } else {
         console.error('Failed to fetch analytics');
@@ -133,46 +183,134 @@ export default function AnalyticsPage() {
           </div>
         ) : (
           <>
-            {/* Charts Grid */}
+            {/* Charts Grid - Row 1: Activation Trends and Project/Device Distribution */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              {/* Activation Trend */}
+              {/* Activation Trends (from Dashboard) */}
               <div className="bg-white rounded-2xl p-6 shadow-lg">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-gray-900">📈 Activation Trends</h3>
-                  {analyticsData.activationTrend.length > 0 && (
-                    <div className="text-sm text-gray-600">
-                      <span className="font-semibold text-purple-600">
-                        {analyticsData.activationTrend[analyticsData.activationTrend.length - 1]?.cumulativeCodes || 0}
-                      </span> codes total
-                    </div>
-                  )}
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900">Activation Trends</h3>
+                    <p className="text-sm text-gray-500">30-day cumulative totals for codes, projects, and devices.</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {activationTrend.length > 0 && (
+                      <div className="text-sm text-gray-600">
+                        <span className="font-semibold text-purple-600">
+                          {activationTrend[activationTrend.length - 1]?.cumulativeCodes || 0}
+                        </span> codes total
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {analyticsData.activationTrend.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300} key={`trend-${dateRange}`}>
-                    <LineChart data={analyticsData.activationTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                      <XAxis dataKey="date" stroke="#6B7280" style={{ fontSize: 12 }} />
-                      <YAxis stroke="#6B7280" style={{ fontSize: 12 }} />
-                      <Tooltip 
-                        contentStyle={{ 
-                          background: 'white', 
-                          border: '1px solid #E5E7EB', 
-                          borderRadius: 8,
-                          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                        }} 
-                      />
-                      <Legend />
-                      <Line type="monotone" dataKey="cumulativeCodes" stroke="#9B59B6" strokeWidth={3} name="Codes Generated (Total)" />
-                      <Line type="monotone" dataKey="cumulativeDevices" stroke="#4CAF50" strokeWidth={3} name="Devices Activated (Total)" />
-                    </LineChart>
-                  </ResponsiveContainer>
+                {isLoadingCharts ? (
+                  <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                  </div>
+                ) : activationTrend.length > 0 ? (
+                  <div className="mt-6">
+                    <ResponsiveContainer width="100%" height={256}>
+                      <LineChart data={activationTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                        <XAxis dataKey="date" stroke="#6B7280" style={{ fontSize: 12 }} />
+                        <YAxis stroke="#6B7280" style={{ fontSize: 12 }} />
+                        <Tooltip 
+                          contentStyle={{ 
+                            background: 'white', 
+                            border: '1px solid #E5E7EB', 
+                            borderRadius: 8,
+                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                          }} 
+                        />
+                        <Legend />
+                        <Line type="monotone" dataKey="cumulativeCodes" stroke="#9B59B6" strokeWidth={2} name="Codes Generated (Total)" />
+                        <Line type="monotone" dataKey="cumulativeProjects" stroke="#FF6B9D" strokeWidth={2} name="Projects Activated (Total)" />
+                        <Line type="monotone" dataKey="cumulativeDevices" stroke="#4CAF50" strokeWidth={2} name="Devices Activated (Total)" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 ) : (
-                  <div className="flex items-center justify-center h-64 text-gray-400">
-                    <p>No data available for selected period</p>
+                  <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
+                    <p>No activation data available</p>
                   </div>
                 )}
               </div>
 
+              {/* Project/Device Distribution (from Dashboard) */}
+              <div className="bg-white rounded-2xl p-6 shadow-lg">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900">Project/Device Distribution</h3>
+                    <p className="text-sm text-gray-500">Active projects and devices breakdown.</p>
+                  </div>
+                </div>
+                {isLoadingDistribution ? (
+                  <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                  </div>
+                ) : projectDeviceDistribution && (
+                  projectDeviceDistribution.projects.active > 0 || 
+                  projectDeviceDistribution.devices.active > 0 || 
+                  projectDeviceDistribution.devices.revoked > 0
+                ) ? (
+                  <div className="mt-6">
+                    <ResponsiveContainer width="100%" height={256}>
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'Active Projects', value: projectDeviceDistribution.projects.active, color: '#4CAF50' },
+                            { name: 'Active Devices', value: projectDeviceDistribution.devices.active, color: '#9B59B6' },
+                            { name: 'Revoked Devices', value: projectDeviceDistribution.devices.revoked, color: '#FF6B9D' },
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={80}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {[
+                            { name: 'Active Projects', value: projectDeviceDistribution.projects.active, color: '#4CAF50' },
+                            { name: 'Active Devices', value: projectDeviceDistribution.devices.active, color: '#9B59B6' },
+                            { name: 'Revoked Devices', value: projectDeviceDistribution.devices.revoked, color: '#FF6B9D' },
+                          ].map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="mt-4 flex justify-center gap-4 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-green-500" />
+                        <span className="text-sm font-medium text-gray-700">
+                          Projects: {projectDeviceDistribution.projects.active} active
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-purple-500" />
+                        <span className="text-sm font-medium text-gray-700">
+                          Devices: {projectDeviceDistribution.devices.active} active
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-pink-500" />
+                        <span className="text-sm font-medium text-gray-700">
+                          Revoked: {projectDeviceDistribution.devices.revoked}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-6 flex h-64 items-center justify-center text-gray-400">
+                    <p>No project/device data available</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Charts Grid - Row 2: Subscription Distribution */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               {/* Subscription Distribution */}
               <div className="bg-white rounded-2xl p-6 shadow-lg">
                 <h3 className="text-xl font-bold text-gray-900 mb-6">🎯 Subscription Distribution</h3>

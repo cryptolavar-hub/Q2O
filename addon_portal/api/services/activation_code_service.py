@@ -7,7 +7,8 @@ from typing import List, Optional
 
 import hashlib
 import secrets
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..core.logging import get_logger
@@ -36,8 +37,8 @@ def _generate_activation_code() -> str:
     return '-'.join(parts)
 
 
-def generate_codes(
-    session: Session,
+async def generate_codes(
+    session: AsyncSession,
     tenant_id: int,
     count: int,
     *,
@@ -65,7 +66,8 @@ def generate_codes(
     
     try:
         # Verify tenant exists
-        tenant = session.query(Tenant).filter(Tenant.id == tenant_id).first()
+        result = await session.execute(select(Tenant).where(Tenant.id == tenant_id))
+        tenant = result.scalar_one_or_none()
         if not tenant:
             raise InvalidOperationError(f"Tenant {tenant_id} not found.")
         
@@ -95,7 +97,7 @@ def generate_codes(
             session.add(new_code)
             generated_codes.append(code_plain)
         
-        session.commit()
+        await session.commit()
         LOGGER.info(
             "activation_codes_generated",
             extra={
@@ -108,7 +110,7 @@ def generate_codes(
         return generated_codes
     
     except SQLAlchemyError as exc:
-        session.rollback()
+        await session.rollback()
         LOGGER.error(
             "activation_code_generation_failed",
             extra={"tenant_id": tenant_id, "count": count, "error": str(exc)},

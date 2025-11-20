@@ -63,6 +63,44 @@ function calculateUsagePercentage(usage: number, quota: number): number {
   return Math.min(100, Math.round((usage / quota) * 100));
 }
 
+function generateSlugSuggestions(baseSlug: string, existingSlugs: string[]): string[] {
+  const suggestions: string[] = [];
+  const suffixes = ['-1', '-2', '-new', '-2025', '-inc'];
+  
+  // Try adding numeric suffixes
+  for (let i = 1; i <= 10; i++) {
+    const candidate = `${baseSlug}-${i}`;
+    if (!existingSlugs.includes(candidate) && suggestions.length < 3) {
+      suggestions.push(candidate);
+    }
+  }
+  
+  // Try adding text suffixes if we still need more
+  if (suggestions.length < 3) {
+    for (const suffix of suffixes) {
+      const candidate = `${baseSlug}${suffix}`;
+      if (!existingSlugs.includes(candidate) && suggestions.length < 3) {
+        suggestions.push(candidate);
+      }
+    }
+  }
+  
+  // Try appending random numbers if we still need more
+  if (suggestions.length < 3) {
+    let attempts = 0;
+    while (suggestions.length < 3 && attempts < 20) {
+      const randomNum = Math.floor(Math.random() * 1000) + 100;
+      const candidate = `${baseSlug}-${randomNum}`;
+      if (!existingSlugs.includes(candidate)) {
+        suggestions.push(candidate);
+      }
+      attempts++;
+    }
+  }
+  
+  return suggestions.slice(0, 3);
+}
+
 export default function TenantsPage() {
   const [tenantPage, setTenantPage] = useState<TenantPage | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -78,6 +116,10 @@ export default function TenantsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState(false);
+  const [slugValue, setSlugValue] = useState('');
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const [slugSuggestions, setSlugSuggestions] = useState<string[]>([]);
+  const [isCheckingSlug, setIsCheckingSlug] = useState(false);
 
   const loadTenants = useCallback(async (params: TenantQueryParams) => {
     setIsLoading(true);
@@ -95,6 +137,11 @@ export default function TenantsPage() {
         if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('Cannot connect')) {
           errorMsg = 'Cannot connect to server. Please ensure the backend API is running on port 8080.';
         }
+      } else if (typeof error === 'string') {
+        errorMsg = error;
+      } else if (error && typeof error === 'object') {
+        // Extract message from error object
+        errorMsg = (error as any).message || (error as any).detail || JSON.stringify(error);
       }
       setErrorMessage(errorMsg);
     } finally {
@@ -143,6 +190,9 @@ export default function TenantsPage() {
     setModalState({ visible: false, mode: 'create' });
     setSelectedTenant(null);
     setErrorMessage(null); // Clear errors when closing modal
+    setSlugValue('');
+    setSlugError(null);
+    setSlugSuggestions([]);
   }, []);
 
   const handleAddTenant = useCallback(
@@ -161,6 +211,9 @@ export default function TenantsPage() {
         logoUrl: (formData.get('logoUrl') as string | null) || undefined,
         primaryColor: (formData.get('primaryColor') as string | null) || '#875A7B',
         domain: (formData.get('domain') as string | null)?.trim() || undefined,
+        email: (formData.get('email') as string | null)?.trim() || undefined,
+        phoneNumber: (formData.get('phoneNumber') as string | null)?.trim() || undefined,
+        otpDeliveryMethod: (formData.get('otpDeliveryMethod') as string) || 'email',
         subscriptionPlan: (formData.get('subscriptionPlan') as string) || plans[0]?.name || '',
         usageQuota: Number(formData.get('usageQuota')) || 10,
       };
@@ -238,6 +291,8 @@ export default function TenantsPage() {
         logoUrl: (formData.get('logoUrl') as string | null)?.trim() || undefined,
         primaryColor: (formData.get('primaryColor') as string | null)?.trim() || undefined,
         domain: (formData.get('domain') as string | null)?.trim() || undefined,
+        email: (formData.get('email') as string | null)?.trim() || undefined,
+        phoneNumber: (formData.get('phoneNumber') as string | null)?.trim() || undefined,
         subscriptionPlan: (formData.get('subscriptionPlan') as string | null)?.trim() || undefined,
         usageQuota: formData.get('usageQuota') ? Number(formData.get('usageQuota')) : undefined,
       };
@@ -380,9 +435,13 @@ export default function TenantsPage() {
                 />
               </label>
               <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
-                Tenant Slug *
+                Slug (unique name for tenant) *
                 <input
-                  className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 disabled:bg-gray-100"
+                  className={`rounded-lg border px-4 py-2 focus:outline-none focus:ring-2 disabled:bg-gray-100 ${
+                    slugError
+                      ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
+                      : 'border-gray-300 focus:border-purple-500 focus:ring-purple-200'
+                  }`}
                   defaultValue={selectedTenant?.slug ?? ''}
                   disabled={isEditMode}
                   name="slug"
@@ -391,8 +450,83 @@ export default function TenantsPage() {
                   type="text"
                   pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
                   title="Lowercase letters, numbers, and hyphens only (e.g., acme-corp)"
+                  onChange={async (e) => {
+                    const value = e.target.value.trim().toLowerCase();
+                    setSlugValue(value);
+                    setSlugError(null);
+                    setSlugSuggestions([]);
+
+                    if (!value || isEditMode) return;
+
+                    // Validate format
+                    const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+                    if (!slugPattern.test(value)) {
+                      setSlugError('Lowercase letters, numbers, and hyphens only');
+                      return;
+                    }
+
+                    if (value.length < 3 || value.length > 100) {
+                      setSlugError('Slug must be between 3 and 100 characters');
+                      return;
+                    }
+
+                    // Check if slug exists
+                    setIsCheckingSlug(true);
+                    try {
+                      const response = await getTenants({ page: 1, pageSize: 1000 });
+                      const existingSlugs = response.items.map(t => t.slug);
+                      
+                      if (existingSlugs.includes(value)) {
+                        setSlugError('This slug is already taken');
+                        // Generate suggestions
+                        const suggestions = generateSlugSuggestions(value, existingSlugs);
+                        setSlugSuggestions(suggestions);
+                      } else {
+                        setSlugError(null);
+                        setSlugSuggestions([]);
+                      }
+                    } catch (error) {
+                      console.error('Error checking slug:', error);
+                      // Don't block user if check fails
+                    } finally {
+                      setIsCheckingSlug(false);
+                    }
+                  }}
                 />
-                <span className="text-xs text-gray-500">Lowercase letters, numbers, and hyphens only</span>
+                <span className="text-xs text-gray-500">
+                  Lowercase letters, numbers, and hyphens only
+                </span>
+                {isCheckingSlug && (
+                  <span className="text-xs text-blue-600">Checking availability...</span>
+                )}
+                {slugError && (
+                  <span className="text-xs text-red-600">{slugError}</span>
+                )}
+                {slugSuggestions.length > 0 && (
+                  <div className="mt-1">
+                    <span className="text-xs text-gray-500">Suggestions:</span>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {slugSuggestions.map((suggestion, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          className="text-xs px-2 py-1 bg-purple-50 text-purple-700 rounded border border-purple-200 hover:bg-purple-100 transition-colors"
+                          onClick={() => {
+                            const slugInput = document.querySelector<HTMLInputElement>('input[name="slug"]');
+                            if (slugInput) {
+                              slugInput.value = suggestion;
+                              setSlugValue(suggestion);
+                              setSlugError(null);
+                              setSlugSuggestions([]);
+                            }
+                          }}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </label>
             </div>
 
@@ -431,6 +565,49 @@ export default function TenantsPage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
+                Email *
+                <input
+                  className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                  defaultValue={selectedTenant?.email ?? ''}
+                  name="email"
+                  placeholder="admin@example.com"
+                  type="email"
+                  required={!isEditMode}
+                />
+                <span className="text-xs text-gray-500">Required for OTP delivery and tenant notifications</span>
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
+                Phone Number
+                <input
+                  className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                  defaultValue={selectedTenant?.phoneNumber ?? ''}
+                  name="phoneNumber"
+                  placeholder="+1234567890"
+                  type="tel"
+                />
+                <span className="text-xs text-gray-500">Optional - for SMS/WhatsApp OTP delivery</span>
+              </label>
+            </div>
+
+            {!isEditMode && (
+              <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
+                OTP Delivery Method
+                <select
+                  className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                  defaultValue="email"
+                  name="otpDeliveryMethod"
+                >
+                  <option value="email">Email</option>
+                  <option value="sms">SMS</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="both">Both (Email + SMS)</option>
+                </select>
+                <span className="text-xs text-gray-500">How to deliver OTP codes to the tenant</span>
+              </label>
+            )}
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="flex flex-col gap-2 text-sm font-medium text-gray-700">
                 Subscription Plan *
                 <select
                   className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
@@ -438,6 +615,16 @@ export default function TenantsPage() {
                   name="subscriptionPlan"
                   required
                   disabled={isLoadingPlans || plans.length === 0}
+                  onChange={(e) => {
+                    // Auto-set quota when plan is selected (works for both create and edit)
+                    const selectedPlan = plans.find(p => p.name === e.target.value);
+                    if (selectedPlan) {
+                      const quotaInput = e.currentTarget.form?.querySelector<HTMLInputElement>('input[name="usageQuota"]');
+                      if (quotaInput) {
+                        quotaInput.value = selectedPlan.monthlyRunQuota.toString();
+                      }
+                    }
+                  }}
                 >
                   {isLoadingPlans ? (
                     <option value="">Loading plans...</option>
@@ -456,11 +643,13 @@ export default function TenantsPage() {
                 Usage Quota
                 <input
                   className="rounded-lg border border-gray-300 px-4 py-2 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
-                  defaultValue={selectedTenant?.usageQuota ?? 10}
+                  defaultValue={selectedTenant?.usageQuota ?? plans[0]?.monthlyRunQuota ?? 10}
+                  id="usageQuotaInput"
                   min={1}
                   name="usageQuota"
                   type="number"
                 />
+                <span className="text-xs text-gray-500">Auto-set from plan quota when plan is selected</span>
               </label>
             </div>
 
@@ -554,7 +743,7 @@ export default function TenantsPage() {
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Tenant</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Domain</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Plan</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Usage</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Activation Codes</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Status</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">Actions</th>
                 </tr>
@@ -592,14 +781,8 @@ export default function TenantsPage() {
                         <td className="px-4 py-4 align-top text-sm text-gray-600">{tenant.domain ?? '—'}</td>
                         <td className="px-4 py-4 align-top text-sm text-gray-600">{tenant.subscription.planName ?? 'Not Assigned'}</td>
                         <td className="px-4 py-4 align-top">
-                          <div className="flex flex-col gap-1">
-                            <div className="flex justify-between text-xs text-gray-500">
-                              <span>{tenant.usageCurrent} / {tenant.usageQuota}</span>
-                              <span>{usagePercent}%</span>
-                            </div>
-                            <div className="h-2 overflow-hidden rounded-full bg-gray-200">
-                              <div className="h-full rounded-full bg-gradient-success" style={{ width: `${usagePercent}%` }} />
-                            </div>
+                          <div className="text-sm text-gray-600">
+                            {tenant.activationCodesUsed ?? 0} / {tenant.activationCodesTotal ?? 0}
                           </div>
                         </td>
                         <td className="px-4 py-4 align-top">

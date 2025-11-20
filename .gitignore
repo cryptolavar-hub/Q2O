@@ -160,3 +160,9 @@ python*.exe
 # Log files (keep logs directory structure)
 logs/*.log
 !logs/.gitkeep
+
+# Batch files with hardcoded credentials (DO NOT COMMIT)
+# These files contain database passwords and should never be committed to git
+RUN_MIGRATION_*.bat
+*_MIGRATION_*.bat
+CHECK_DASHBOARD_STATUS.bat

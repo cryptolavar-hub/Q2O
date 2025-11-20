@@ -9,7 +9,12 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/', label: 'Dashboard', icon: '🏠' },
+  { href: '/projects', label: 'Projects', icon: '📁' },
+  { href: '/status', label: 'Status', icon: '📊' },
+  // TODO: Add more navigation items as features are implemented:
+  // { href: '/devices', label: 'Devices', icon: '📱' },
+  // { href: '/downloads', label: 'Downloads', icon: '⬇️' },
+  // { href: '/profile', label: 'Profile', icon: '👤' },
 ];
 
 export function Navigation() {
