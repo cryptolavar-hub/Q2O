@@ -430,3 +430,32 @@ export async function runProject(projectId: string): Promise<{
   return await response.json();
 }
 
+/**
+ * Restart a failed project execution
+ */
+export async function restartProject(projectId: string): Promise<{
+  success: boolean;
+  message: string;
+  execution_id?: number;
+  status?: string;
+  output_folder_path?: string;
+}> {
+  const response = await fetch(`${API_BASE}/api/tenant/projects/${projectId}/restart`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Session expired. Please login again.');
+    }
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    const errorMessage = typeof error.detail === 'string' 
+      ? error.detail 
+      : (error.message || response.statusText || `Failed to restart project: ${response.status}`);
+    throw new Error(errorMessage);
+  }
+
+  return await response.json();
+}
+

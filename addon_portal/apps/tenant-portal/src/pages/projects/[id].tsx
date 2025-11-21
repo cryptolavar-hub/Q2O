@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { SessionGuard } from '../../components/SessionGuard';
 import { Navigation } from '../../components/Navigation';
 import { Breadcrumb } from '../../components/Breadcrumb';
-import { getProject, deleteProject, assignActivationCode, runProject, type Project } from '../../lib/projects';
+import { getProject, deleteProject, assignActivationCode, runProject, restartProject, type Project } from '../../lib/projects';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function ProjectDetailPage() {
@@ -24,6 +24,7 @@ export default function ProjectDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
   const [showActivationCodeModal, setShowActivationCodeModal] = useState(false);
   const [activationCodeInput, setActivationCodeInput] = useState('');
   const [isAssigningCode, setIsAssigningCode] = useState(false);
@@ -127,6 +128,44 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleRestartProject = async () => {
+    if (!project || !id || typeof id !== 'string') return;
+
+    // Validate project can be restarted
+    if (project.execution_status !== 'failed') {
+      setError('Only failed projects can be restarted.');
+      return;
+    }
+
+    if (!project.activation_code_id) {
+      setError('Project must have an activation code assigned before restarting. Please assign an activation code first.');
+      setShowActivationCodeModal(true);
+      return;
+    }
+
+    if (!project.name || !project.description || !project.objectives) {
+      setError('Project must have Name, Description, and Objectives before restarting.');
+      return;
+    }
+
+    setIsRestarting(true);
+    setError(null);
+    try {
+      const result = await restartProject(id);
+      if (result.success) {
+        // Refresh project data to show updated status
+        await fetchProject(id);
+        // Redirect to status page
+        router.push('/status');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to restart project';
+      setError(errorMessage);
+    } finally {
+      setIsRestarting(false);
+    }
+  };
+
   const canRunProject = (): { canRun: boolean; reason?: string } => {
     if (!project) return { canRun: false, reason: 'Project not loaded' };
     if (!project.activation_code_id) return { canRun: false, reason: 'Activation code required' };
@@ -137,6 +176,20 @@ export default function ProjectDetailPage() {
       return { canRun: false, reason: 'Project is already running' };
     }
     return { canRun: true };
+  };
+
+  const canRestartProject = (): { canRestart: boolean; reason?: string } => {
+    if (!project) return { canRestart: false, reason: 'Project not loaded' };
+    if (project.execution_status !== 'failed') {
+      return { canRestart: false, reason: 'Only failed projects can be restarted' };
+    }
+    if (!project.activation_code_id) {
+      return { canRestart: false, reason: 'Activation code required' };
+    }
+    if (!project.name || !project.description || !project.objectives) {
+      return { canRestart: false, reason: 'Name, Description, and Objectives are required' };
+    }
+    return { canRestart: true };
   };
 
   const getStatusColor = (status: Project['status']) => {
@@ -234,7 +287,26 @@ export default function ProjectDetailPage() {
                           Assign Activation Code
                         </button>
                       )}
-                      {(() => {
+                      {/* Restart button (only for failed projects) */}
+                      {project.execution_status === 'failed' && (() => {
+                        const { canRestart, reason } = canRestartProject();
+                        return (
+                          <button
+                            onClick={handleRestartProject}
+                            disabled={!canRestart || isRestarting}
+                            title={reason}
+                            className={`px-6 py-2 font-semibold rounded-lg transition-colors ${
+                              canRestart && !isRestarting
+                                ? 'bg-orange-500 text-white hover:bg-orange-600'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            }`}
+                          >
+                            {isRestarting ? 'Restarting...' : '🔄 RESTART PROJECT'}
+                          </button>
+                        );
+                      })()}
+                      {/* Run button (for pending/new projects) */}
+                      {project.execution_status !== 'failed' && project.execution_status !== 'running' && (() => {
                         const { canRun, reason } = canRunProject();
                         return (
                           <button

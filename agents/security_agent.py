@@ -3,7 +3,7 @@ Security Agent - Performs security and compliance reviews.
 Focuses on security-specific checks beyond general QA.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from agents.base_agent import BaseAgent, AgentType, Task, TaskStatus
 from agents.qa_agent import QAAgent
 from utils.security_scanner import get_scanner
@@ -16,8 +16,10 @@ import re
 class SecurityAgent(BaseAgent):
     """Agent responsible for security and compliance reviews."""
 
-    def __init__(self, agent_id: str = "security_main", workspace_path: str = "."):
-        super().__init__(agent_id, AgentType.SECURITY)
+    def __init__(self, agent_id: str = "security_main", workspace_path: str = ".",
+                 project_id: Optional[str] = None,
+                 tenant_id: Optional[int] = None):
+        super().__init__(agent_id, AgentType.SECURITY, project_id=project_id, tenant_id=tenant_id)
         self.workspace_path = workspace_path
         self.reviewed_files: List[str] = []
         self.security_reports: Dict[str, Dict[str, Any]] = {}

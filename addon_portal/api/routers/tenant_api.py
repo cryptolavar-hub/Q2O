@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 
 from ..core.exceptions import ConfigurationError, InvalidOperationError, TenantNotFoundError
 from ..models.licensing import Tenant, Subscription, SubscriptionState, ActivationCode
 from ..models.llm_config import LLMProjectConfig
-from ..services.project_execution_service import execute_project
+from ..services.project_execution_service import execute_project, restart_project
 from ..core.logging import get_logger
 from ..deps import get_db
 from ..schemas.llm import (
@@ -23,8 +24,20 @@ from ..schemas.llm import (
 from ..schemas.tenant import (
     TenantProjectCreatePayload,
     TenantProjectUpdatePayload,
+    TenantUpdatePayload,
+    TenantResponse,
     ActivationCodeAssignPayload,
 )
+from ..schemas.billing import (
+    BillingResponse,
+    SubscriptionBillingInfo,
+    UsageQuotaInfo,
+    BillingHistoryItem,
+    PlanUpgradeRequest,
+    ActivationCodePurchaseRequest,
+    ActivationCodePurchaseResponse,
+)
+from ..schemas.plan import PlanResponse
 from ..schemas.tenant_auth import (
     OTPGenerateRequest,
     OTPGenerateResponse,
@@ -60,12 +73,19 @@ async def get_tenant_from_session(
 ) -> dict:
     """Dependency to extract tenant info from session token.
     
+    Updates last_activity to keep session alive during active use.
+    
     Raises:
         HTTPException: If session is invalid or expired.
     """
     try:
-        return await validate_session(x_session_token, db)
+        tenant_info = await validate_session(x_session_token, db)
+        # Commit the last_activity update immediately to ensure it's persisted
+        # This prevents race conditions where navigation triggers multiple requests
+        await db.commit()
+        return tenant_info
     except InvalidOperationError as e:
+        await db.rollback()  # Rollback on error
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
@@ -214,6 +234,426 @@ async def logout_endpoint(
     except Exception as e:
         await db.rollback()
         LOGGER.error("logout_error", extra={"error": str(e)})
+
+
+# ============================================================================
+# PROFILE ENDPOINTS
+# ============================================================================
+
+@router.get("/profile", response_model=TenantResponse)
+async def get_tenant_profile(
+    tenant_info: dict = Depends(get_tenant_from_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get current tenant's profile information."""
+    from ..services.tenant_service import get_tenant_by_slug
+    
+    return await get_tenant_by_slug(db, tenant_info["tenant_slug"])
+
+
+@router.put("/profile", response_model=TenantResponse)
+async def update_tenant_profile(
+    payload: TenantUpdatePayload,
+    tenant_info: dict = Depends(get_tenant_from_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update current tenant's profile information."""
+    from ..services.tenant_service import update_tenant
+    
+    try:
+        return await update_tenant(db, tenant_info["tenant_slug"], payload)
+    except TenantNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except TenantConflictError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+    except Exception as e:
+        await db.rollback()
+        LOGGER.error("profile_update_error", extra={"error": str(e), "tenant_slug": tenant_info["tenant_slug"]})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update profile",
+        )
+
+
+# ============================================================================
+# BILLING ENDPOINTS
+# ============================================================================
+
+@router.get("/billing", response_model=BillingResponse)
+async def get_tenant_billing(
+    tenant_info: dict = Depends(get_tenant_from_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get current tenant's billing information."""
+    from ..services.tenant_service import get_tenant_by_slug
+    from ..models.licensing import Subscription, Plan, ActivationCode
+    from sqlalchemy import func, case
+    from datetime import datetime, timezone
+    
+    tenant_response = await get_tenant_by_slug(db, tenant_info["tenant_slug"])
+    
+    # Get subscription details
+    result = await db.execute(
+        select(Subscription)
+        .options(selectinload(Subscription.plan))
+        .where(Subscription.tenant_id == tenant_info["tenant_id"])
+        .order_by(Subscription.id.desc())
+        .limit(1)
+    )
+    subscription = result.scalar_one_or_none()
+    
+    # Build subscription billing info
+    subscription_info = SubscriptionBillingInfo(
+        plan_name=subscription.plan.name if subscription and subscription.plan else "No Plan",
+        plan_tier=subscription.plan.name.lower() if subscription and subscription.plan else None,
+        monthly_price=None,  # TODO: Add pricing to Plan model or fetch from Stripe
+        status=subscription.state.value if subscription and subscription.state else "inactive",
+        next_billing_date=subscription.current_period_end.isoformat() if subscription and subscription.current_period_end else None,
+        auto_renewal=True,  # TODO: Add auto_renewal field to Subscription model
+        stripe_subscription_id=subscription.stripe_subscription_id if subscription else None,
+        stripe_customer_id=subscription.stripe_customer_id if subscription else None,
+        current_period_start=subscription.current_period_start.isoformat() if subscription and subscription.current_period_start else None,
+        current_period_end=subscription.current_period_end.isoformat() if subscription and subscription.current_period_end else None,
+    )
+    
+    # Calculate usage and quota
+    usage_percentage = (tenant_response.usage_current / tenant_response.usage_quota * 100) if tenant_response.usage_quota > 0 else 0
+    activation_percentage = (tenant_response.activation_codes_used / tenant_response.activation_codes_total * 100) if tenant_response.activation_codes_total > 0 else 0
+    
+    usage_info = UsageQuotaInfo(
+        monthly_run_quota=tenant_response.usage_quota,
+        current_month_usage=tenant_response.usage_current,
+        usage_percentage=round(usage_percentage, 2),
+        activation_codes_total=tenant_response.activation_codes_total,
+        activation_codes_used=tenant_response.activation_codes_used,
+        activation_codes_remaining=tenant_response.activation_codes_total - tenant_response.activation_codes_used,
+        activation_codes_percentage=round(activation_percentage, 2),
+    )
+    
+    # TODO: Fetch billing history from Stripe or database
+    billing_history: List[BillingHistoryItem] = []
+    
+    return BillingResponse(
+        subscription=subscription_info,
+        usage=usage_info,
+        billing_history=billing_history,
+    )
+
+
+@router.get("/billing/plans")
+async def get_available_plans(
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all available subscription plans for upgrade/downgrade."""
+    from ..models.licensing import Plan
+    
+    result = await db.execute(select(Plan).order_by(Plan.monthly_run_quota))
+    plans = result.scalars().all()
+    
+    return [
+        PlanResponse(
+            id=plan.id,
+            name=plan.name,
+            stripe_price_id=plan.stripe_price_id,
+            monthly_run_quota=plan.monthly_run_quota,
+        )
+        for plan in plans
+    ]
+
+
+@router.post("/billing/upgrade")
+async def upgrade_subscription_plan(
+    request: PlanUpgradeRequest,
+    tenant_info: dict = Depends(get_tenant_from_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upgrade or downgrade subscription plan via Stripe checkout."""
+    import stripe
+    from ..core.settings import settings
+    from ..models.licensing import Subscription, Plan, Tenant
+    from sqlalchemy.orm import selectinload
+    
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    
+    # Verify plan exists
+    result = await db.execute(select(Plan).where(Plan.id == request.plan_id))
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Plan not found",
+        )
+    
+    # Get tenant
+    result = await db.execute(select(Tenant).where(Tenant.id == tenant_info["tenant_id"]))
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found",
+        )
+    
+    # Get current subscription
+    result = await db.execute(
+        select(Subscription)
+        .options(selectinload(Subscription.plan))
+        .where(Subscription.tenant_id == tenant_info["tenant_id"])
+        .order_by(Subscription.id.desc())
+        .limit(1)
+    )
+    subscription = result.scalar_one_or_none()
+    
+    try:
+        # If tenant already has a Stripe customer, use it; otherwise create one
+        if subscription and subscription.stripe_customer_id:
+            customer_id = subscription.stripe_customer_id
+        else:
+            # Create Stripe customer
+            customer = stripe.Customer.create(
+                email=tenant.email,
+                name=tenant.name,
+                metadata={"tenant_id": str(tenant.id), "tenant_slug": tenant.slug},
+            )
+            customer_id = customer.id
+            
+            # Update subscription with customer ID
+            if subscription:
+                subscription.stripe_customer_id = customer_id
+            else:
+                # Create new subscription record
+                subscription = Subscription(
+                    tenant_id=tenant.id,
+                    plan_id=plan.id,
+                    stripe_customer_id=customer_id,
+                    state=SubscriptionState.trialing,
+                )
+                db.add(subscription)
+            await db.commit()
+        
+        # Create Stripe checkout session for subscription
+        checkout_session = stripe.checkout.Session.create(
+            customer=customer_id,
+            payment_method_types=["card"],
+            mode="subscription",
+            line_items=[
+                {
+                    "price": plan.stripe_price_id,
+                    "quantity": 1,
+                }
+            ],
+            metadata={
+                "tenant_id": str(tenant.id),
+                "plan_id": str(plan.id),
+                "type": "subscription_upgrade",
+            },
+            success_url=f"{settings.ALLOWED_ORIGINS[0]}/billing?success=true",
+            cancel_url=f"{settings.ALLOWED_ORIGINS[0]}/billing?canceled=true",
+        )
+        
+        LOGGER.info(
+            "stripe_checkout_created",
+            extra={
+                "tenant_id": tenant.id,
+                "plan_id": plan.id,
+                "checkout_session_id": checkout_session.id,
+            },
+        )
+        
+        return {"checkoutUrl": checkout_session.url, "sessionId": checkout_session.id}
+    except stripe.error.StripeError as e:
+        LOGGER.error("stripe_error", extra={"error": str(e), "tenant_id": tenant_info["tenant_id"]})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Stripe error: {str(e)}",
+        )
+    except Exception as e:
+        await db.rollback()
+        LOGGER.error("plan_upgrade_error", extra={"error": str(e), "tenant_id": tenant_info["tenant_id"], "plan_id": request.plan_id})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create checkout session",
+        )
+
+
+@router.post("/billing/purchase-codes")
+async def purchase_activation_codes(
+    request: ActivationCodePurchaseRequest,
+    tenant_info: dict = Depends(get_tenant_from_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """Purchase additional activation codes via Stripe checkout."""
+    import stripe
+    from ..core.settings import settings
+    from ..models.licensing import Tenant, Subscription
+    
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    
+    # Pricing per code (can be moved to configuration)
+    COST_PER_CODE = 5.00
+    
+    # Get tenant
+    result = await db.execute(select(Tenant).where(Tenant.id == tenant_info["tenant_id"]))
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found",
+        )
+    
+    # Get or create Stripe customer
+    result = await db.execute(
+        select(Subscription)
+        .where(Subscription.tenant_id == tenant_info["tenant_id"])
+        .order_by(Subscription.id.desc())
+        .limit(1)
+    )
+    subscription = result.scalar_one_or_none()
+    
+    try:
+        if subscription and subscription.stripe_customer_id:
+            customer_id = subscription.stripe_customer_id
+        else:
+            # Create Stripe customer
+            customer = stripe.Customer.create(
+                email=tenant.email,
+                name=tenant.name,
+                metadata={"tenant_id": str(tenant.id), "tenant_slug": tenant.slug},
+            )
+            customer_id = customer.id
+            
+            # Update or create subscription record
+            if subscription:
+                subscription.stripe_customer_id = customer_id
+            else:
+                subscription = Subscription(
+                    tenant_id=tenant.id,
+                    plan_id=1,  # Default plan, will be updated later
+                    stripe_customer_id=customer_id,
+                    state=SubscriptionState.trialing,
+                )
+                db.add(subscription)
+            await db.commit()
+        
+        # Create Stripe Price for one-time payment (if not exists, create it)
+        # For simplicity, we'll use a fixed price ID or create a product/price on the fly
+        # In production, you'd want to create these in Stripe dashboard and store the price IDs
+        
+        # Create checkout session for one-time payment
+        checkout_session = stripe.checkout.Session.create(
+            customer=customer_id,
+            payment_method_types=["card"],
+            mode="payment",
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "product_data": {
+                            "name": f"Activation Codes ({request.quantity})",
+                            "description": f"Purchase {request.quantity} activation code(s) for Q2O Platform",
+                        },
+                        "unit_amount": int(COST_PER_CODE * 100 * request.quantity),  # Convert to cents
+                    },
+                    "quantity": 1,
+                }
+            ],
+            metadata={
+                "tenant_id": str(tenant.id),
+                "quantity": str(request.quantity),
+                "type": "activation_codes",
+                "label": request.label or f"Purchased {request.quantity} codes",
+            },
+            success_url=f"{settings.ALLOWED_ORIGINS[0]}/billing?success=true&codes={request.quantity}",
+            cancel_url=f"{settings.ALLOWED_ORIGINS[0]}/billing?canceled=true",
+        )
+        
+        LOGGER.info(
+            "stripe_checkout_created_for_codes",
+            extra={
+                "tenant_id": tenant.id,
+                "quantity": request.quantity,
+                "checkout_session_id": checkout_session.id,
+            },
+        )
+        
+        return {
+            "checkoutUrl": checkout_session.url,
+            "sessionId": checkout_session.id,
+            "totalCost": COST_PER_CODE * request.quantity,
+        }
+    except stripe.error.StripeError as e:
+        LOGGER.error("stripe_error", extra={"error": str(e), "tenant_id": tenant_info["tenant_id"]})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Stripe error: {str(e)}",
+        )
+    except Exception as e:
+        await db.rollback()
+        LOGGER.error("code_purchase_error", extra={"error": str(e), "tenant_id": tenant_info["tenant_id"]})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create checkout session",
+        )
+
+
+@router.get("/billing/payment-methods")
+async def get_payment_methods(
+    tenant_info: dict = Depends(get_tenant_from_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get saved payment methods for the tenant."""
+    import stripe
+    from ..core.settings import settings
+    from ..models.licensing import Subscription
+    
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    
+    # Get subscription to find Stripe customer
+    result = await db.execute(
+        select(Subscription)
+        .where(Subscription.tenant_id == tenant_info["tenant_id"])
+        .order_by(Subscription.id.desc())
+        .limit(1)
+    )
+    subscription = result.scalar_one_or_none()
+    
+    if not subscription or not subscription.stripe_customer_id:
+        return {"paymentMethods": []}
+    
+    try:
+        # Get payment methods from Stripe
+        payment_methods = stripe.PaymentMethod.list(
+            customer=subscription.stripe_customer_id,
+            type="card",
+        )
+        
+        return {
+            "paymentMethods": [
+                {
+                    "id": pm.id,
+                    "type": pm.type,
+                    "card": {
+                        "brand": pm.card.brand,
+                        "last4": pm.card.last4,
+                        "expMonth": pm.card.exp_month,
+                        "expYear": pm.card.exp_year,
+                    },
+                    "isDefault": pm.id == subscription.stripe_customer_id,  # Simplified - would need to check default payment method
+                }
+                for pm in payment_methods.data
+            ],
+        }
+    except stripe.error.StripeError as e:
+        LOGGER.error("stripe_error_getting_payment_methods", extra={"error": str(e), "tenant_id": tenant_info["tenant_id"]})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve payment methods: {str(e)}",
+        )
 
 
 # ============================================================================
@@ -700,5 +1140,79 @@ async def run_tenant_project(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to run project: {str(e)}"
+        )
+
+
+@router.post("/projects/{project_id}/restart", response_model=dict)
+async def restart_tenant_project(
+    project_id: str,
+    tenant_info: dict = Depends(get_tenant_from_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """Restart a failed project execution.
+    
+    Requirements:
+    - Project must have execution_status='failed' (completed projects cannot be restarted)
+    - Project must have activation code assigned
+    - Project must have all required fields (ID, Name, Description, Objectives)
+    - Tenant must have active subscription (or trialing with no other running projects)
+    - For trialing subscriptions: only one project can be running at a time
+    """
+    # Get project
+    result = await db.execute(
+        select(LLMProjectConfig).where(
+            LLMProjectConfig.project_id == project_id,
+            LLMProjectConfig.tenant_id == tenant_info["tenant_id"]
+        )
+    )
+    project = result.scalar_one_or_none()
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    try:
+        # Restart project (validates status and resets execution fields)
+        execution_info = await restart_project(
+            session=db,
+            project=project,
+            tenant_id=tenant_info["tenant_id"],
+        )
+        
+        LOGGER.info(
+            "project_restart_initiated",
+            extra={
+                "project_id": project_id,
+                "tenant_id": tenant_info["tenant_id"],
+                "execution_id": execution_info.get("execution_id"),
+            }
+        )
+        
+        return {
+            "success": True,
+            "message": "Project execution restarted successfully",
+            "execution_id": execution_info.get("execution_id"),
+            "status": execution_info.get("status"),
+            "output_folder_path": execution_info.get("output_folder_path"),
+        }
+    except InvalidOperationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        LOGGER.error(
+            "project_restart_failed",
+            extra={
+                "project_id": project_id,
+                "tenant_id": tenant_info["tenant_id"],
+                "error": str(e),
+            }
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to restart project: {str(e)}"
         )
 

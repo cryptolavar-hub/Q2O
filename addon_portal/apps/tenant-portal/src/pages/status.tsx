@@ -114,7 +114,10 @@ export default function StatusPage() {
     query: TASK_UPDATES_SUBSCRIPTION,
     variables: { projectId: selectedProjectId || null },
   });
-  const [metricsStreamResult] = useSubscription({ query: SYSTEM_METRICS_STREAM_SUBSCRIPTION });
+  const [metricsStreamResult] = useSubscription({ 
+    query: SYSTEM_METRICS_STREAM_SUBSCRIPTION,
+    variables: { projectId: selectedProjectId || null },
+  });
 
   // Combine data from queries and subscriptions
   const dashboardStats = dashboardStatsResult.data?.dashboardStats;
@@ -229,11 +232,22 @@ export default function StatusPage() {
     metrics: {
       cpu: currentMetrics?.cpuUsagePercent || systemMetrics?.cpuUsagePercent || 0,
       memory: currentMetrics?.memoryUsagePercent || systemMetrics?.memoryUsagePercent || 0,
-      activeTasks: currentMetrics?.activeTasks || systemMetrics?.activeTasks || dashboardStats?.activeTasks || 0,
-      completedTasks: currentMetrics?.tasksCompletedToday || systemMetrics?.tasksCompletedToday || dashboardStats?.completedTasksToday || 0,
-      failedTasks: currentMetrics?.tasksFailedToday || systemMetrics?.tasksFailedToday || 0,
-      totalTasks: currentProject?.totalTasks || dashboardStats?.totalTasks || 0,
-      successRate: currentProject?.successRate || dashboardStats?.averageSuccessRate || currentMetrics?.systemHealthScore || systemMetrics?.systemHealthScore || 0,
+      // Prioritize project-specific data, then metrics stream, then dashboard stats
+      activeTasks: currentProject?.totalTasks 
+        ? (currentProject.totalTasks - currentProject.completedTasks - currentProject.failedTasks)
+        : (currentMetrics?.activeTasks || systemMetrics?.activeTasks || dashboardStats?.activeTasks || 0),
+      completedTasks: currentProject?.completedTasks !== undefined
+        ? currentProject.completedTasks
+        : (currentMetrics?.tasksCompletedToday || systemMetrics?.tasksCompletedToday || dashboardStats?.completedTasksToday || 0),
+      failedTasks: currentProject?.failedTasks !== undefined
+        ? currentProject.failedTasks
+        : (currentMetrics?.tasksFailedToday || systemMetrics?.tasksFailedToday || 0),
+      totalTasks: currentProject?.totalTasks !== undefined
+        ? currentProject.totalTasks
+        : (dashboardStats?.totalTasks || 0),
+      successRate: currentProject?.successRate !== undefined
+        ? currentProject.successRate
+        : (dashboardStats?.averageSuccessRate || currentMetrics?.systemHealthScore || systemMetrics?.systemHealthScore || 0),
       averageTaskTime: currentMetrics?.averageTaskDurationSeconds || systemMetrics?.averageTaskDurationSeconds || 0,
     },
   };
@@ -522,12 +536,27 @@ export default function StatusPage() {
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-medium text-gray-700">Completion Rate</span>
-                      <span className="text-sm font-bold text-green-600">{metrics.totalTasks > 0 ? Math.round((metrics.completedTasks / metrics.totalTasks) * 100) : 0}%</span>
+                      <span className="text-sm font-bold text-green-600">
+                        {(() => {
+                          // Use project completion percentage if available, otherwise calculate from metrics
+                          const completion = selectedProject?.completionPercentage !== undefined
+                            ? selectedProject.completionPercentage
+                            : (metrics.totalTasks > 0 ? Math.min(100, Math.round((metrics.completedTasks / metrics.totalTasks) * 100)) : 0);
+                          return `${Math.min(100, Math.max(0, completion))}%`;
+                        })()}
+                      </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-green-500 h-2 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${metrics.totalTasks > 0 ? (metrics.completedTasks / metrics.totalTasks) * 100 : 0}%` }}
+                        style={{ 
+                          width: `${(() => {
+                            const completion = selectedProject?.completionPercentage !== undefined
+                              ? selectedProject.completionPercentage
+                              : (metrics.totalTasks > 0 ? Math.min(100, (metrics.completedTasks / metrics.totalTasks) * 100) : 0);
+                            return Math.min(100, Math.max(0, completion));
+                          })()}%` 
+                        }}
                       />
                     </div>
                   </div>

@@ -79,8 +79,9 @@ class Agent:
         """Calculate agent success rate"""
         total = self.tasks_completed + self.tasks_failed
         if total == 0:
-            return 100.0
-        return (self.tasks_completed / total) * 100
+            return 0.0  # No tasks = 0% success rate, not 100%
+        rate = (self.tasks_completed / total) * 100.0
+        return min(100.0, max(0.0, rate))  # Cap between 0% and 100%
 
 
 @strawberry.type
@@ -144,7 +145,7 @@ class Project:
         limit: int = 50
     ) -> List[Task]:
         """Get project tasks (filtered, batched)"""
-        loader = info.context.get("tasks_by_project_loader") if info.context else None
+        loader = getattr(info.context, "tasks_by_project_loader", None) if info.context else None
         if loader:
             all_tasks = await loader.load(self.id)
             # Filter by status if provided
@@ -155,10 +156,11 @@ class Project:
     
     @strawberry.field
     def success_rate(self) -> float:
-        """Calculate project success rate"""
+        """Calculate project success rate (capped at 100%)"""
         if self.total_tasks == 0:
             return 0.0
-        return (self.completed_tasks / self.total_tasks) * 100
+        rate = (self.completed_tasks / self.total_tasks) * 100.0
+        return max(0.0, min(100.0, rate))  # Cap at 100%
 
 
 @strawberry.type

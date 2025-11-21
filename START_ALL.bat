@@ -1,14 +1,14 @@
 @echo off
 REM =========================================================================
 REM START_ALL.bat
-REM Quick2Odoo Combined - Simplified Launcher
+REM Q2O - Simplified Launcher
 REM =========================================================================
 REM This batch file launches the comprehensive PowerShell startup script
 REM =========================================================================
 
 echo.
 echo =========================================================================
-echo  Quick2Odoo Combined - Starting All Services
+echo  Q2O - Starting All Services
 echo =========================================================================
 echo.
 echo  This will:

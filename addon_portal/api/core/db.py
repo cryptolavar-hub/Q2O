@@ -10,10 +10,15 @@ if async_dsn.startswith("sqlite:///"):
     async_dsn = async_dsn.replace("sqlite:///", "sqlite+aiosqlite:///")
 # postgresql+psycopg:// already works with async in psycopg 3.x
 
-# Create async engine
+# Create async engine with increased pool size for GraphQL concurrent requests
+# Also enable pool recycling to prevent stale connections
 engine = create_async_engine(
     async_dsn,
-    pool_pre_ping=True,
+    pool_pre_ping=True,  # Verify connections before using
+    pool_size=25,  # Increased from 20 to handle more concurrent GraphQL requests
+    max_overflow=35,  # Increased from 30 to handle bursts
+    pool_timeout=30,  # Time to wait for a connection from the pool
+    pool_recycle=3600,  # Recycle connections after 1 hour to prevent stale connections
     echo=False,  # Set to True for SQL query logging
     future=True
 )

@@ -216,20 +216,25 @@ async def validate_session(session_token: str, session: AsyncSession) -> dict:
     if not tenant_session:
         raise InvalidOperationError("Invalid or expired session.")
     
-    # Check idle timeout (30 minutes)
+    # Store old last_activity before updating (for idle timeout check)
+    old_last_activity = tenant_session.last_activity
+    
+    # Check idle timeout (30 minutes) using the OLD last_activity value
+    # This ensures we check if the user was idle BEFORE this request
     idle_timeout = timedelta(minutes=SESSION_IDLE_TIMEOUT_MINUTES)
-    if tenant_session.last_activity + idle_timeout < now:
+    if old_last_activity + idle_timeout < now:
         LOGGER.info(
             "session_idle_timeout",
             extra={
                 "tenant_id": tenant_session.tenant_id,
                 "session_id": tenant_session.id,
-                "last_activity": tenant_session.last_activity.isoformat(),
+                "last_activity": old_last_activity.isoformat(),
             },
         )
         raise InvalidOperationError("Session expired due to inactivity.")
     
-    # Update last activity
+    # Update last activity AFTER timeout check passes
+    # This extends the session for active users
     tenant_session.last_activity = now
     await session.flush()
     
