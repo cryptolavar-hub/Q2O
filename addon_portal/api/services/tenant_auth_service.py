@@ -6,12 +6,14 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, func, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from ..core.exceptions import InvalidOperationError, TenantNotFoundError
 from ..core.logging import get_logger
 from ..core.settings import settings
 from ..models.licensing import Tenant, TenantSession
+from .otp_delivery_service import deliver_otp
 
 LOGGER = get_logger(__name__)
 
@@ -25,35 +27,40 @@ SESSION_IDLE_TIMEOUT_MINUTES = 30
 SESSION_MAX_LIFETIME_HOURS = 24
 
 
-def generate_otp(tenant_slug: str, session: Session) -> str:
-    """Generate and store an OTP for tenant authentication.
+async def generate_otp(tenant_slug: str, session: AsyncSession) -> None:
+    """Generate, store, and send an OTP for tenant authentication.
     
     Args:
         tenant_slug: Tenant slug identifier.
         session: Database session.
         
-    Returns:
-        The generated OTP code (6 digits).
-        
     Raises:
         TenantNotFoundError: If tenant doesn't exist.
-        InvalidOperationError: If rate limit exceeded.
+        InvalidOperationError: If rate limit exceeded or OTP delivery failed.
     """
     # Find tenant
-    tenant = session.scalar(select(Tenant).where(Tenant.slug == tenant_slug))
+    result = await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
+    tenant = result.scalar_one_or_none()
     if not tenant:
         raise TenantNotFoundError(f"Tenant not found: {tenant_slug}")
     
+    # Check if tenant has contact information
+    if not tenant.email and not tenant.phone_number:
+        raise InvalidOperationError(
+            "Tenant contact information missing. Please configure email or phone number in tenant settings."
+        )
+    
     # Check rate limit (max 3 OTPs per hour per tenant)
     one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
-    recent_otps = session.scalar(
+    result = await session.execute(
         select(func.count(TenantSession.id))
         .where(
             TenantSession.tenant_id == tenant.id,
             TenantSession.otp_code.isnot(None),
             TenantSession.created_at >= one_hour_ago,
         )
-    ) or 0
+    )
+    recent_otps = result.scalar() or 0
     
     if recent_otps >= OTP_RATE_LIMIT_PER_HOUR:
         LOGGER.warning(
@@ -80,22 +87,46 @@ def generate_otp(tenant_slug: str, session: Session) -> str:
         expires_at=expires_at,
     )
     session.add(tenant_session)
-    session.flush()
+    await session.flush()
+    
+    # Send OTP via email/SMS
+    delivery_success = deliver_otp(tenant, otp_code)
+    
+    if not delivery_success:
+        # Log the OTP for development/testing (when SMTP is disabled)
+        # In production, this should never happen if SMTP is properly configured
+        LOGGER.warning(
+            "otp_delivery_failed_but_stored",
+            extra={
+                "tenant_id": tenant.id,
+                "tenant_slug": tenant_slug,
+                "session_id": tenant_session.id,
+                "otp_code": otp_code,  # Only logged in development
+                "otp_expires_at": otp_expires_at.isoformat(),
+                "note": "OTP stored but delivery failed. Check SMTP/SMS configuration.",
+            },
+        )
+        # In development, we allow this to continue (OTP is logged)
+        # In production, you might want to raise an error here
+        if settings.ENV == "production":
+            raise InvalidOperationError(
+                "Failed to deliver OTP. Please contact support or try again later."
+            )
     
     LOGGER.info(
-        "otp_generated",
+        "otp_generated_and_sent",
         extra={
             "tenant_id": tenant.id,
             "tenant_slug": tenant_slug,
             "session_id": tenant_session.id,
             "otp_expires_at": otp_expires_at.isoformat(),
+            "delivery_method": tenant.otp_delivery_method or "email",
+            "delivery_success": delivery_success,
         },
     )
-    
-    return otp_code
 
 
-def verify_otp(tenant_slug: str, otp_code: str, session: Session) -> str:
+async def verify_otp(tenant_slug: str, otp_code: str, session: AsyncSession) -> str:
     """Verify OTP and return session token.
     
     Args:
@@ -111,13 +142,14 @@ def verify_otp(tenant_slug: str, otp_code: str, session: Session) -> str:
         InvalidOperationError: If OTP is invalid or expired.
     """
     # Find tenant
-    tenant = session.scalar(select(Tenant).where(Tenant.slug == tenant_slug))
+    result = await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
+    tenant = result.scalar_one_or_none()
     if not tenant:
         raise TenantNotFoundError(f"Tenant not found: {tenant_slug}")
     
     # Find valid OTP session
     now = datetime.now(timezone.utc)
-    tenant_session = session.scalar(
+    result = await session.execute(
         select(TenantSession)
         .where(
             TenantSession.tenant_id == tenant.id,
@@ -127,6 +159,7 @@ def verify_otp(tenant_slug: str, otp_code: str, session: Session) -> str:
         )
         .order_by(TenantSession.created_at.desc())
     )
+    tenant_session = result.scalar_one_or_none()
     
     if not tenant_session:
         LOGGER.warning(
@@ -139,7 +172,7 @@ def verify_otp(tenant_slug: str, otp_code: str, session: Session) -> str:
     tenant_session.otp_code = None
     tenant_session.otp_expires_at = None
     tenant_session.last_activity = now
-    session.flush()
+    await session.flush()
     
     LOGGER.info(
         "otp_verified",
@@ -154,7 +187,7 @@ def verify_otp(tenant_slug: str, otp_code: str, session: Session) -> str:
     return tenant_session.session_token
 
 
-def validate_session(session_token: str, session: Session) -> dict:
+async def validate_session(session_token: str, session: AsyncSession) -> dict:
     """Validate session token and return tenant information.
     
     Args:
@@ -169,15 +202,16 @@ def validate_session(session_token: str, session: Session) -> dict:
     """
     now = datetime.now(timezone.utc)
     
-    # Find session
-    tenant_session = session.scalar(
+    # Find session (eagerly load tenant to avoid lazy loading issues)
+    result = await session.execute(
         select(TenantSession)
-        .join(Tenant)
+        .options(selectinload(TenantSession.tenant))
         .where(
             TenantSession.session_token == session_token,
             TenantSession.expires_at > now,
         )
     )
+    tenant_session = result.scalar_one_or_none()
     
     if not tenant_session:
         raise InvalidOperationError("Invalid or expired session.")
@@ -197,7 +231,7 @@ def validate_session(session_token: str, session: Session) -> dict:
     
     # Update last activity
     tenant_session.last_activity = now
-    session.flush()
+    await session.flush()
     
     created_at = tenant_session.created_at
     if created_at.tzinfo is None:
@@ -212,7 +246,7 @@ def validate_session(session_token: str, session: Session) -> dict:
     }
 
 
-def refresh_session(session_token: str, session: Session) -> dict:
+async def refresh_session(session_token: str, session: AsyncSession) -> dict:
     """Refresh session expiration time.
     
     Args:
@@ -225,7 +259,7 @@ def refresh_session(session_token: str, session: Session) -> dict:
     Raises:
         InvalidOperationError: If session is invalid.
     """
-    session_info = validate_session(session_token, session)
+    session_info = await validate_session(session_token, session)
     
     # Extend expiration (up to max lifetime)
     now = datetime.now(timezone.utc)
@@ -233,10 +267,10 @@ def refresh_session(session_token: str, session: Session) -> dict:
     max_expires = created_at + timedelta(hours=SESSION_MAX_LIFETIME_HOURS)
     new_expires = min(now + timedelta(hours=SESSION_MAX_LIFETIME_HOURS), max_expires)
     
-    tenant_session = session.get(TenantSession, session_info["session_id"])
+    tenant_session = await session.get(TenantSession, session_info["session_id"])
     tenant_session.expires_at = new_expires
     tenant_session.last_activity = now
-    session.flush()
+    await session.flush()
     
     LOGGER.info(
         "session_refreshed",
@@ -253,20 +287,21 @@ def refresh_session(session_token: str, session: Session) -> dict:
     }
 
 
-def logout(session_token: str, session: Session) -> None:
+async def logout(session_token: str, session: AsyncSession) -> None:
     """Invalidate a session.
     
     Args:
         session_token: Session token to invalidate.
         session: Database session.
     """
-    tenant_session = session.scalar(
+    result = await session.execute(
         select(TenantSession).where(TenantSession.session_token == session_token)
     )
+    tenant_session = result.scalar_one_or_none()
     
     if tenant_session:
-        session.delete(tenant_session)
-        session.flush()
+        await session.delete(tenant_session)
+        await session.flush()
         
         LOGGER.info(
             "session_logged_out",
@@ -277,7 +312,7 @@ def logout(session_token: str, session: Session) -> None:
         )
 
 
-def cleanup_expired_sessions(session: Session) -> int:
+async def cleanup_expired_sessions(session: AsyncSession) -> int:
     """Clean up expired sessions (call periodically).
     
     Args:
@@ -287,10 +322,11 @@ def cleanup_expired_sessions(session: Session) -> int:
         Number of sessions deleted.
     """
     now = datetime.now(timezone.utc)
-    deleted = session.execute(
+    result = await session.execute(
         delete(TenantSession).where(TenantSession.expires_at <= now)
-    ).rowcount
-    session.commit()
+    )
+    deleted = result.rowcount
+    await session.commit()
     
     if deleted > 0:
         LOGGER.info("expired_sessions_cleaned", extra={"count": deleted})

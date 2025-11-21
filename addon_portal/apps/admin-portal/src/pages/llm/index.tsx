@@ -197,14 +197,14 @@ export default function LLMOverview() {
             onClick={() => router.push('/llm/alerts')}
             className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
           >
-            Alerts ({hasStats ? stats.alerts.length : 0})
+            Alerts ({hasStats ? (stats?.alerts?.length ?? 0) : 0})
           </button>
         </div>
 
         {/* Critical Alerts */}
-        {hasStats && stats.alerts.length > 0 && (
+        {hasStats && (stats?.alerts?.length ?? 0) > 0 && (
           <div className="mb-6">
-            {stats.alerts.slice(0, 3).map((alert) => (
+            {(stats?.alerts ?? []).slice(0, 3).map((alert) => (
               <div
                 key={alert.id}
                 className={`mb-3 p-4 border rounded-lg ${getAlertColor(alert.level)}`}
@@ -243,32 +243,32 @@ export default function LLMOverview() {
               />
             </div>
             <p className="text-sm text-gray-600">
-              ${stats.budgetUsed.toFixed(2)} of ${stats.monthlyBudget.toFixed(2)}
+              ${(stats?.budgetUsed ?? 0).toFixed(2)} of ${(stats?.monthlyBudget ?? 0).toFixed(2)}
             </p>
           </div>
 
           {/* Total Calls */}
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-sm font-medium text-gray-600 mb-2">Total LLM Calls</h3>
-            <p className="text-3xl font-bold text-gray-900">{stats.totalCalls.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-gray-900">{(stats?.totalCalls ?? 0).toLocaleString()}</p>
             <p className="text-sm text-gray-600 mt-2">
-              Success Rate: {stats.successRate.toFixed(1)}%
+              Success Rate: {(stats?.successRate ?? 0).toFixed(1)}%
             </p>
           </div>
 
           {/* Avg Response Time */}
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-sm font-medium text-gray-600 mb-2">Avg Response Time</h3>
-            <p className="text-3xl font-bold text-gray-900">{stats.avgResponseTime.toFixed(2)}s</p>
+            <p className="text-3xl font-bold text-gray-900">{(stats?.avgResponseTime ?? 0).toFixed(2)}s</p>
             <p className="text-sm text-green-600 mt-2">Within target range</p>
           </div>
 
           {/* Cost Savings */}
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-sm font-medium text-gray-600 mb-2">Template Savings</h3>
-            <p className="text-3xl font-bold text-green-600">${stats.templateStats.saved.toFixed(2)}</p>
+            <p className="text-3xl font-bold text-green-600">${(stats?.templateStats?.saved ?? 0).toFixed(2)}</p>
             <p className="text-sm text-gray-600 mt-2">
-              {stats.templateStats.uses} template uses
+              {stats?.templateStats?.uses ?? 0} template uses
             </p>
           </div>
         </div>
@@ -286,15 +286,15 @@ export default function LLMOverview() {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Calls:</span>
-                <span className="text-sm font-semibold">{stats.providerBreakdown.gemini.calls}</span>
+                <span className="text-sm font-semibold">{stats.providerBreakdown?.gemini?.calls ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Total Cost:</span>
-                <span className="text-sm font-semibold text-blue-600">${stats.providerBreakdown.gemini.cost.toFixed(2)}</span>
+                <span className="text-sm font-semibold text-blue-600">${(stats.providerBreakdown?.gemini?.cost ?? 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Avg Cost:</span>
-                <span className="text-sm font-semibold">${(stats.providerBreakdown.gemini.cost / (stats.providerBreakdown.gemini.calls || 1)).toFixed(4)}</span>
+                <span className="text-sm font-semibold">${((stats.providerBreakdown?.gemini?.cost ?? 0) / ((stats.providerBreakdown?.gemini?.calls ?? 0) || 1)).toFixed(4)}</span>
               </div>
             </div>
           </div>
@@ -308,15 +308,15 @@ export default function LLMOverview() {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Calls:</span>
-                <span className="text-sm font-semibold">{stats.providerBreakdown.openai.calls}</span>
+                <span className="text-sm font-semibold">{stats.providerBreakdown?.openai?.calls ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Total Cost:</span>
-                <span className="text-sm font-semibold text-green-600">${stats.providerBreakdown.openai.cost.toFixed(2)}</span>
+                <span className="text-sm font-semibold text-green-600">${(stats.providerBreakdown?.openai?.cost ?? 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Avg Cost:</span>
-                <span className="text-sm font-semibold">${(stats.providerBreakdown.openai.cost / (stats.providerBreakdown.openai.calls || 1)).toFixed(4)}</span>
+                <span className="text-sm font-semibold">${((stats.providerBreakdown?.openai?.cost ?? 0) / ((stats.providerBreakdown?.openai?.calls ?? 0) || 1)).toFixed(4)}</span>
               </div>
             </div>
           </div>
@@ -330,15 +330,15 @@ export default function LLMOverview() {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Calls:</span>
-                <span className="text-sm font-semibold">{stats.providerBreakdown.anthropic.calls}</span>
+                <span className="text-sm font-semibold">{stats.providerBreakdown?.anthropic?.calls ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Total Cost:</span>
-                <span className="text-sm font-semibold text-orange-600">${stats.providerBreakdown.anthropic.cost.toFixed(2)}</span>
+                <span className="text-sm font-semibold text-orange-600">${(stats.providerBreakdown?.anthropic?.cost ?? 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Avg Cost:</span>
-                <span className="text-sm font-semibold">${(stats.providerBreakdown.anthropic.cost / (stats.providerBreakdown.anthropic.calls || 1)).toFixed(4)}</span>
+                <span className="text-sm font-semibold">${((stats.providerBreakdown?.anthropic?.cost ?? 0) / ((stats.providerBreakdown?.anthropic?.calls ?? 0) || 1)).toFixed(4)}</span>
               </div>
             </div>
           </div>
@@ -380,13 +380,13 @@ export default function LLMOverview() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {stats.providerBreakdown.gemini.calls}
+                    {stats.providerBreakdown?.gemini?.calls ?? 0}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${stats.providerBreakdown.gemini.cost.toFixed(2)}
+                    ${(stats.providerBreakdown?.gemini?.cost ?? 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${(stats.providerBreakdown.gemini.cost / (stats.providerBreakdown.gemini.calls || 1)).toFixed(4)}
+                    ${((stats.providerBreakdown?.gemini?.cost ?? 0) / ((stats.providerBreakdown?.gemini?.calls ?? 0) || 1)).toFixed(4)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
                     99.2%
@@ -399,13 +399,13 @@ export default function LLMOverview() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {stats.providerBreakdown.openai.calls}
+                    {stats.providerBreakdown?.openai?.calls ?? 0}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${stats.providerBreakdown.openai.cost.toFixed(2)}
+                    ${(stats.providerBreakdown?.openai?.cost ?? 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${(stats.providerBreakdown.openai.cost / (stats.providerBreakdown.openai.calls || 1)).toFixed(4)}
+                    ${((stats.providerBreakdown?.openai?.cost ?? 0) / ((stats.providerBreakdown?.openai?.calls ?? 0) || 1)).toFixed(4)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
                     98.8%
@@ -418,13 +418,13 @@ export default function LLMOverview() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {stats.providerBreakdown.anthropic.calls}
+                    {stats.providerBreakdown?.anthropic?.calls ?? 0}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${stats.providerBreakdown.anthropic.cost.toFixed(2)}
+                    ${(stats.providerBreakdown?.anthropic?.cost ?? 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${(stats.providerBreakdown.anthropic.cost / (stats.providerBreakdown.anthropic.calls || 1)).toFixed(4)}
+                    ${((stats.providerBreakdown?.anthropic?.cost ?? 0) / ((stats.providerBreakdown?.anthropic?.calls ?? 0) || 1)).toFixed(4)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
                     99.5%

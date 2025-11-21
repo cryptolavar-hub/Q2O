@@ -5,12 +5,14 @@ Provides CRUD operations for Tenants, Activation Codes, and Devices
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from datetime import datetime, timedelta
 
 from ..deps import get_db
-from ..models.licensing import ActivationCode, Device, Tenant, SubscriptionState, Plan
+from ..models.licensing import ActivationCode, Device, Tenant, SubscriptionState, Plan, Subscription
 from ..models.llm_config import LLMProjectConfig
 from ..models.events import PlatformEvent, EventType, EventSeverity
 from ..schemas.tenant import (
@@ -36,7 +38,7 @@ LOGGER = get_logger(__name__)
 # ============================================================================
 
 @router.get("/dashboard-stats")
-async def get_dashboard_stats(db: Session = Depends(get_db)):
+async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     """Get dashboard statistics for the main admin page."""
     
     from ..utils.timezone_utils import now_in_server_tz, utc_to_server_tz
@@ -44,7 +46,8 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     now_tz = now_in_server_tz()
     
     # Count activation codes by status
-    all_codes = db.query(ActivationCode).all()
+    result = await db.execute(select(ActivationCode))
+    all_codes = result.scalars().all()
     total_codes = len(all_codes)
     # Convert timezone-naive expires_at (stored as UTC) to server timezone for comparison
     def _convert_expires_at(expires_at):
@@ -61,13 +64,17 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     revoked_codes = sum(1 for c in all_codes if c.revoked_at is not None)
     
     # Count devices
-    all_devices = db.query(Device).all()
+    result = await db.execute(select(Device))
+    all_devices = result.scalars().all()
     total_devices = len(all_devices)
     active_devices = sum(1 for d in all_devices if not d.is_revoked)
     revoked_devices = sum(1 for d in all_devices if d.is_revoked)
     
-    # Count tenants
-    all_tenants = db.query(Tenant).all()
+    # Count tenants (eagerly load subscriptions to avoid lazy loading issues)
+    result = await db.execute(
+        select(Tenant).options(selectinload(Tenant.subscriptions).selectinload(Subscription.plan))
+    )
+    all_tenants = result.scalars().unique().all()
     total_tenants = len(all_tenants)
     # Determine active tenants (has active subscription)
     active_tenants = 0
@@ -144,7 +151,7 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
 
 @router.get("/recent-activities")
 async def get_recent_activities(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     days: int = Query(7, ge=1, le=90, description="Number of days to look back")
 ):
     """Get recent activities from event log (database-backed event tracking).
@@ -168,9 +175,13 @@ async def get_recent_activities(
         start_date = now - timedelta(days=days)
         
         # Fetch events from event log
-        events = db.query(PlatformEvent).filter(
-            PlatformEvent.created_at >= start_date
-        ).order_by(PlatformEvent.created_at.desc()).limit(50).all()
+        result = await db.execute(
+            select(PlatformEvent)
+            .where(PlatformEvent.created_at >= start_date)
+            .order_by(PlatformEvent.created_at.desc())
+            .limit(50)
+        )
+        events = result.scalars().all()
     except (ProgrammingError, OperationalError) as e:
         # Table doesn't exist yet - return empty list
         # This happens if migration 006 hasn't been run
@@ -229,7 +240,8 @@ async def get_recent_activities(
         # Get tenant name from relationship or metadata
         tenant_name = event.actor_name or (event.tenant.name if event.tenant else "Unknown")
         if event.tenant_id and not tenant_name:
-            tenant = db.query(Tenant).filter(Tenant.id == event.tenant_id).first()
+            result = await db.execute(select(Tenant).where(Tenant.id == event.tenant_id))
+            tenant = result.scalar_one_or_none()
             tenant_name = tenant.name if tenant else "Unknown"
         
         activities.append({
@@ -250,7 +262,7 @@ async def get_recent_activities(
 
 @router.get("/activation-trend")
 async def get_activation_trend(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     days: int = Query(30, ge=7, le=365, description="Number of days for trend")
 ):
     """Get activation trend data for dashboard chart (codes generated vs projects/devices activated)."""
@@ -265,13 +277,14 @@ async def get_activation_trend(
     start_date = now - timedelta(days=days)
     
     # Fetch all codes, projects, and devices (we'll filter by date in Python for reliability)
-    all_codes = db.query(ActivationCode).all()
-    all_projects = db.query(LLMProjectConfig).filter(
-        LLMProjectConfig.activation_code_id.isnot(None)
-    ).all()
-    all_devices = db.query(Device).filter(
-        Device.is_revoked == False
-    ).all()
+    result = await db.execute(select(ActivationCode))
+    all_codes = result.scalars().all()
+    result = await db.execute(
+        select(LLMProjectConfig).where(LLMProjectConfig.activation_code_id.isnot(None))
+    )
+    all_projects = result.scalars().all()
+    result = await db.execute(select(Device).where(Device.is_revoked == False))
+    all_devices = result.scalars().all()
     
     # Helper function to convert timezone-naive datetime (assumed UTC) to server timezone date
     def _get_date_in_server_tz(dt):
@@ -315,7 +328,7 @@ async def get_activation_trend(
 
 
 @router.get("/project-device-distribution")
-async def get_project_device_distribution(db: Session = Depends(get_db)):
+async def get_project_device_distribution(db: AsyncSession = Depends(get_db)):
     """Get distribution of projects and devices for dashboard chart.
     
     Shows ALL projects (not just activated ones) to match Analytics page.
@@ -324,18 +337,22 @@ async def get_project_device_distribution(db: Session = Depends(get_db)):
     from ..models.llm_config import LLMProjectConfig
     
     # Count ALL active projects (not just activated with codes)
-    active_projects = db.query(LLMProjectConfig).filter(
-        LLMProjectConfig.is_active == True
-    ).count()
+    result = await db.execute(
+        select(func.count(LLMProjectConfig.id)).where(LLMProjectConfig.is_active == True)
+    )
+    active_projects = result.scalar()
     
     # Count total projects
-    total_projects = db.query(LLMProjectConfig).count()
+    result = await db.execute(select(func.count(LLMProjectConfig.id)))
+    total_projects = result.scalar()
     
     # Count active devices
-    active_devices = db.query(Device).filter(Device.is_revoked == False).count()
+    result = await db.execute(select(func.count(Device.id)).where(Device.is_revoked == False))
+    active_devices = result.scalar()
     
     # Count revoked devices
-    revoked_devices = db.query(Device).filter(Device.is_revoked == True).count()
+    result = await db.execute(select(func.count(Device.id)).where(Device.is_revoked == True))
+    revoked_devices = result.scalar()
     
     return {
         "projects": {
@@ -352,7 +369,7 @@ async def get_project_device_distribution(db: Session = Depends(get_db)):
 
 @router.get("/analytics")
 async def get_analytics(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     date_range: str = Query("7d", regex="^(today|7d|30d|90d|1y)$"),
     project_filter: Optional[str] = Query(None, description="Filter by project: 'latest', 'top10', or specific project_id")
 ):
@@ -391,8 +408,10 @@ async def get_analytics(
     # Fetch all codes and devices, filter by date in Python for reliability
     from datetime import timezone as tz
     from ..utils.timezone_utils import utc_to_server_tz
-    all_codes_for_trend = db.query(ActivationCode).all()
-    all_devices_for_trend = db.query(Device).all()
+    result = await db.execute(select(ActivationCode))
+    all_codes_for_trend = result.scalars().all()
+    result = await db.execute(select(Device))
+    all_devices_for_trend = result.scalars().all()
     
     # Helper function to convert timezone-naive datetime (assumed UTC) to server timezone date
     def _get_date_in_server_tz_analytics(dt):
@@ -437,27 +456,40 @@ async def get_analytics(
     
     # Tenant usage (current usage vs quota) - with project filtering
     tenant_usage = []
-    all_tenants = db.query(Tenant).all()
+    # Eagerly load subscriptions to avoid lazy loading issues
+    result = await db.execute(
+        select(Tenant).options(selectinload(Tenant.subscriptions).selectinload(Subscription.plan))
+    )
+    all_tenants = result.scalars().unique().all()
     
     # Get projects based on filter
-    project_filter_query = db.query(LLMProjectConfig)
-    
+    filtered_projects = None
     if project_filter == "latest":
         # Get latest project only
-        latest_project = db.query(LLMProjectConfig).order_by(LLMProjectConfig.created_at.desc()).first()
+        result = await db.execute(
+            select(LLMProjectConfig).order_by(LLMProjectConfig.created_at.desc()).limit(1)
+        )
+        latest_project = result.scalar_one_or_none()
         if latest_project:
-            project_filter_query = db.query(LLMProjectConfig).filter(LLMProjectConfig.id == latest_project.id)
+            result = await db.execute(
+                select(LLMProjectConfig).where(LLMProjectConfig.id == latest_project.id)
+            )
+            filtered_projects = result.scalars().all()
         else:
-            project_filter_query = db.query(LLMProjectConfig).filter(False)  # No projects
+            filtered_projects = []
     elif project_filter == "top10":
         # Get top 10 most recent projects
-        project_filter_query = db.query(LLMProjectConfig).order_by(LLMProjectConfig.created_at.desc()).limit(10)
+        result = await db.execute(
+            select(LLMProjectConfig).order_by(LLMProjectConfig.created_at.desc()).limit(10)
+        )
+        filtered_projects = result.scalars().all()
     elif project_filter and project_filter.startswith("project:"):
         # Specific project ID
         project_id = project_filter.replace("project:", "")
-        project_filter_query = db.query(LLMProjectConfig).filter(LLMProjectConfig.project_id == project_id)
-    
-    filtered_projects = project_filter_query.all() if project_filter else None
+        result = await db.execute(
+            select(LLMProjectConfig).where(LLMProjectConfig.project_id == project_id)
+        )
+        filtered_projects = result.scalars().all()
     filtered_project_ids = {p.project_id for p in filtered_projects} if filtered_projects else None
     
     for tenant in all_tenants:
@@ -472,18 +504,23 @@ async def get_analytics(
             # Calculate usage based on projects (if filter applied) or devices
             if filtered_project_ids:
                 # Count projects for this tenant that match filter
-                tenant_projects = db.query(LLMProjectConfig).filter(
-                    and_(
-                        LLMProjectConfig.tenant_id == tenant.id,
-                        LLMProjectConfig.project_id.in_(filtered_project_ids)
+                result = await db.execute(
+                    select(func.count(LLMProjectConfig.id)).where(
+                        and_(
+                            LLMProjectConfig.tenant_id == tenant.id,
+                            LLMProjectConfig.project_id.in_(filtered_project_ids)
+                        )
                     )
-                ).count()
-                usage = tenant_projects
+                )
+                usage = result.scalar()
             else:
                 # Default: count devices (for backward compatibility)
-                usage = db.query(Device).filter(
-                    and_(Device.tenant_id == tenant.id, Device.is_revoked == False)
-                ).count()
+                result = await db.execute(
+                    select(func.count(Device.id)).where(
+                        and_(Device.tenant_id == tenant.id, Device.is_revoked == False)
+                    )
+                )
+                usage = result.scalar()
             
             quota = active_sub.plan.monthly_run_quota or 0
             
@@ -502,14 +539,18 @@ async def get_analytics(
     
     # Subscription distribution
     subscription_distribution = []
-    plans = db.query(Plan).all()
+    result = await db.execute(select(Plan))
+    plans = result.scalars().all()
     for plan in plans:
-        count = db.query(Subscription).filter(
-            and_(
-                Subscription.plan_id == plan.id,
-                Subscription.state == SubscriptionState.active
+        result = await db.execute(
+            select(func.count(Subscription.id)).where(
+                and_(
+                    Subscription.plan_id == plan.id,
+                    Subscription.state == SubscriptionState.active
+                )
             )
-        ).count()
+        )
+        count = result.scalar()
         if count > 0:
             # Assign colors based on plan name
             color_map = {
@@ -526,11 +567,11 @@ async def get_analytics(
     
     # Summary stats
     total_revenue = 0  # Revenue calculation would require Stripe integration
-    total_usage = db.query(Device).filter(Device.is_revoked == False).count()
+    result = await db.execute(select(func.count(Device.id)).where(Device.is_revoked == False))
+    total_usage = result.scalar()
     total_quota = 0
-    active_subscriptions = db.query(Subscription).filter(
-        Subscription.state == SubscriptionState.active
-    ).all()
+    result = await db.execute(select(Subscription).where(Subscription.state == SubscriptionState.active))
+    active_subscriptions = result.scalars().all()
     
     for sub in active_subscriptions:
         if sub.plan and sub.plan.monthly_run_quota:
@@ -545,13 +586,16 @@ async def get_analytics(
     total_tenants = len(all_tenants)
     for tenant in all_tenants:
         # Check if tenant has devices activated in last 30 days
-        recent_devices = db.query(Device).filter(
-            and_(
-                Device.tenant_id == tenant.id,
-                Device.created_at >= thirty_days_ago,
-                Device.is_revoked == False
+        result = await db.execute(
+            select(func.count(Device.id)).where(
+                and_(
+                    Device.tenant_id == tenant.id,
+                    Device.created_at >= thirty_days_ago,
+                    Device.is_revoked == False
+                )
             )
-        ).count()
+        )
+        recent_devices = result.scalar()
         if recent_devices > 0:
             active_tenants_30d += 1
     
@@ -588,9 +632,9 @@ class ActivationCodeGenerate(BaseModel):
 
 @router.get("/tenants", response_model=TenantCollectionResponse)
 async def get_tenants(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
+    page_size: int = Query(10, ge=1, le=1000),
     search: Optional[str] = Query(None, max_length=200),
     status: Optional[SubscriptionState] = Query(None),
     sort_field: TenantSortField = Query(TenantSortField.CREATED_AT),
@@ -622,7 +666,7 @@ async def get_tenants(
             "sortDirection": sort_direction.value,
         },
     )
-    return list_tenants(
+    return await list_tenants(
         db,
         page=page,
         page_size=page_size,
@@ -634,14 +678,15 @@ async def get_tenants(
 
 
 @router.get("/plans", response_model=PlanCollectionResponse)
-async def get_plans(db: Session = Depends(get_db)) -> PlanCollectionResponse:
+async def get_plans(db: AsyncSession = Depends(get_db)) -> PlanCollectionResponse:
     """Get all available subscription plans from the database.
     
     This endpoint provides the single source of truth for subscription plans.
     Frontend should use this to populate plan dropdowns dynamically.
     """
     try:
-        plans = db.query(Plan).order_by(Plan.monthly_run_quota.asc()).all()
+        result = await db.execute(select(Plan).order_by(Plan.monthly_run_quota.asc()))
+        plans = result.scalars().all()
         return PlanCollectionResponse(
             plans=[
                 PlanResponse(
@@ -662,11 +707,11 @@ async def get_plans(db: Session = Depends(get_db)) -> PlanCollectionResponse:
 
 
 @router.post("/tenants", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
-async def create_tenant_endpoint(payload: TenantCreatePayload, db: Session = Depends(get_db)) -> TenantResponse:
+async def create_tenant_endpoint(payload: TenantCreatePayload, db: AsyncSession = Depends(get_db)) -> TenantResponse:
     """Create a tenant and return the persisted record."""
 
     LOGGER.info("create_tenant_request", extra={"slug": payload.slug})
-    return create_tenant(db, payload)
+    return await create_tenant(db, payload)
 
 
 # IMPORTANT: More specific routes must come BEFORE generic routes
@@ -674,22 +719,22 @@ async def create_tenant_endpoint(payload: TenantCreatePayload, db: Session = Dep
 @router.get("/tenants/{tenant_slug}/deletion-impact")
 async def get_tenant_deletion_impact_endpoint(
     tenant_slug: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Get a summary of all records that will be deleted with a tenant."""
 
     LOGGER.info("get_tenant_deletion_impact_request", extra={"slug": tenant_slug})
     from ..services.tenant_service import get_tenant_deletion_impact
 
-    return get_tenant_deletion_impact(db, tenant_slug)
+    return await get_tenant_deletion_impact(db, tenant_slug)
 
 
 @router.get("/tenants/{tenant_slug}", response_model=TenantResponse)
-async def get_tenant(tenant_slug: str, db: Session = Depends(get_db)) -> TenantResponse:
+async def get_tenant(tenant_slug: str, db: AsyncSession = Depends(get_db)) -> TenantResponse:
     """Return a single tenant by slug."""
 
     try:
-        return get_tenant_by_slug(db, tenant_slug)
+        return await get_tenant_by_slug(db, tenant_slug)
     except TenantNotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error.message) from error
 
@@ -698,16 +743,16 @@ async def get_tenant(tenant_slug: str, db: Session = Depends(get_db)) -> TenantR
 async def update_tenant_endpoint(
     tenant_slug: str,
     payload: TenantUpdatePayload,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> TenantResponse:
     """Update tenant details and return the updated record."""
 
     LOGGER.info("update_tenant_request", extra={"slug": tenant_slug})
-    return update_tenant(db, tenant_slug, payload)
+    return await update_tenant(db, tenant_slug, payload)
 
 
 @router.delete("/tenants/{tenant_slug}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_tenant_endpoint(tenant_slug: str, db: Session = Depends(get_db)) -> None:
+async def delete_tenant_endpoint(tenant_slug: str, db: AsyncSession = Depends(get_db)) -> None:
     """Delete the requested tenant and all related records.
 
     This will permanently delete:
@@ -722,7 +767,7 @@ async def delete_tenant_endpoint(tenant_slug: str, db: Session = Depends(get_db)
     """
 
     LOGGER.info("delete_tenant_request", extra={"slug": tenant_slug})
-    delete_tenant(db, tenant_slug)
+    await delete_tenant(db, tenant_slug)
 
 
 # ============================================================================
@@ -731,33 +776,72 @@ async def delete_tenant_endpoint(tenant_slug: str, db: Session = Depends(get_db)
 
 @router.get("/codes")
 async def get_all_codes(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     tenant_slug: Optional[str] = None,
     status: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 25
 ):
-    """Get all activation codes with optional filtering."""
+    """Get activation codes with optional filtering and pagination.
     
+    Args:
+        page: Page number (1-indexed)
+        page_size: Number of items per page (10, 25, 50, 100, or 200)
+    """
     from sqlalchemy.orm import joinedload
     
-    query = db.query(ActivationCode).join(Tenant).options(joinedload(ActivationCode.tenant))
+    # Validate page_size
+    valid_page_sizes = [10, 25, 50, 100, 200]
+    if page_size not in valid_page_sizes:
+        page_size = 25
+    
+    # Build base query
+    base_stmt = select(ActivationCode).join(Tenant).options(joinedload(ActivationCode.tenant))
     
     if tenant_slug:
-        query = query.filter(Tenant.slug == tenant_slug)
+        base_stmt = base_stmt.where(Tenant.slug == tenant_slug)
     
     if status:
         # Calculate status based on expires_at, used_at, revoked
-        # This is simplified - in production, you'd have a status column
-        pass  # Status filtering logic here
+        if status == 'revoked':
+            base_stmt = base_stmt.where(ActivationCode.revoked_at.isnot(None))
+        elif status == 'expired':
+            base_stmt = base_stmt.where(
+                ActivationCode.expires_at.isnot(None),
+                ActivationCode.expires_at < datetime.now()
+            )
+        elif status == 'used':
+            base_stmt = base_stmt.where(ActivationCode.use_count >= ActivationCode.max_uses)
+        elif status == 'active':
+            base_stmt = base_stmt.where(
+                ActivationCode.revoked_at.is_(None),
+                (ActivationCode.expires_at.is_(None) | (ActivationCode.expires_at >= datetime.now())),
+                ActivationCode.use_count < ActivationCode.max_uses
+            )
     
     if search:
         search_pattern = f"%{search}%"
-        query = query.filter(
+        base_stmt = base_stmt.where(
             (ActivationCode.code_plain.ilike(search_pattern)) |
-            (Tenant.name.ilike(search_pattern))
+            (Tenant.name.ilike(search_pattern)) |
+            (ActivationCode.label.ilike(search_pattern))
         )
     
-    codes = query.all()
+    # Get total count before pagination
+    count_stmt = base_stmt.with_only_columns(func.count(ActivationCode.id)).order_by(None)
+    result = await db.execute(count_stmt)
+    total = result.scalar()
+    
+    # Apply pagination
+    offset = (page - 1) * page_size
+    result = await db.execute(
+        base_stmt.order_by(ActivationCode.created_at.desc()).offset(offset).limit(page_size)
+    )
+    codes = result.scalars().all()
+    
+    # Note: Codes are already fresh from the query above.
+    # The query executes a fresh SELECT, so use_count should be current.
     
     result = []
     for code in codes:
@@ -788,15 +872,24 @@ async def get_all_codes(
             "maxUses": code.max_uses
         })
     
-    return {"codes": result, "total": len(result)}
+    total_pages = (total + page_size - 1) // page_size  # Ceiling division
+    
+    return {
+        "codes": result,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages
+    }
 
 
 @router.post("/codes/generate")
-async def generate_codes_json(data: ActivationCodeGenerate, db: Session = Depends(get_db)):
+async def generate_codes_json(data: ActivationCodeGenerate, db: AsyncSession = Depends(get_db)):
     """Generate activation codes (JSON API version)."""
     
     # Find tenant
-    tenant = db.query(Tenant).filter(Tenant.slug == data.tenant_slug).first()
+    result = await db.execute(select(Tenant).where(Tenant.slug == data.tenant_slug))
+    tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     
@@ -853,13 +946,14 @@ async def generate_codes_json(data: ActivationCodeGenerate, db: Session = Depend
         from ..services.event_service import log_code_generated
         if generated_codes:
             # Flush to get code IDs before committing
-            db.flush()
+            await db.flush()
             # Get the first code ID (representing the batch)
-            first_code = db.query(ActivationCode).filter(
-                ActivationCode.code_plain == generated_codes[0]
-            ).first()
+            result = await db.execute(
+                select(ActivationCode).where(ActivationCode.code_plain == generated_codes[0])
+            )
+            first_code = result.scalar_one_or_none()
             if first_code:
-                log_code_generated(
+                await log_code_generated(
                     session=db,
                     code_id=first_code.id,
                     tenant_id=tenant.id,
@@ -871,7 +965,7 @@ async def generate_codes_json(data: ActivationCodeGenerate, db: Session = Depend
         LOGGER.error("event_logging_failed", extra={"error": str(e), "event": "code_generated"})
     
     # Commit codes and event together
-    db.commit()
+    await db.commit()
     
     return {
         "success": True,
@@ -881,10 +975,11 @@ async def generate_codes_json(data: ActivationCodeGenerate, db: Session = Depend
 
 
 @router.delete("/codes/{code_id}")
-async def delete_code(code_id: int, db: Session = Depends(get_db)):
+async def delete_code(code_id: int, db: AsyncSession = Depends(get_db)):
     """Delete/revoke an activation code."""
     
-    code = db.query(ActivationCode).filter(ActivationCode.id == code_id).first()
+    result = await db.execute(select(ActivationCode).where(ActivationCode.id == code_id))
+    code = result.scalar_one_or_none()
     
     if not code:
         raise HTTPException(status_code=404, detail="Code not found")
@@ -895,9 +990,10 @@ async def delete_code(code_id: int, db: Session = Depends(get_db)):
     # Log event for code revocation BEFORE committing (so it's part of the same transaction)
     try:
         from ..services.event_service import log_code_revoked
-        tenant = db.query(Tenant).filter(Tenant.id == code.tenant_id).first()
+        result = await db.execute(select(Tenant).where(Tenant.id == code.tenant_id))
+        tenant = result.scalar_one_or_none()
         if tenant:
-            log_code_revoked(
+            await log_code_revoked(
                 session=db,
                 code_id=code.id,
                 tenant_id=tenant.id,
@@ -908,7 +1004,7 @@ async def delete_code(code_id: int, db: Session = Depends(get_db)):
         LOGGER.error("event_logging_failed", extra={"error": str(e), "event": "code_revoked"})
     
     # Commit code revocation and event together
-    db.commit()
+    await db.commit()
     
     return {
         "success": True,
@@ -922,26 +1018,27 @@ async def delete_code(code_id: int, db: Session = Depends(get_db)):
 
 @router.get("/devices")
 async def get_all_devices(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     tenant_slug: Optional[str] = None,
     search: Optional[str] = None
 ):
     """Get all devices with optional filtering."""
     
-    query = db.query(Device).join(Tenant)
+    base_stmt = select(Device).join(Tenant)
     
     if tenant_slug:
-        query = query.filter(Tenant.slug == tenant_slug)
+        base_stmt = base_stmt.where(Tenant.slug == tenant_slug)
     
     if search:
         search_pattern = f"%{search}%"
-        query = query.filter(
+        base_stmt = base_stmt.where(
             (Device.label.ilike(search_pattern)) |
             (Device.hw_fingerprint.ilike(search_pattern)) |
             (Tenant.name.ilike(search_pattern))
         )
     
-    devices = query.all()
+    result = await db.execute(base_stmt)
+    devices = result.scalars().all()
     
     result = []
     for device in devices:
@@ -961,17 +1058,18 @@ async def get_all_devices(
 
 
 @router.delete("/devices/{device_id}")
-async def revoke_device(device_id: int, db: Session = Depends(get_db)):
+async def revoke_device(device_id: int, db: AsyncSession = Depends(get_db)):
     """Revoke a device."""
     
-    device = db.query(Device).filter(Device.id == device_id).first()
+    result = await db.execute(select(Device).where(Device.id == device_id))
+    device = result.scalar_one_or_none()
     
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
     
     # Mark as revoked
     device.is_revoked = True
-    db.commit()
+    await db.commit()
     
     return {
         "success": True,

@@ -125,16 +125,32 @@ def verify_environment():
 class AgentSystem:
     """Main system that coordinates all agents."""
 
-    def __init__(self, workspace_path: str = ".", project_layout: ProjectLayout = None):
+    def __init__(
+        self, 
+        workspace_path: str = ".", 
+        project_layout: ProjectLayout = None,
+        project_id: Optional[str] = None,
+        tenant_id: Optional[int] = None
+    ):
         """
         Initialize the agent system.
         
         Args:
             workspace_path: Path to the workspace directory
             project_layout: Optional custom project layout
+            project_id: Project ID for task tracking (from tenant portal)
+            tenant_id: Tenant ID for task tracking (from tenant portal)
         """
         self.workspace_path = Path(workspace_path)
         self.workspace_path.mkdir(parents=True, exist_ok=True)
+        self.project_id = project_id
+        self.tenant_id = tenant_id
+        
+        # Set environment variables for task tracking
+        if project_id:
+            os.environ["Q2O_PROJECT_ID"] = project_id
+        if tenant_id:
+            os.environ["Q2O_TENANT_ID"] = str(tenant_id)
         
         # Load project layout (from config file, custom, or default)
         if project_layout is None:
@@ -153,49 +169,57 @@ class AgentSystem:
         
         # Initialize specialized agents with project layout and load balancer
         # Multiple instances per type for redundancy and uptime
+        # Pass project_id and tenant_id to agents for task tracking
+        agent_kwargs = {
+            "workspace_path": str(self.workspace_path),
+            "project_layout": self.project_layout,
+            "project_id": self.project_id,
+            "tenant_id": self.tenant_id
+        }
+        
         self.coder_agents = [
-            CoderAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
-            CoderAgent(agent_id="coder_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+            CoderAgent(**agent_kwargs),
+            CoderAgent(agent_id="coder_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
         ]
         self.testing_agents = [
-            TestingAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
-            TestingAgent(agent_id="testing_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+            TestingAgent(**agent_kwargs),
+            TestingAgent(agent_id="testing_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
         ]
         self.qa_agents = [
-            QAAgent(workspace_path=str(self.workspace_path)),
-            QAAgent(agent_id="qa_backup", workspace_path=str(self.workspace_path))
+            QAAgent(**{k: v for k, v in agent_kwargs.items() if k != "project_layout"}),
+            QAAgent(agent_id="qa_backup", **{k: v for k, v in agent_kwargs.items() if k not in ["workspace_path", "project_layout"]})
         ]
         self.infrastructure_agents = [
-            InfrastructureAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
-            InfrastructureAgent(agent_id="infrastructure_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+            InfrastructureAgent(**agent_kwargs),
+            InfrastructureAgent(agent_id="infrastructure_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
         ]
         self.integration_agents = [
-            IntegrationAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
-            IntegrationAgent(agent_id="integration_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+            IntegrationAgent(**agent_kwargs),
+            IntegrationAgent(agent_id="integration_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
         ]
         self.frontend_agents = [
-            FrontendAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
-            FrontendAgent(agent_id="frontend_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+            FrontendAgent(**agent_kwargs),
+            FrontendAgent(agent_id="frontend_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
         ]
         self.workflow_agents = [
-            WorkflowAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
-            WorkflowAgent(agent_id="workflow_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+            WorkflowAgent(**agent_kwargs),
+            WorkflowAgent(agent_id="workflow_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
         ]
         self.security_agents = [
-            SecurityAgent(workspace_path=str(self.workspace_path)),
-            SecurityAgent(agent_id="security_backup", workspace_path=str(self.workspace_path))
+            SecurityAgent(**{k: v for k, v in agent_kwargs.items() if k != "project_layout"}),
+            SecurityAgent(agent_id="security_backup", **{k: v for k, v in agent_kwargs.items() if k not in ["workspace_path", "project_layout"]})
         ]
         self.researcher_agents = [
-            ResearcherAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
-            ResearcherAgent(agent_id="researcher_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+            ResearcherAgent(**agent_kwargs),
+            ResearcherAgent(agent_id="researcher_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
         ]
         
         # Node.js agent (if available)
         self.node_agents = []
         if HAS_NODE_AGENT:
             self.node_agents = [
-                NodeAgent(workspace_path=str(self.workspace_path), project_layout=self.project_layout),
-                NodeAgent(agent_id="node_backup", workspace_path=str(self.workspace_path), project_layout=self.project_layout)
+                NodeAgent(**agent_kwargs),
+                NodeAgent(agent_id="node_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
             ]
         
         # Register all agents with load balancer
@@ -573,6 +597,44 @@ Examples:
         help="Path to save results JSON file"
     )
     
+    parser.add_argument(
+        "--project-id",
+        type=str,
+        help="Project ID for task tracking (from tenant portal)"
+    )
+    
+    parser.add_argument(
+        "--project-name",
+        type=str,
+        help="Project name (from tenant portal)"
+    )
+    
+    parser.add_argument(
+        "--description",
+        type=str,
+        default="",
+        help="Project description (from tenant portal)"
+    )
+    
+    parser.add_argument(
+        "--objectives",
+        type=str,
+        default="",
+        help="Project objectives/custom instructions (from tenant portal)"
+    )
+    
+    parser.add_argument(
+        "--output-folder",
+        type=str,
+        help="Output folder path for project results"
+    )
+    
+    parser.add_argument(
+        "--tenant-id",
+        type=int,
+        help="Tenant ID for task tracking (from tenant portal)"
+    )
+    
     args = parser.parse_args()
     
     # Setup logging
@@ -587,7 +649,19 @@ Examples:
     print()
     
     # Load project configuration
-    if args.config:
+    # Priority: command line args (from tenant portal) > config file > interactive
+    if args.project_id and args.objectives:
+        # Called from tenant portal - use provided arguments
+        project_description = args.project_name or args.description or "Project"
+        # Parse objectives (can be comma-separated or newline-separated)
+        if isinstance(args.objectives, str):
+            objectives = [obj.strip() for obj in args.objectives.split('\n') if obj.strip()]
+            if len(objectives) == 1 and ',' in objectives[0]:
+                objectives = [obj.strip() for obj in objectives[0].split(',') if obj.strip()]
+        else:
+            objectives = args.objectives if isinstance(args.objectives, list) else []
+        platforms = []
+    elif args.config:
         with open(args.config, 'r') as f:
             config = json.load(f)
         project_description = config.get("project_description", "")
@@ -595,7 +669,7 @@ Examples:
         platforms = config.get("platforms", [])
     elif args.project and args.objectives:
         project_description = args.project
-        objectives = args.objectives
+        objectives = args.objectives if isinstance(args.objectives, list) else [args.objectives]
         platforms = []  # No platforms specified via command line
     else:
         # Interactive mode or example
@@ -625,7 +699,11 @@ Examples:
         sys.exit(1)
     
     # Initialize and run the system
-    system = AgentSystem(workspace_path=args.workspace)
+    system = AgentSystem(
+        workspace_path=args.workspace or (args.output_folder if args.output_folder else "."),
+        project_id=args.project_id,
+        tenant_id=args.tenant_id
+    )
     results = system.run_project(project_description, objectives, platforms)
     
     # Print results

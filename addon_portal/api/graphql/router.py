@@ -6,34 +6,23 @@ Integrates Strawberry GraphQL with FastAPI, providing:
 - /graphql (GET) GraphiQL playground for development
 - /graphql/subscriptions for WebSocket subscriptions
 """
-from fastapi import APIRouter, Depends
 from strawberry.fastapi import GraphQLRouter as StrawberryRouter
 
 from .schema import schema
-from .context import get_graphql_context, GraphQLContext
+from .context import get_graphql_context
 from ..core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Create FastAPI router
-router = APIRouter(
-    prefix="/graphql",
-    tags=["GraphQL - Multi-Agent Dashboard"]
-)
-
 # Create Strawberry GraphQL router with schema and context
-graphql_router = StrawberryRouter(
+# This IS a FastAPI router, so we export it directly
+router = StrawberryRouter(
     schema=schema,
     context_getter=get_graphql_context,
     # Enable GraphiQL playground in development
     graphiql=True,  # Set to False in production
+    path="/graphql",  # Explicit path for the GraphQL endpoint
 )
-
-# Mount GraphQL router
-# This creates:
-# - POST /graphql - Execute GraphQL queries/mutations
-# - GET /graphql - GraphiQL playground (if enabled)
-router.include_router(graphql_router)
 
 logger.info("GraphQL router initialized")
 logger.info("  - Endpoint: POST /graphql")

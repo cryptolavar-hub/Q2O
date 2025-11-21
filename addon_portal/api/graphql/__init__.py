@@ -11,3 +11,7 @@ Features:
 - Type-safe schema
 """
 
+from .router import router
+
+__all__ = ["router"]
+

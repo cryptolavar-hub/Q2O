@@ -103,6 +103,13 @@ class LLMProjectConfig(Base):
     # Activation code used to activate this project (one code = one project activation)
     activation_code_id = Column(Integer, ForeignKey("activation_codes.id", ondelete="SET NULL"), nullable=True)
     
+    # Project execution tracking
+    execution_status = Column(String(20), default='pending')  # pending, running, completed, failed, paused
+    execution_started_at = Column(DateTime(timezone=True), nullable=True)
+    execution_completed_at = Column(DateTime(timezone=True), nullable=True)
+    execution_error = Column(Text, nullable=True)
+    output_folder_path = Column(String(500), nullable=True)
+    
     # Metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

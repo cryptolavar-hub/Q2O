@@ -425,8 +425,10 @@ Write-Host "[1/5] Licensing API (Port 8080)..." -ForegroundColor White
 Write-Host "  Dependencies: PostgreSQL (5432)" -ForegroundColor Gray
 if (-not ($PortsInUse -contains 8080)) {
     $licensingDir = Join-Path $CurrentDir.Path "addon_portal"
+    # Use Windows-specific startup script that sets event loop policy before uvicorn
+    $startScript = Join-Path $licensingDir "start_api_windows.py"
     Start-ServiceInWindow -Title "Licensing API (Port 8080)" `
-                           -Command "python -m uvicorn api.main:app --host 0.0.0.0 --port 8080" `
+                           -Command "python $startScript" `
                            -WorkingDir $licensingDir
     
     Write-Host "  Verifying service startup (15 seconds)..." -ForegroundColor Yellow
@@ -702,7 +704,8 @@ function Show-ServiceMenu {
             
             Write-Host "[START] Starting Licensing API..." -ForegroundColor Yellow
             Set-Location addon_portal
-            Start-Process powershell -ArgumentList "-NoExit", "-Command", "uvicorn api.main:app --host :: --port 8080 --reload"
+            $startScript = Join-Path (Get-Location) "addon_portal\start_api_windows.py"
+            Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd addon_portal; python start_api_windows.py"
             Set-Location ..
             Start-Sleep -Seconds 15
             Write-Host "[OK] Licensing API restarted!" -ForegroundColor Green

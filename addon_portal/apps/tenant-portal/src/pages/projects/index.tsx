@@ -29,14 +29,16 @@ export default function ProjectsPage() {
   
   // Filters
   const [search, setSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState(''); // Actual search query used for API calls
   const [statusFilter, setStatusFilter] = useState<Project['status'] | 'all'>('all');
   
   // UI state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
+  // Only fetch when page, pageSize, statusFilter, or searchQuery changes (not on every keystroke)
   useEffect(() => {
     fetchProjects();
-  }, [page, pageSize, statusFilter]);
+  }, [page, pageSize, statusFilter, searchQuery]);
 
   const fetchProjects = async () => {
     try {
@@ -46,7 +48,7 @@ export default function ProjectsPage() {
       const response = await listProjects(
         page,
         pageSize,
-        search || undefined,
+        searchQuery || undefined,
         statusFilter !== 'all' ? statusFilter : undefined
       );
       
@@ -69,12 +71,18 @@ export default function ProjectsPage() {
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setPage(1); // Reset to first page
-    fetchProjects();
+    setSearchQuery(search); // Update the actual search query, which triggers useEffect
   };
 
   const handleStatusFilter = (status: Project['status'] | 'all') => {
     setStatusFilter(status);
     setPage(1); // Reset to first page
+  };
+
+  const handleClearSearch = () => {
+    setSearch('');
+    setSearchQuery('');
+    setPage(1);
   };
 
   const getStatusColor = (status: Project['status']) => {
@@ -138,6 +146,15 @@ export default function ProjectsPage() {
                   >
                     Search
                   </button>
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={handleClearSearch}
+                      className="px-6 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
                 </div>
               </form>
 

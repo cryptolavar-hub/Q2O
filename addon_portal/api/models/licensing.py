@@ -20,6 +20,11 @@ class Tenant(Base):
     logo_url = Column(String, nullable=True)
     primary_color = Column(String, nullable=True)
     domain = Column(String, nullable=True)
+    # Contact information for OTP delivery
+    email = Column(String, nullable=True)  # Primary email for OTP delivery
+    phone_number = Column(String, nullable=True)  # Phone number for SMS/WhatsApp OTP delivery
+    # OTP delivery preference: 'email', 'sms', 'whatsapp', or 'both'
+    otp_delivery_method = Column(String, default='email', nullable=False)
     usage_quota = Column(Integer, default=10, nullable=False)  # For usage-based billing
     usage_current = Column(Integer, default=0, nullable=False)  # Current usage count
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

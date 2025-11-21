@@ -125,6 +125,8 @@ class ProjectResponse(BaseModel):
     created_at: str
     updated_at: Optional[str] = None
     agent_prompts: List[AgentPromptResponse]
+    activation_code_id: Optional[int] = None  # ID of assigned activation code
+    execution_status: Optional[str] = None  # pending, running, completed, failed, paused
 
 
 class ProjectCollectionResponse(BaseModel):

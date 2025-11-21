@@ -7,7 +7,8 @@ from typing import Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from ..core.exceptions import ConfigurationError, InvalidOperationError
 from ..core.logging import get_logger
@@ -26,17 +27,20 @@ from ..schemas.llm import (
 from ..utils.env_manager import read_env_value, write_env_value
 
 LOGGER = get_logger(__name__)
-ENV_PATH = Path(__file__).resolve().parents[2] / '.env'
+# Path to .env file in project root: C:\Q2O_Combined\.env
+# Using explicit path to ensure it's always found
+ENV_PATH = Path(r'C:\Q2O_Combined\.env')
 SYSTEM_PROMPT_KEY = 'LLM_SYSTEM_PROMPT'
 
 
-def _ensure_system_config(session: Session) -> LLMSystemConfig:
-    config = session.execute(select(LLMSystemConfig)).scalar_one_or_none()
+async def _ensure_system_config(session: AsyncSession) -> LLMSystemConfig:
+    result = await session.execute(select(LLMSystemConfig))
+    config = result.scalar_one_or_none()
     if config is None:
         config = LLMSystemConfig()
         session.add(config)
-        session.commit()
-        session.refresh(config)
+        await session.commit()
+        await session.refresh(config)
     return config
 
 
@@ -62,16 +66,16 @@ def _serialize_system_config(config: LLMSystemConfig, system_prompt: str) -> Sys
     )
 
 
-def get_system_config(session: Session, env_path: Path = ENV_PATH) -> SystemConfigResponse:
+async def get_system_config(session: AsyncSession, env_path: Path = ENV_PATH) -> SystemConfigResponse:
     """Return the current system-level LLM configuration."""
 
-    config = _ensure_system_config(session)
+    config = await _ensure_system_config(session)
     system_prompt = read_env_value(SYSTEM_PROMPT_KEY, env_path) or config.system_prompt or ''
     return _serialize_system_config(config, system_prompt)
 
 
-def update_system_config(
-    session: Session,
+async def update_system_config(
+    session: AsyncSession,
     payload: SystemConfigUpdate,
     *,
     updated_by: str = 'admin-ui',
@@ -79,7 +83,7 @@ def update_system_config(
 ) -> SystemConfigResponse:
     """Persist system configuration changes and update the .env system prompt."""
 
-    config = _ensure_system_config(session)
+    config = await _ensure_system_config(session)
 
     config.primary_provider = payload.primary_provider.value
     config.secondary_provider = payload.secondary_provider.value
@@ -102,17 +106,17 @@ def update_system_config(
     try:
         write_env_value(SYSTEM_PROMPT_KEY, payload.system_prompt, env_path)
         config.system_prompt = payload.system_prompt
-        session.commit()
+        await session.commit()
     except OSError as exc:
-        session.rollback()
+        await session.rollback()
         LOGGER.error('system_prompt_write_failed', extra={'error': str(exc)})
         raise ConfigurationError('Failed to persist system prompt to environment file.') from exc
     except SQLAlchemyError as exc:
-        session.rollback()
+        await session.rollback()
         LOGGER.error('system_config_update_failed', extra={'error': str(exc)})
         raise InvalidOperationError('Failed to update system configuration.') from exc
 
-    session.refresh(config)
+    await session.refresh(config)
     return _serialize_system_config(config, payload.system_prompt)
 
 
@@ -146,11 +150,13 @@ def _serialize_project(project: LLMProjectConfig) -> ProjectResponse:
         created_at=project.created_at.isoformat() if project.created_at else '',
         updated_at=project.updated_at.isoformat() if project.updated_at else None,
         agent_prompts=[_serialize_agent(agent) for agent in project.agent_configs],
+        activation_code_id=project.activation_code_id,  # Include activation code ID
+        execution_status=project.execution_status,  # Include execution status
     )
 
 
-def list_projects(
-    session: Session,
+async def list_projects(
+    session: AsyncSession,
     *,
     page: int,
     page_size: int,
@@ -167,19 +173,18 @@ def list_projects(
     
     if search:
         pattern = f"%{search.strip().lower()}%"
+        # Search by client_name (which is the project name)
         stmt = stmt.where(func.lower(LLMProjectConfig.client_name).like(pattern))
 
-    total = session.execute(
+    result = await session.execute(
         stmt.with_only_columns(func.count(LLMProjectConfig.id)).order_by(None)
-    ).scalar_one()
-
-    projects = (
-        session.execute(
-            stmt.order_by(LLMProjectConfig.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
-        )
-        .scalars()
-        .all()
     )
+    total = result.scalar_one()
+
+    result = await session.execute(
+        stmt.order_by(LLMProjectConfig.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    )
+    projects = result.scalars().all()
 
     return ProjectCollectionResponse(
         items=[_serialize_project(project) for project in projects],
@@ -189,8 +194,8 @@ def list_projects(
     )
 
 
-def get_project(
-    session: Session,
+async def get_project(
+    session: AsyncSession,
     project_id: str,
     tenant_id: Optional[int] = None,  # Verify tenant ownership (None = admin can access any)
 ) -> ProjectResponse:
@@ -204,7 +209,8 @@ def get_project(
     if tenant_id is not None:
         stmt = stmt.where(LLMProjectConfig.tenant_id == tenant_id)
     
-    project = session.execute(stmt).scalar_one_or_none()
+    result = await session.execute(stmt)
+    project = result.scalar_one_or_none()
 
     if project is None:
         raise ConfigurationError('Project not found.', detail={'projectId': project_id})
@@ -212,8 +218,8 @@ def get_project(
     return _serialize_project(project)
 
 
-def create_project(
-    session: Session,
+async def create_project(
+    session: AsyncSession,
     payload: ProjectCreatePayload,
     *,
     tenant_id: Optional[int] = None,  # Set tenant_id for tenant-scoped projects
@@ -222,9 +228,10 @@ def create_project(
     """Create a new project-level configuration."""
 
     # Check if project already exists
-    existing = session.execute(
+    result = await session.execute(
         select(LLMProjectConfig).where(LLMProjectConfig.project_id == payload.project_id)
-    ).scalar_one_or_none()
+    )
+    existing = result.scalar_one_or_none()
 
     if existing is not None:
         raise InvalidOperationError(
@@ -245,25 +252,26 @@ def create_project(
 
     try:
         session.add(project)
-        session.commit()
-        session.refresh(project)
+        await session.commit()
+        await session.refresh(project)
     except SQLAlchemyError as exc:
-        session.rollback()
+        await session.rollback()
         LOGGER.error('project_creation_failed', extra={'projectId': payload.project_id, 'error': str(exc)})
         raise InvalidOperationError('Failed to create project configuration.') from exc
 
     # Reload with agent configs relationship
-    project = session.execute(
+    result = await session.execute(
         select(LLMProjectConfig)
         .options(selectinload(LLMProjectConfig.agent_configs))
         .where(LLMProjectConfig.project_id == payload.project_id)
-    ).scalar_one()
+    )
+    project = result.scalar_one()
 
     return _serialize_project(project)
 
 
-def update_project(
-    session: Session,
+async def update_project(
+    session: AsyncSession,
     project_id: str,
     payload: ProjectUpdatePayload,
     tenant_id: Optional[int] = None,  # Verify tenant ownership (None = admin can update any)
@@ -280,7 +288,8 @@ def update_project(
     if tenant_id is not None:
         stmt = stmt.where(LLMProjectConfig.tenant_id == tenant_id)
     
-    project = session.execute(stmt).scalar_one_or_none()
+    result = await session.execute(stmt)
+    project = result.scalar_one_or_none()
 
     if project is None:
         raise ConfigurationError('Project not found.', detail={'projectId': project_id})
@@ -307,18 +316,18 @@ def update_project(
         project.priority = payload.priority
 
     try:
-        session.commit()
+        await session.commit()
     except SQLAlchemyError as exc:
-        session.rollback()
+        await session.rollback()
         LOGGER.error('project_update_failed', extra={'projectId': project_id, 'error': str(exc)})
         raise InvalidOperationError('Failed to update project configuration.') from exc
 
-    session.refresh(project)
+    await session.refresh(project)
     return _serialize_project(project)
 
 
-def delete_project(
-    session: Session,
+async def delete_project(
+    session: AsyncSession,
     project_id: str,
     tenant_id: Optional[int] = None,  # Verify tenant ownership (None = admin can delete any)
 ) -> None:
@@ -330,33 +339,35 @@ def delete_project(
     if tenant_id is not None:
         stmt = stmt.where(LLMProjectConfig.tenant_id == tenant_id)
     
-    project = session.execute(stmt).scalar_one_or_none()
+    result = await session.execute(stmt)
+    project = result.scalar_one_or_none()
 
     if project is None:
         raise ConfigurationError('Project not found.', detail={'projectId': project_id})
 
     try:
-        session.delete(project)
-        session.commit()
+        await session.delete(project)
+        await session.commit()
     except SQLAlchemyError as exc:
-        session.rollback()
+        await session.rollback()
         LOGGER.error('project_deletion_failed', extra={'projectId': project_id, 'error': str(exc)})
         raise InvalidOperationError('Failed to delete project configuration.') from exc
 
 
-def update_agent_prompt(
-    session: Session,
+async def update_agent_prompt(
+    session: AsyncSession,
     project_id: str,
     agent_type: str,
     payload: AgentPromptUpdate,
 ) -> AgentPromptResponse:
     """Create or update agent-level prompt configuration."""
 
-    project = session.execute(
+    result = await session.execute(
         select(LLMProjectConfig)
         .options(selectinload(LLMProjectConfig.agent_configs))
         .where(LLMProjectConfig.project_id == project_id)
-    ).scalar_one_or_none()
+    )
+    project = result.scalar_one_or_none()
 
     if project is None:
         raise ConfigurationError('Project not found.', detail={'projectId': project_id})
@@ -383,11 +394,11 @@ def update_agent_prompt(
         agent.enabled = payload.enabled
 
     try:
-        session.commit()
+        await session.commit()
     except SQLAlchemyError as exc:
-        session.rollback()
+        await session.rollback()
         LOGGER.error('agent_prompt_update_failed', extra={'projectId': project_id, 'agentType': agent_type, 'error': str(exc)})
         raise InvalidOperationError('Failed to update agent prompt configuration.') from exc
 
-    session.refresh(agent)
+    await session.refresh(agent)
     return _serialize_agent(agent)

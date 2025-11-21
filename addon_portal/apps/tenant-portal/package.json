@@ -9,13 +9,16 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.1.1",
+    "urql": "^4.0.6",
     "caniuse-lite": "^1.0.30001754",
     "fund": "^1.0.0",
+    "graphql": "^16.8.1",
     "nanoid": "^5.1.6",
     "next": "^14.2.33",
     "postcss": "^8.5.6",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "graphql-ws": "^5.14.2"
   },
   "devDependencies": {
     "@types/node": "24.10.0",

@@ -5,7 +5,7 @@ Event Logging Service - Centralized event logging for platform activities.
 import traceback
 from datetime import datetime
 from typing import Optional, Dict, Any
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.events import PlatformEvent, EventType, EventSeverity
 from ..core.logging import get_logger
@@ -13,8 +13,8 @@ from ..core.logging import get_logger
 LOGGER = get_logger(__name__)
 
 
-def log_event(
-    session: Session,
+async def log_event(
+    session: AsyncSession,
     event_type: EventType,
     severity: EventSeverity,
     title: str,
@@ -68,8 +68,8 @@ def log_event(
         )
         session.add(event)
         # Flush to get the ID, but don't commit yet (let caller handle commit)
-        session.flush()
-        session.refresh(event)
+        await session.flush()
+        await session.refresh(event)
         
         LOGGER.info(
             "event_logged",
@@ -90,9 +90,9 @@ def log_event(
 
 # Convenience functions for common events
 
-def log_tenant_created(session: Session, tenant_id: int, tenant_name: str, actor_name: Optional[str] = None):
+async def log_tenant_created(session: AsyncSession, tenant_id: int, tenant_name: str, actor_name: Optional[str] = None):
     """Log tenant creation event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.TENANT_CREATED,
         severity=EventSeverity.MAJOR,
@@ -105,9 +105,9 @@ def log_tenant_created(session: Session, tenant_id: int, tenant_name: str, actor
     )
 
 
-def log_tenant_updated(session: Session, tenant_id: int, tenant_name: str, changes: Dict[str, Any], actor_name: Optional[str] = None):
+async def log_tenant_updated(session: AsyncSession, tenant_id: int, tenant_name: str, changes: Dict[str, Any], actor_name: Optional[str] = None):
     """Log tenant update event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.TENANT_UPDATED,
         severity=EventSeverity.MAJOR,
@@ -120,9 +120,9 @@ def log_tenant_updated(session: Session, tenant_id: int, tenant_name: str, chang
     )
 
 
-def log_tenant_deleted(session: Session, tenant_id: int, tenant_name: str, actor_name: Optional[str] = None):
+async def log_tenant_deleted(session: AsyncSession, tenant_id: int, tenant_name: str, actor_name: Optional[str] = None):
     """Log tenant deletion event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.TENANT_DELETED,
         severity=EventSeverity.MAJOR,
@@ -135,9 +135,9 @@ def log_tenant_deleted(session: Session, tenant_id: int, tenant_name: str, actor
     )
 
 
-def log_code_generated(session: Session, code_id: int, tenant_id: int, tenant_name: str, code_count: int, actor_name: Optional[str] = None):
+async def log_code_generated(session: AsyncSession, code_id: int, tenant_id: int, tenant_name: str, code_count: int, actor_name: Optional[str] = None):
     """Log activation code generation event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.CODE_GENERATED,
         severity=EventSeverity.MAJOR,
@@ -151,9 +151,9 @@ def log_code_generated(session: Session, code_id: int, tenant_id: int, tenant_na
     )
 
 
-def log_code_revoked(session: Session, code_id: int, tenant_id: int, tenant_name: str, actor_name: Optional[str] = None):
+async def log_code_revoked(session: AsyncSession, code_id: int, tenant_id: int, tenant_name: str, actor_name: Optional[str] = None):
     """Log activation code revocation event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.CODE_REVOKED,
         severity=EventSeverity.MAJOR,
@@ -167,9 +167,9 @@ def log_code_revoked(session: Session, code_id: int, tenant_id: int, tenant_name
     )
 
 
-def log_code_activated(session: Session, code_id: int, tenant_id: int, tenant_name: str, project_id: Optional[str] = None):
+async def log_code_activated(session: AsyncSession, code_id: int, tenant_id: int, tenant_name: str, project_id: Optional[str] = None):
     """Log activation code usage event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.CODE_ACTIVATED,
         severity=EventSeverity.MINOR,
@@ -183,9 +183,9 @@ def log_code_activated(session: Session, code_id: int, tenant_id: int, tenant_na
     )
 
 
-def log_project_created(session: Session, project_id: str, tenant_id: int, tenant_name: str, client_name: str, actor_name: Optional[str] = None):
+async def log_project_created(session: AsyncSession, project_id: str, tenant_id: int, tenant_name: str, client_name: str, actor_name: Optional[str] = None):
     """Log project creation event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.PROJECT_CREATED,
         severity=EventSeverity.MAJOR,
@@ -199,9 +199,9 @@ def log_project_created(session: Session, project_id: str, tenant_id: int, tenan
     )
 
 
-def log_project_updated(session: Session, project_id: str, tenant_id: int, client_name: str, changes: Dict[str, Any], actor_name: Optional[str] = None):
+async def log_project_updated(session: AsyncSession, project_id: str, tenant_id: int, client_name: str, changes: Dict[str, Any], actor_name: Optional[str] = None):
     """Log project update event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.PROJECT_UPDATED,
         severity=EventSeverity.MAJOR,
@@ -215,9 +215,9 @@ def log_project_updated(session: Session, project_id: str, tenant_id: int, clien
     )
 
 
-def log_project_deleted(session: Session, project_id: str, tenant_id: int, client_name: str, actor_name: Optional[str] = None):
+async def log_project_deleted(session: AsyncSession, project_id: str, tenant_id: int, client_name: str, actor_name: Optional[str] = None):
     """Log project deletion event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.PROJECT_DELETED,
         severity=EventSeverity.MAJOR,
@@ -231,9 +231,9 @@ def log_project_deleted(session: Session, project_id: str, tenant_id: int, clien
     )
 
 
-def log_device_enrolled(session: Session, device_id: int, tenant_id: int, tenant_name: str, device_label: Optional[str] = None):
+async def log_device_enrolled(session: AsyncSession, device_id: int, tenant_id: int, tenant_name: str, device_label: Optional[str] = None):
     """Log device enrollment event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.DEVICE_ENROLLED,
         severity=EventSeverity.MINOR,
@@ -246,9 +246,9 @@ def log_device_enrolled(session: Session, device_id: int, tenant_id: int, tenant
     )
 
 
-def log_device_revoked(session: Session, device_id: int, tenant_id: int, tenant_name: str, actor_name: Optional[str] = None):
+async def log_device_revoked(session: AsyncSession, device_id: int, tenant_id: int, tenant_name: str, actor_name: Optional[str] = None):
     """Log device revocation event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.DEVICE_REVOKED,
         severity=EventSeverity.MINOR,
@@ -262,9 +262,9 @@ def log_device_revoked(session: Session, device_id: int, tenant_id: int, tenant_
     )
 
 
-def log_user_login(session: Session, tenant_id: Optional[int] = None, tenant_name: Optional[str] = None, actor_type: str = "admin"):
+async def log_user_login(session: AsyncSession, tenant_id: Optional[int] = None, tenant_name: Optional[str] = None, actor_type: str = "admin"):
     """Log user login event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.USER_LOGIN,
         severity=EventSeverity.MINOR,
@@ -276,9 +276,9 @@ def log_user_login(session: Session, tenant_id: Optional[int] = None, tenant_nam
     )
 
 
-def log_user_logout(session: Session, tenant_id: Optional[int] = None, tenant_name: Optional[str] = None, actor_type: str = "admin"):
+async def log_user_logout(session: AsyncSession, tenant_id: Optional[int] = None, tenant_name: Optional[str] = None, actor_type: str = "admin"):
     """Log user logout event."""
-    return log_event(
+    return await log_event(
         session=session,
         event_type=EventType.USER_LOGOUT,
         severity=EventSeverity.MINOR,

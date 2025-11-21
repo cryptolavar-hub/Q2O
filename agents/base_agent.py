@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
 import logging
+import os
 
 if TYPE_CHECKING:
     from utils.project_layout import ProjectLayout
@@ -83,7 +84,15 @@ class Task:
 class BaseAgent(ABC):
     """Base class for all agents in the system."""
 
-    def __init__(self, agent_id: str, agent_type: AgentType, project_layout: Optional[ProjectLayout] = None, enable_messaging: bool = True):
+    def __init__(
+        self, 
+        agent_id: str, 
+        agent_type: AgentType, 
+        project_layout: Optional[ProjectLayout] = None, 
+        enable_messaging: bool = True,
+        project_id: Optional[str] = None,
+        tenant_id: Optional[int] = None
+    ):
         self.agent_id = agent_id
         self.agent_type = agent_type
         self.logger = logging.getLogger(f"{agent_type.value}.{agent_id}")
@@ -92,6 +101,9 @@ class BaseAgent(ABC):
         self.failed_tasks: List[Task] = []
         self.project_layout: ProjectLayout = project_layout or get_default_layout()
         self.enable_messaging = enable_messaging
+        self.project_id = project_id or os.getenv("Q2O_PROJECT_ID")
+        self.tenant_id = tenant_id or (int(os.getenv("Q2O_TENANT_ID")) if os.getenv("Q2O_TENANT_ID") else None)
+        self.db_task_ids: Dict[str, str] = {}  # Map task.id -> db_task_id
         
         # Initialize messaging if enabled
         if enable_messaging:
@@ -177,6 +189,19 @@ class BaseAgent(ABC):
         
         for attempt in range(policy.max_retries + 1):
             try:
+                # Update task status to "running" in database
+                db_task_id = self.db_task_ids.get(task.id)
+                if db_task_id and self.project_id:
+                    try:
+                        from agents.task_tracking import update_task_status_in_db, run_async
+                        run_async(update_task_status_in_db(
+                            task_id=db_task_id,
+                            status="running",
+                            progress_percentage=5.0,  # Just started
+                        ))
+                    except Exception as e:
+                        self.logger.debug(f"Failed to update task status to running: {e}")
+                
                 # Process the task
                 result = self.process_task(task)
                 
@@ -397,6 +422,28 @@ class BaseAgent(ABC):
         task.start()
         self.logger.info(f"Assigned task {task.id}: {task.title}")
         
+        # Create task in database for tracking
+        if self.project_id:
+            try:
+                from agents.task_tracking import create_task_in_db, run_async
+                
+                db_task_id = run_async(create_task_in_db(
+                    project_id=self.project_id,
+                    agent_type=self.agent_type.value,
+                    task_name=task.title,
+                    task_description=task.description,
+                    task_type=getattr(task, 'task_type', None),
+                    agent_id=self.agent_id,
+                    priority=1,  # Default priority
+                    tenant_id=self.tenant_id,
+                ))
+                
+                if db_task_id:
+                    self.db_task_ids[task.id] = db_task_id
+                    self.logger.info(f"Created database task {db_task_id} for {task.id}")
+            except Exception as e:
+                self.logger.warning(f"Failed to create task in database: {e}")
+        
         # Emit dashboard event
         self._emit_task_started(task.id, task)
         
@@ -435,6 +482,31 @@ class BaseAgent(ABC):
         self.completed_tasks.append(task)
         self.logger.info(f"Completed task {task_id}: {task.title}")
         
+        # Update task in database
+        db_task_id = self.db_task_ids.get(task_id)
+        if db_task_id:
+            try:
+                from agents.task_tracking import update_task_status_in_db, run_async
+                
+                # Prepare execution metadata
+                execution_metadata = {}
+                if result and isinstance(result, dict):
+                    execution_metadata = {
+                        "files_created": result.get("files_created", []),
+                        "files_modified": result.get("files_modified", []),
+                        "outputs": result.get("outputs", {}),
+                    }
+                
+                run_async(update_task_status_in_db(
+                    task_id=db_task_id,
+                    status="completed",
+                    progress_percentage=100.0,
+                    execution_metadata=execution_metadata if execution_metadata else None,
+                ))
+                self.logger.info(f"Updated database task {db_task_id} to completed")
+            except Exception as e:
+                self.logger.warning(f"Failed to update task in database: {e}")
+        
         # Auto-commit if VCS integration enabled
         self._auto_commit_task(task)
         
@@ -457,6 +529,23 @@ class BaseAgent(ABC):
         task.fail(error)
         self.failed_tasks.append(task)
         self.logger.error(f"Failed task {task_id}: {task.title} - {error}")
+        
+        # Update task in database
+        db_task_id = self.db_task_ids.get(task_id)
+        if db_task_id:
+            try:
+                from agents.task_tracking import update_task_status_in_db, run_async
+                import traceback
+                
+                run_async(update_task_status_in_db(
+                    task_id=db_task_id,
+                    status="failed",
+                    error_message=error,
+                    error_stack_trace=traceback.format_exc(),
+                ))
+                self.logger.info(f"Updated database task {db_task_id} to failed")
+            except Exception as e:
+                self.logger.warning(f"Failed to update task in database: {e}")
         
         # Emit dashboard event
         self._emit_task_failed(task_id, task, error)

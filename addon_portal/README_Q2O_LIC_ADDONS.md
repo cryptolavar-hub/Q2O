@@ -17,5 +17,8 @@
    ```
 4. Portal:
    ```bash
-   cd apps/tenant-portal && cp .env.example .env.local && npm i && npm run dev
+   cd apps/tenant-portal && npm i && npm run dev
    ```
+   
+   **Note:** All environment variables are configured in the root `.env` file (`C:\Q2O_Combined\.env`). 
+   The tenant portal reads API configuration from the backend, which loads from the root `.env`.

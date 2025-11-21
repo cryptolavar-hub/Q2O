@@ -5,7 +5,7 @@ Handles queries, mutations, and subscriptions.
 Integrates with existing database and WebSocket system.
 """
 from typing import List, Optional, AsyncGenerator
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 import strawberry
@@ -40,7 +40,7 @@ class Query:
         min_health: float = 0.0
     ) -> List[Agent]:
         """
-        Get all agents with optional filtering
+        Get all agents with optional filtering from REAL database
         
         Example:
         query {
@@ -53,30 +53,89 @@ class Query:
           }
         }
         """
-        db: AsyncSession = info.context["db"]
+        db: AsyncSession = getattr(info.context, 'db', None) if info.context else None
         
-        # Mock data for now - replace with actual DB queries
-        # In production, query from agent_activity table
-        agents = [
-            Agent(
-                id=f"agent-{i}",
-                type=AgentType.CODER if i % 2 == 0 else AgentType.RESEARCHER,
-                name=f"Agent-{i}",
-                status="active",
-                health_score=0.95,
-                tasks_completed=100,
-                tasks_failed=5,
-                current_task_id=f"task-{i}" if i < 3 else None,
-                last_activity=datetime.utcnow()
-            )
-            for i in range(1, 13)  # 12 agents
-        ]
+        if not db:
+            logger.warning("No database session available for agents query")
+            return []
         
-        # Apply filters
+        # Query REAL agents from database (aggregate from tasks and agent configs)
+        from ..models.agent_tasks import AgentTask
+        from ..models.llm_config import LLMAgentConfig
+        from sqlalchemy import func, and_
+        
+        # Get distinct agent types from tasks
+        stmt = select(
+            AgentTask.agent_type,
+            func.count(AgentTask.id).label('total_tasks'),
+            func.sum(func.case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
+            func.sum(func.case((AgentTask.status == 'failed', 1), else_=0)).label('failed'),
+            func.max(AgentTask.updated_at).label('last_activity')
+        ).group_by(AgentTask.agent_type)
+        
+        # Filter by agent_type if provided
         if agent_type:
-            agents = [a for a in agents if a.type == agent_type]
-        if min_health > 0:
-            agents = [a for a in agents if a.health_score >= min_health]
+            agent_type_str = agent_type.name.lower()
+            stmt = stmt.where(AgentTask.agent_type == agent_type_str)
+        
+        result = await db.execute(stmt)
+        agent_stats = result.all()
+        
+        # Build Agent objects from statistics
+        agents = []
+        for stats in agent_stats:
+            try:
+                agent_type_str = stats.agent_type.upper()
+                agent_type_enum = AgentType[agent_type_str] if agent_type_str in [e.name for e in AgentType] else AgentType.CODER
+            except (KeyError, AttributeError):
+                agent_type_enum = AgentType.CODER
+            
+            total_tasks = stats.total_tasks or 0
+            completed = stats.completed or 0
+            failed = stats.failed or 0
+            
+            # Calculate health score (success rate)
+            if total_tasks > 0:
+                health_score = (completed / total_tasks) * 100.0
+            else:
+                health_score = 0.0
+            
+            # Apply min_health filter
+            if min_health > 0 and health_score < min_health:
+                continue
+            
+            # Get current task (most recent running task)
+            current_task_result = await db.execute(
+                select(AgentTask.task_id)
+                .where(
+                    and_(
+                        AgentTask.agent_type == stats.agent_type,
+                        AgentTask.status.in_(['started', 'running'])
+                    )
+                )
+                .order_by(AgentTask.started_at.desc())
+                .limit(1)
+            )
+            current_task = current_task_result.scalar_one_or_none()
+            
+            # Determine status
+            status = "active" if current_task else "idle"
+            
+            last_activity = stats.last_activity or datetime.now(timezone.utc)
+            if last_activity.tzinfo is None:
+                last_activity = last_activity.replace(tzinfo=timezone.utc)
+            
+            agents.append(Agent(
+                id=f"agent-{stats.agent_type}",
+                type=agent_type_enum,
+                name=f"{stats.agent_type.title()} Agent",
+                status=status,
+                health_score=health_score,
+                tasks_completed=completed,
+                tasks_failed=failed,
+                current_task_id=current_task,
+                last_activity=last_activity
+            ))
         
         return agents
     
@@ -89,7 +148,7 @@ class Query:
         offset: int = 0
     ) -> List[Task]:
         """
-        Get tasks with flexible filtering
+        Get tasks with flexible filtering from REAL database
         
         Example:
         query {
@@ -105,39 +164,99 @@ class Query:
           }
         }
         """
-        db: AsyncSession = info.context["db"]
+        db: AsyncSession = getattr(info.context, 'db', None) if info.context else None
         
-        # Build query based on filters
-        # In production, query from tasks table
-        tasks = [
-            Task(
-                id=f"task-{i}",
-                project_id=f"project-{i % 5}",
-                agent_type=AgentType.CODER if i % 2 == 0 else AgentType.FRONTEND,
-                title=f"Task {i}: Generate API endpoint",
-                description=f"Create FastAPI endpoint for entity {i}",
-                status=TaskStatus.IN_PROGRESS if i < 3 else TaskStatus.COMPLETED,
-                priority=1 if i < 3 else 2,
-                created_at=datetime.utcnow() - timedelta(hours=i),
-                started_at=datetime.utcnow() - timedelta(hours=i-1) if i < 10 else None,
-                completed_at=datetime.utcnow() - timedelta(minutes=30) if i >= 3 else None,
-                error_message=None
-            )
-            for i in range(1, 51)
-        ]
+        if not db:
+            logger.warning("No database session available for tasks query")
+            return []
+        
+        # Query REAL tasks from database
+        from ..models.agent_tasks import AgentTask
+        
+        stmt = select(AgentTask)
         
         # Apply filters
         if filter:
             if filter.status:
-                tasks = [t for t in tasks if t.status == filter.status]
+                # Map GraphQL TaskStatus to database status
+                status_map = {
+                    TaskStatus.PENDING: 'pending',
+                    TaskStatus.IN_PROGRESS: ['started', 'running'],
+                    TaskStatus.COMPLETED: 'completed',
+                    TaskStatus.FAILED: 'failed',
+                    TaskStatus.CANCELLED: 'cancelled',
+                }
+                db_status = status_map.get(filter.status)
+                if isinstance(db_status, list):
+                    stmt = stmt.where(AgentTask.status.in_(db_status))
+                else:
+                    stmt = stmt.where(AgentTask.status == db_status)
+            
             if filter.agent_type:
-                tasks = [t for t in tasks if t.agent_type == filter.agent_type]
+                # Map GraphQL AgentType to database agent_type
+                agent_type_str = filter.agent_type.name.lower()
+                stmt = stmt.where(AgentTask.agent_type == agent_type_str)
+            
             if filter.project_id:
-                tasks = [t for t in tasks if t.project_id == filter.project_id]
+                stmt = stmt.where(AgentTask.project_id == filter.project_id)
+            
             if filter.created_after:
-                tasks = [t for t in tasks if t.created_at >= filter.created_after]
+                stmt = stmt.where(AgentTask.created_at >= filter.created_after)
         
-        return tasks[offset:offset + limit]
+        stmt = stmt.order_by(AgentTask.created_at.desc()).limit(limit).offset(offset)
+        
+        result = await db.execute(stmt)
+        db_tasks = result.scalars().all()
+        
+        # Convert to GraphQL Task objects
+        tasks = []
+        for db_task in db_tasks:
+            # Map agent_type to AgentType enum
+            try:
+                agent_type_str = db_task.agent_type.upper()
+                agent_type = AgentType[agent_type_str] if agent_type_str in [e.name for e in AgentType] else AgentType.CODER
+            except (KeyError, AttributeError):
+                agent_type = AgentType.CODER
+            
+            # Map status
+            status_map = {
+                'pending': TaskStatus.PENDING,
+                'started': TaskStatus.IN_PROGRESS,
+                'running': TaskStatus.IN_PROGRESS,
+                'completed': TaskStatus.COMPLETED,
+                'failed': TaskStatus.FAILED,
+                'cancelled': TaskStatus.CANCELLED,
+            }
+            task_status = status_map.get(db_task.status, TaskStatus.PENDING)
+            
+            # Ensure timezone-aware datetimes
+            created_at = db_task.created_at
+            if created_at and created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            
+            started_at = db_task.started_at
+            if started_at and started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
+            
+            completed_at = db_task.completed_at
+            if completed_at and completed_at.tzinfo is None:
+                completed_at = completed_at.replace(tzinfo=timezone.utc)
+            
+            tasks.append(Task(
+                id=db_task.task_id,
+                project_id=db_task.project_id,
+                agent_type=agent_type,
+                title=db_task.task_name,
+                description=db_task.task_description or "",
+                status=task_status,
+                priority=db_task.priority,
+                created_at=created_at,
+                started_at=started_at,
+                completed_at=completed_at,
+                error_message=db_task.error_message
+            ))
+        
+        return tasks
     
     @strawberry.field
     async def projects(
@@ -165,7 +284,7 @@ class Query:
           }
         }
         """
-        db: AsyncSession = info.context["db"]
+        db: AsyncSession = getattr(info.context, 'db', None) if info.context else None
         
         # In production, query from projects table
         projects = [
@@ -212,13 +331,173 @@ class Query:
           }
         }
         """
-        projects = await self.projects(info)
-        return next((p for p in projects if p.id == id), None)
+        db: AsyncSession = getattr(info.context, 'db', None) if info.context else None
+        
+        if not db:
+            logger.warning("No database session available for project query")
+            return None
+        
+        # Query real project from database
+        from ..models.llm_config import LLMProjectConfig
+        from sqlalchemy.orm import selectinload
+        
+        result = await db.execute(
+            select(LLMProjectConfig)
+            .options(selectinload(LLMProjectConfig.agent_configs))
+            .where(LLMProjectConfig.project_id == id)
+        )
+        db_project = result.scalar_one_or_none()
+        
+        if not db_project:
+            return None
+        
+        # Map execution_status to ProjectStatus
+        status_map = {
+            'pending': ProjectStatus.PLANNING,
+            'running': ProjectStatus.IN_PROGRESS,
+            'completed': ProjectStatus.COMPLETED,
+            'failed': ProjectStatus.FAILED,
+            'paused': ProjectStatus.ON_HOLD,
+        }
+        project_status = status_map.get(db_project.execution_status, ProjectStatus.PLANNING)
+        
+        # Calculate REAL completion percentage from actual tasks
+        from ..services.agent_task_service import calculate_project_progress, get_project_tasks
+        from ..models.agent_tasks import AgentTask
+        
+        # Get real task statistics
+        task_stats = await calculate_project_progress(db, id)
+        total_tasks = task_stats["total_tasks"]
+        completed_tasks = task_stats["completed_tasks"]
+        failed_tasks = task_stats["failed_tasks"]
+        completion_percentage = task_stats["completion_percentage"]
+        
+        # If no tasks exist yet, use status-based fallback
+        if total_tasks == 0:
+            if db_project.execution_status == 'completed':
+                completion_percentage = 100.0
+            elif db_project.execution_status == 'running':
+                completion_percentage = 5.0  # Just started, minimal progress
+            elif db_project.execution_status == 'failed':
+                completion_percentage = 0.0
+            else:
+                completion_percentage = 0.0
+        
+        # Map agent_configs to Agent objects with REAL task statistics
+        agents = []
+        if db_project.agent_configs:
+            # Get task counts per agent type
+            agent_task_counts = {}
+            if total_tasks > 0:
+                agent_tasks = await get_project_tasks(db, id)
+                for task in agent_tasks:
+                    agent_type = task.agent_type
+                    if agent_type not in agent_task_counts:
+                        agent_task_counts[agent_type] = {"completed": 0, "failed": 0, "running": None}
+                    if task.status == 'completed':
+                        agent_task_counts[agent_type]["completed"] += 1
+                    elif task.status == 'failed':
+                        agent_task_counts[agent_type]["failed"] += 1
+                    elif task.status in ('started', 'running') and not agent_task_counts[agent_type]["running"]:
+                        agent_task_counts[agent_type]["running"] = task.task_id
+            
+            for agent_config in db_project.agent_configs:
+                try:
+                    # Map agent_type string to AgentType enum
+                    agent_type_str = agent_config.agent_type.upper()
+                    agent_type = AgentType[agent_type_str] if agent_type_str in [e.name for e in AgentType] else AgentType.CODER
+                except (KeyError, AttributeError):
+                    agent_type = AgentType.CODER
+                
+                # Get real task statistics for this agent
+                agent_stats = agent_task_counts.get(agent_config.agent_type, {"completed": 0, "failed": 0, "running": None})
+                tasks_completed = agent_stats["completed"]
+                tasks_failed = agent_stats["failed"]
+                current_task_id = agent_stats["running"]
+                
+                # Agent is "active" if project is running AND agent is enabled AND has active tasks
+                agent_status = "active" if (
+                    db_project.execution_status == 'running' 
+                    and agent_config.enabled 
+                    and current_task_id is not None
+                ) else "idle"
+                
+                # Health score based on success rate
+                total_agent_tasks = tasks_completed + tasks_failed
+                if total_agent_tasks > 0:
+                    health_score = (tasks_completed / total_agent_tasks) * 100.0
+                elif agent_status == "active":
+                    health_score = 100.0  # Active but no completed tasks yet
+                else:
+                    health_score = 0.0
+                
+                agents.append(Agent(
+                    id=f"{db_project.project_id}-{agent_config.agent_type}",
+                    type=agent_type,
+                    name=f"{agent_config.agent_type.title()} Agent",
+                    status=agent_status,
+                    health_score=health_score,
+                    tasks_completed=tasks_completed,
+                    tasks_failed=tasks_failed,
+                    current_task_id=current_task_id,
+                    last_activity=agent_config.updated_at or agent_config.created_at or datetime.now(timezone.utc)
+                ))
+        
+        # Calculate estimated time remaining based on REAL task data
+        estimated_time_remaining = None
+        if db_project.execution_status == 'running' and total_tasks > 0:
+            # Get average task duration from completed tasks
+            result = await db.execute(
+                select(func.avg(AgentTask.actual_duration_seconds))
+                .where(
+                    and_(
+                        AgentTask.project_id == id,
+                        AgentTask.status == 'completed',
+                        AgentTask.actual_duration_seconds.isnot(None)
+                    )
+                )
+            )
+            avg_duration = result.scalar()
+            
+            if avg_duration:
+                # Estimate: remaining tasks * average duration
+                remaining_tasks = total_tasks - completed_tasks - failed_tasks
+                estimated_time_remaining = int(remaining_tasks * avg_duration)
+            elif db_project.execution_started_at:
+                # Fallback: estimate based on elapsed time and progress
+                started_at = db_project.execution_started_at
+                if started_at.tzinfo is None:
+                    started_at = started_at.replace(tzinfo=timezone.utc)
+                now = datetime.now(timezone.utc)
+                elapsed_seconds = (now - started_at).total_seconds()
+                if completion_percentage > 0:
+                    estimated_total_seconds = (elapsed_seconds / completion_percentage) * 100.0
+                    remaining = max(0, estimated_total_seconds - elapsed_seconds)
+                    estimated_time_remaining = int(remaining)
+        
+        # Create Project object with REAL data
+        # Note: tasks field is loaded via resolver method, not passed directly
+        project = Project(
+            id=db_project.project_id,
+            name=db_project.client_name or "Unnamed Project",
+            objective=db_project.custom_instructions or db_project.description or "",
+            status=project_status,
+            created_at=db_project.created_at or datetime.now(timezone.utc),
+            updated_at=db_project.updated_at or db_project.created_at or datetime.now(timezone.utc),
+            completion_percentage=completion_percentage,
+            total_tasks=total_tasks,
+            completed_tasks=completed_tasks,
+            failed_tasks=failed_tasks,
+            agents=agents,
+            estimated_time_remaining_seconds=estimated_time_remaining
+        )
+        
+        return project
     
     @strawberry.field
     async def dashboard_stats(self, info) -> DashboardStats:
         """
-        Get high-level dashboard statistics
+        Get high-level dashboard statistics from REAL database data
         
         Example:
         query {
@@ -236,36 +515,135 @@ class Query:
           }
         }
         """
-        db: AsyncSession = info.context["db"]
+        db: AsyncSession = getattr(info.context, 'db', None) if info.context else None
         
-        # In production, aggregate from database
-        return DashboardStats(
-            total_projects=10,
-            active_projects=3,
-            total_tasks=200,
-            active_tasks=5,
-            completed_tasks_today=45,
-            average_success_rate=95.5,
-            most_active_agent=AgentType.CODER,
-            recent_activities=[
-                AgentActivity(
-                    id=f"activity-{i}",
-                    agent_type=AgentType.CODER if i % 2 == 0 else AgentType.RESEARCHER,
-                    agent_id=f"agent-{i}",
-                    event_type="task_completed",
-                    message=f"Completed task: Generate API endpoint #{i}",
-                    timestamp=datetime.utcnow() - timedelta(minutes=i*5),
-                    task_id=f"task-{i}",
-                    metadata=None
+        if not db:
+            logger.warning("No database session available for dashboard_stats")
+            return DashboardStats(
+                total_projects=0,
+                active_projects=0,
+                total_tasks=0,
+                active_tasks=0,
+                completed_tasks_today=0,
+                average_success_rate=0.0,
+                most_active_agent=None,
+                recent_activities=[]
+            )
+        
+        # Get REAL statistics from database
+        from ..models.llm_config import LLMProjectConfig
+        from ..models.agent_tasks import AgentTask
+        from datetime import datetime, timezone, timedelta
+        
+        # Count projects
+        result = await db.execute(select(func.count(LLMProjectConfig.id)))
+        total_projects = result.scalar() or 0
+        
+        result = await db.execute(
+            select(func.count(LLMProjectConfig.id))
+            .where(LLMProjectConfig.execution_status == 'running')
+        )
+        active_projects = result.scalar() or 0
+        
+        # Count tasks
+        result = await db.execute(select(func.count(AgentTask.id)))
+        total_tasks = result.scalar() or 0
+        
+        result = await db.execute(
+            select(func.count(AgentTask.id))
+            .where(AgentTask.status.in_(['started', 'running']))
+        )
+        active_tasks = result.scalar() or 0
+        
+        # Tasks completed today
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        result = await db.execute(
+            select(func.count(AgentTask.id))
+            .where(
+                and_(
+                    AgentTask.status == 'completed',
+                    AgentTask.completed_at >= today_start
                 )
-                for i in range(1, 6)
-            ]
+            )
+        )
+        completed_tasks_today = result.scalar() or 0
+        
+        # Calculate average success rate
+        result = await db.execute(
+            select(
+                func.count(AgentTask.id).label('total'),
+                func.sum(func.case((AgentTask.status == 'completed', 1), else_=0)).label('completed')
+            )
+        )
+        stats = result.first()
+        total_completed = stats.total or 0
+        completed = stats.completed or 0
+        average_success_rate = (completed / total_completed * 100.0) if total_completed > 0 else 0.0
+        
+        # Find most active agent type
+        result = await db.execute(
+            select(AgentTask.agent_type, func.count(AgentTask.id).label('count'))
+            .where(AgentTask.status == 'completed')
+            .group_by(AgentTask.agent_type)
+            .order_by(func.count(AgentTask.id).desc())
+            .limit(1)
+        )
+        most_active = result.first()
+        most_active_agent = None
+        if most_active:
+            try:
+                agent_type_str = most_active.agent_type.upper()
+                most_active_agent = AgentType[agent_type_str] if agent_type_str in [e.name for e in AgentType] else None
+            except (KeyError, AttributeError):
+                pass
+        
+        # Get recent activities (last 5 completed tasks)
+        result = await db.execute(
+            select(AgentTask)
+            .where(AgentTask.status == 'completed')
+            .order_by(AgentTask.completed_at.desc())
+            .limit(5)
+        )
+        recent_tasks = result.scalars().all()
+        
+        recent_activities = []
+        for task in recent_tasks:
+            try:
+                agent_type_str = task.agent_type.upper()
+                agent_type = AgentType[agent_type_str] if agent_type_str in [e.name for e in AgentType] else AgentType.CODER
+            except (KeyError, AttributeError):
+                agent_type = AgentType.CODER
+            
+            completed_at = task.completed_at or datetime.now(timezone.utc)
+            if completed_at.tzinfo is None:
+                completed_at = completed_at.replace(tzinfo=timezone.utc)
+            
+            recent_activities.append(AgentActivity(
+                id=task.task_id,
+                agent_type=agent_type,
+                agent_id=task.agent_id or f"{task.project_id}-{task.agent_type}",
+                event_type="task_completed",
+                message=f"Completed task: {task.task_name}",
+                timestamp=completed_at,
+                task_id=task.task_id,
+                metadata=None
+            ))
+        
+        return DashboardStats(
+            total_projects=total_projects,
+            active_projects=active_projects,
+            total_tasks=total_tasks,
+            active_tasks=active_tasks,
+            completed_tasks_today=completed_tasks_today,
+            average_success_rate=average_success_rate,
+            most_active_agent=most_active_agent,
+            recent_activities=recent_activities
         )
     
     @strawberry.field
     async def system_metrics(self, info) -> SystemMetrics:
         """
-        Get real-time system metrics
+        Get real-time system metrics from REAL database data
         
         Example:
         query {
@@ -280,17 +658,118 @@ class Query:
           }
         }
         """
-        # In production, collect from monitoring system
+        db: AsyncSession = getattr(info.context, 'db', None) if info.context else None
+        
+        if not db:
+            logger.warning("No database session available for system_metrics")
+            return SystemMetrics(
+                timestamp=datetime.now(timezone.utc),
+                active_agents=0,
+                active_tasks=0,
+                tasks_completed_today=0,
+                tasks_failed_today=0,
+                average_task_duration_seconds=0.0,
+                system_health_score=0.0,
+                cpu_usage_percent=0.0,
+                memory_usage_percent=0.0
+            )
+        
+        # Get REAL metrics from database
+        from ..models.agent_tasks import AgentTask
+        from ..models.llm_config import LLMProjectConfig, LLMAgentConfig
+        from datetime import datetime, timezone, timedelta
+        import psutil
+        
+        # Count active agents (agents with running tasks)
+        result = await db.execute(
+            select(func.count(func.distinct(AgentTask.agent_type)))
+            .where(AgentTask.status.in_(['started', 'running']))
+        )
+        active_agents = result.scalar() or 0
+        
+        # Count active tasks
+        result = await db.execute(
+            select(func.count(AgentTask.id))
+            .where(AgentTask.status.in_(['started', 'running']))
+        )
+        active_tasks = result.scalar() or 0
+        
+        # Tasks completed today
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        result = await db.execute(
+            select(func.count(AgentTask.id))
+            .where(
+                and_(
+                    AgentTask.status == 'completed',
+                    AgentTask.completed_at >= today_start
+                )
+            )
+        )
+        tasks_completed_today = result.scalar() or 0
+        
+        # Tasks failed today
+        result = await db.execute(
+            select(func.count(AgentTask.id))
+            .where(
+                and_(
+                    AgentTask.status == 'failed',
+                    AgentTask.failed_at >= today_start
+                )
+            )
+        )
+        tasks_failed_today = result.scalar() or 0
+        
+        # Average task duration (from completed tasks)
+        result = await db.execute(
+            select(func.avg(AgentTask.actual_duration_seconds))
+            .where(
+                and_(
+                    AgentTask.status == 'completed',
+                    AgentTask.actual_duration_seconds.isnot(None)
+                )
+            )
+        )
+        avg_duration = result.scalar() or 0.0
+        
+        # System health score (based on success rate)
+        result = await db.execute(
+            select(
+                func.count(AgentTask.id).label('total'),
+                func.sum(func.case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
+                func.sum(func.case((AgentTask.status == 'failed', 1), else_=0)).label('failed')
+            )
+        )
+        stats = result.first()
+        total = stats.total or 0
+        completed = stats.completed or 0
+        failed = stats.failed or 0
+        
+        if total > 0:
+            system_health_score = ((completed - failed * 0.5) / total) * 100.0
+            system_health_score = max(0.0, min(100.0, system_health_score))
+        else:
+            system_health_score = 100.0  # No tasks = healthy
+        
+        # System resource usage (from psutil)
+        try:
+            cpu_usage_percent = psutil.cpu_percent(interval=0.1)
+            memory = psutil.virtual_memory()
+            memory_usage_percent = memory.percent
+        except Exception:
+            # Fallback if psutil not available
+            cpu_usage_percent = 0.0
+            memory_usage_percent = 0.0
+        
         return SystemMetrics(
-            timestamp=datetime.utcnow(),
-            active_agents=12,
-            active_tasks=5,
-            tasks_completed_today=45,
-            tasks_failed_today=2,
-            average_task_duration_seconds=120.5,
-            system_health_score=98.5,
-            cpu_usage_percent=35.2,
-            memory_usage_percent=62.8
+            timestamp=datetime.now(timezone.utc),
+            active_agents=active_agents,
+            active_tasks=active_tasks,
+            tasks_completed_today=tasks_completed_today,
+            tasks_failed_today=tasks_failed_today,
+            average_task_duration_seconds=float(avg_duration),
+            system_health_score=system_health_score,
+            cpu_usage_percent=cpu_usage_percent,
+            memory_usage_percent=memory_usage_percent
         )
 
 
@@ -323,7 +802,7 @@ class Mutation:
           }
         }
         """
-        db: AsyncSession = info.context["db"]
+        db: AsyncSession = getattr(info.context, 'db', None) if info.context else None
         
         # In production, insert into database
         new_project = Project(
@@ -371,7 +850,7 @@ class Mutation:
           }
         }
         """
-        db: AsyncSession = info.context["db"]
+        db: AsyncSession = getattr(info.context, 'db', None) if info.context else None
         
         # In production, update in database
         # For now, return mock updated task
@@ -512,4 +991,37 @@ class Subscription:
             
             yield metrics
             await asyncio.sleep(interval_seconds)
+    
+    @strawberry.subscription
+    async def project_updates(
+        self,
+        info,
+        project_id: str
+    ) -> AsyncGenerator[Project, None]:
+        """
+        Subscribe to real-time project status updates
+        
+        Example:
+        subscription {
+          projectUpdates(projectId: "project-1") {
+            id
+            name
+            status
+            completionPercentage
+            totalTasks
+            completedTasks
+            updatedAt
+          }
+        }
+        """
+        logger.info(f"New subscription: project_updates (project: {project_id})")
+        
+        while True:
+            event = await subscription_queue.get()
+            
+            if event["type"] == "project_updated" and event.get("project", {}).get("id") == project_id:
+                yield event["project"]
+            
+            # Small delay to prevent overwhelming clients
+            await asyncio.sleep(0.1)
 

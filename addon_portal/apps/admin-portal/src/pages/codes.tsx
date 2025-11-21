@@ -9,8 +9,11 @@ import { getCodes, generateCodes, revokeCode, type ActivationCode } from '../lib
 import { getTenants, type Tenant } from '../lib/api';
 
 export default function CodesPage() {
-  const [allCodes, setAllCodes] = useState<ActivationCode[]>([]);
-  const [filteredCodes, setFilteredCodes] = useState<ActivationCode[]>([]);
+  const [codes, setCodes] = useState<ActivationCode[]>([]);
+  const [totalCodes, setTotalCodes] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalPages, setTotalPages] = useState(1);
   const [selectedTenant, setSelectedTenant] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -18,15 +21,20 @@ export default function CodesPage() {
   const [showQRCode, setShowQRCode] = useState<string | null>(null);
   const [generatedCodes, setGeneratedCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingCodes, setLoadingCodes] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loadingTenants, setLoadingTenants] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load codes and tenants
+  // Load tenants on mount
   useEffect(() => {
-    loadCodes();
     loadTenants();
   }, []);
+
+  // Load codes when filters or pagination changes
+  useEffect(() => {
+    loadCodes();
+  }, [currentPage, pageSize, selectedTenant, selectedStatus, searchQuery]);
 
   const loadTenants = async () => {
     try {
@@ -42,39 +50,41 @@ export default function CodesPage() {
 
   const loadCodes = async () => {
     try {
-      const codes = await getCodes();
-      setAllCodes(codes);
-      setFilteredCodes(codes);
+      setLoadingCodes(true);
+      const tenantSlug = selectedTenant !== 'all' ? selectedTenant : undefined;
+      const status = selectedStatus !== 'all' ? selectedStatus : undefined;
+      const search = searchQuery.trim() || undefined;
+      const response = await getCodes(tenantSlug, currentPage, pageSize, status, search);
+      
+      setCodes(response.codes);
+      setTotalCodes(response.total);
+      setTotalPages(response.total_pages);
+      
+      // Reset to page 1 if current page is beyond total pages
+      if (currentPage > response.total_pages && response.total_pages > 0) {
+        setCurrentPage(1);
+      }
     } catch (error) {
       console.error('Error loading codes:', error);
+      setCodes([]);
+      setTotalCodes(0);
+      setTotalPages(1);
+    } finally {
+      setLoadingCodes(false);
     }
   };
 
-  // Apply filters whenever search, tenant, or status changes
-  useEffect(() => {
-    let filtered = [...allCodes];
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setCurrentPage(1); // Reset to first page when changing page size
+  };
 
-    // Filter by tenant
-    if (selectedTenant !== 'all') {
-      filtered = filtered.filter(code => code.tenant.toLowerCase().includes(selectedTenant.toLowerCase()));
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-
-    // Filter by status
-    if (selectedStatus !== 'all') {
-      filtered = filtered.filter(code => code.status === selectedStatus);
-    }
-
-    // Filter by search query
-    if (searchQuery) {
-      filtered = filtered.filter(code => 
-        code.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        code.tenant.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        code.label?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    setFilteredCodes(filtered);
-  }, [searchQuery, selectedTenant, selectedStatus, allCodes]);
+  };
 
   const handleGenerateCodes = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -139,7 +149,7 @@ export default function CodesPage() {
     setTimeout(() => notification.remove(), 2000);
   };
 
-  const uniqueTenants = Array.from(new Set(allCodes.map(c => c.tenant)));
+  const uniqueTenants = Array.from(new Set(tenants.map(t => t.slug)));
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -197,14 +207,17 @@ export default function CodesPage() {
 
         {/* Filters */}
         <div className="bg-white rounded-2xl p-6 shadow-lg mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
               <input
                 type="text"
                 placeholder="Search codes, tenant, or label..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1); // Reset to first page when search changes
+                }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
@@ -212,12 +225,15 @@ export default function CodesPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Tenant</label>
               <select
                 value={selectedTenant}
-                onChange={(e) => setSelectedTenant(e.target.value)}
+                onChange={(e) => {
+                  setSelectedTenant(e.target.value);
+                  setCurrentPage(1); // Reset to first page when filter changes
+                }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
                 <option value="all">All Tenants</option>
-                {uniqueTenants.map(tenant => (
-                  <option key={tenant} value={tenant}>{tenant}</option>
+                {tenants.map(tenant => (
+                  <option key={tenant.slug} value={tenant.slug}>{tenant.name} ({tenant.slug})</option>
                 ))}
               </select>
             </div>
@@ -225,7 +241,10 @@ export default function CodesPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
               <select
                 value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
+                onChange={(e) => {
+                  setSelectedStatus(e.target.value);
+                  setCurrentPage(1); // Reset to first page when filter changes
+                }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
                 <option value="all">All Statuses</option>
@@ -235,9 +254,28 @@ export default function CodesPage() {
                 <option value="revoked">Revoked</option>
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Items Per Page</label>
+              <select
+                value={pageSize}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+              </select>
+            </div>
           </div>
-          <div className="mt-4 text-sm text-gray-600">
-            Showing {filteredCodes.length} of {allCodes.length} codes
+          <div className="mt-4 flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              Showing {codes.length > 0 ? ((currentPage - 1) * pageSize + 1) : 0} to {Math.min(currentPage * pageSize, totalCodes)} of {totalCodes} codes
+            </div>
+            {loadingCodes && (
+              <div className="text-sm text-gray-500">Loading...</div>
+            )}
           </div>
         </div>
 
@@ -257,7 +295,13 @@ export default function CodesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredCodes.length === 0 ? (
+                {loadingCodes ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                      Loading codes...
+                    </td>
+                  </tr>
+                ) : codes.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                       {searchQuery || selectedTenant !== 'all' || selectedStatus !== 'all' 
@@ -266,7 +310,7 @@ export default function CodesPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredCodes.map((code, i) => (
+                  codes.map((code, i) => (
                     <motion.tr
                       key={code.id}
                       initial={{ opacity: 0, y: 10 }}
@@ -351,6 +395,72 @@ export default function CodesPage() {
               </tbody>
             </table>
           </div>
+          
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      currentPage === 1
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                    }`}
+                  >
+                    ← Previous
+                  </button>
+                  
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum: number;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => handlePageChange(pageNum)}
+                          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                            currentPage === pageNum
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      currentPage === totalPages
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                    }`}
+                  >
+                    Next →
+                  </button>
+                </div>
+                
+                <div className="text-sm text-gray-600">
+                  Page {currentPage} of {totalPages}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 

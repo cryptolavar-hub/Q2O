@@ -6,17 +6,19 @@ from typing import Iterable, Optional, Sequence
 
 from sqlalchemy import asc, delete, desc, func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload, selectinload
 
 from ..core.exceptions import InvalidOperationError, PlanNotFoundError, TenantConflictError, TenantNotFoundError
 from ..core.logging import get_logger
-from ..models.licensing import Plan, Subscription, SubscriptionState, Tenant
+from ..models.licensing import Plan, Subscription, SubscriptionState, Tenant, ActivationCode
 from .activation_code_service import generate_codes
 from ..schemas.tenant import (
     SortDirection,
     TenantCollectionResponse,
     TenantCreatePayload,
     TenantResponse,
+    TenantSubscriptionInfo,
     TenantSortField,
     TenantUpdatePayload,
 )
@@ -45,10 +47,23 @@ def _apply_sorting(sort_field: TenantSortField, sort_direction: SortDirection) -
     return (ordering, desc(Tenant.created_at))
 
 
-def _load_subscription_details(tenant: Tenant) -> TenantResponse:
+async def _load_subscription_details(session: AsyncSession, tenant: Tenant) -> TenantResponse:
+    """Load tenant details including subscription and activation code usage."""
     subscription: Optional[Subscription] = tenant.subscriptions[0] if tenant.subscriptions else None
     subscription_plan = subscription.plan.name if subscription and subscription.plan else None
-    subscription_state = subscription.state if subscription else None
+    subscription_state = subscription.state.value if subscription and subscription.state else None
+
+    # Calculate activation code usage
+    from sqlalchemy import func, case
+    codes_result = await session.execute(
+        select(
+            func.count(ActivationCode.id).label('total'),
+            func.sum(case((ActivationCode.use_count > 0, 1), else_=0)).label('used')
+        ).where(ActivationCode.tenant_id == tenant.id)
+    )
+    codes_stats = codes_result.first()
+    activation_codes_total = codes_stats.total or 0 if codes_stats else 0
+    activation_codes_used = int(codes_stats.used or 0) if codes_stats else 0
 
     return TenantResponse(
         id=tenant.id,
@@ -57,18 +72,23 @@ def _load_subscription_details(tenant: Tenant) -> TenantResponse:
         logo_url=tenant.logo_url,
         primary_color=tenant.primary_color,
         domain=tenant.domain,
+        email=tenant.email,
+        phone_number=tenant.phone_number,
         usage_quota=tenant.usage_quota,
         usage_current=tenant.usage_current,
+        activation_codes_total=activation_codes_total,
+        activation_codes_used=activation_codes_used,
         created_at=tenant.created_at.isoformat(),
-        subscription={
-            "plan_name": subscription_plan,
-            "status": subscription_state,
-        },
+        updated_at=tenant.updated_at.isoformat() if tenant.updated_at else tenant.created_at.isoformat(),
+        subscription=TenantSubscriptionInfo(
+            plan_name=subscription_plan,
+            status=subscription_state,
+        ),
     )
 
 
-def list_tenants(
-    session: Session,
+async def list_tenants(
+    session: AsyncSession,
     *,
     page: int,
     page_size: int,
@@ -102,7 +122,14 @@ def list_tenants(
         )
 
         if status is not None:
-            base_stmt = base_stmt.join(Tenant.subscriptions).where(Subscription.state == status)
+            # Join subscriptions to filter by state
+            # Use outerjoin to handle tenants without subscriptions
+            if status == SubscriptionState.none:
+                # Filter for tenants with no subscription
+                base_stmt = base_stmt.outerjoin(Subscription).where(Subscription.id.is_(None))
+            else:
+                # Filter for tenants with subscription matching the status
+                base_stmt = base_stmt.join(Subscription).where(Subscription.state == status)
 
         if search:
             pattern = f"%{search.strip().lower()}%"
@@ -110,32 +137,37 @@ def list_tenants(
                 func.lower(Tenant.name).like(pattern) | func.lower(Tenant.slug).like(pattern)
             )
 
-        total = session.execute(
+        result = await session.execute(
             base_stmt.with_only_columns(func.count(func.distinct(Tenant.id))).order_by(None)
-        ).scalar_one()
+        )
+        total = result.scalar_one()
 
         ordering = _apply_sorting(sort_field, sort_direction)
-        tenants: Sequence[Tenant] = (
-            session.execute(
-                base_stmt.order_by(*ordering).offset((page - 1) * page_size).limit(page_size)
-            )
-            .scalars()
-            .unique()
-            .all()
+        result = await session.execute(
+            base_stmt.order_by(*ordering).offset((page - 1) * page_size).limit(page_size)
         )
+        tenants: Sequence[Tenant] = result.scalars().unique().all()
 
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 1  # Ceiling division
+        
+        # Load subscription details with activation code usage (async)
+        items = []
+        for tenant in tenants:
+            items.append(await _load_subscription_details(session, tenant))
+        
         return TenantCollectionResponse(
-            items=[_load_subscription_details(tenant) for tenant in tenants],
+            items=items,
             total=total,
             page=page,
             page_size=page_size,
+            total_pages=total_pages,
         )
     except SQLAlchemyError as exc:
         LOGGER.error("tenant_query_failed", extra={"error": str(exc)})
         raise InvalidOperationError("Failed to retrieve tenants.") from exc
 
 
-def create_tenant(session: Session, payload: TenantCreatePayload) -> TenantResponse:
+async def create_tenant(session: AsyncSession, payload: TenantCreatePayload) -> TenantResponse:
     """Create a new tenant and associated subscription.
 
     Args:
@@ -151,7 +183,8 @@ def create_tenant(session: Session, payload: TenantCreatePayload) -> TenantRespo
         InvalidOperationError: For unexpected database failures.
     """
 
-    plan = session.execute(select(Plan).where(Plan.name == payload.subscription_plan)).scalar_one_or_none()
+    result = await session.execute(select(Plan).where(Plan.name == payload.subscription_plan))
+    plan = result.scalar_one_or_none()
     if plan is None:
         raise PlanNotFoundError("Subscription plan not found.", detail={"plan": payload.subscription_plan})
 
@@ -161,15 +194,18 @@ def create_tenant(session: Session, payload: TenantCreatePayload) -> TenantRespo
         logo_url=str(payload.logo_url) if payload.logo_url else None,
         primary_color=payload.primary_color,
         domain=payload.domain,
+        email=payload.email,
+        phone_number=payload.phone_number,
+        otp_delivery_method=payload.otp_delivery_method or "email",
         usage_quota=payload.usage_quota,
     )
 
     session.add(new_tenant)
 
     try:
-        session.flush()
+        await session.flush()
     except IntegrityError as exc:
-        session.rollback()
+        await session.rollback()
         LOGGER.warning("tenant_slug_conflict", extra={"slug": payload.slug})
         raise TenantConflictError("A tenant with this slug already exists.") from exc
 
@@ -184,7 +220,7 @@ def create_tenant(session: Session, payload: TenantCreatePayload) -> TenantRespo
         # Log tenant creation event BEFORE committing (so it's part of the same transaction)
         try:
             from ..services.event_service import log_tenant_created
-            log_tenant_created(
+            await log_tenant_created(
                 session=session,
                 tenant_id=new_tenant.id,
                 tenant_name=new_tenant.name,
@@ -194,9 +230,9 @@ def create_tenant(session: Session, payload: TenantCreatePayload) -> TenantRespo
             LOGGER.error("event_logging_failed", extra={"error": str(e), "event": "tenant_created"})
         
         # Commit everything together (tenant, subscription, and event)
-        session.commit()
+        await session.commit()
     except SQLAlchemyError as exc:
-        session.rollback()
+        await session.rollback()
         LOGGER.error("tenant_creation_failed", extra={"tenantId": new_tenant.id, "error": str(exc)})
         raise InvalidOperationError("Tenant creation failed due to a database error.") from exc
     
@@ -204,7 +240,7 @@ def create_tenant(session: Session, payload: TenantCreatePayload) -> TenantRespo
     try:
         quota = plan.monthly_run_quota
         code_count = max(1, int(quota * 0.1))  # 10% of quota, minimum 1 code
-        generated_codes = generate_codes(
+        generated_codes = await generate_codes(
             session=session,
             tenant_id=new_tenant.id,
             count=code_count,
@@ -227,18 +263,51 @@ def create_tenant(session: Session, payload: TenantCreatePayload) -> TenantRespo
             extra={"tenant_id": new_tenant.id, "error": str(exc)},
         )
 
-    session.refresh(new_tenant)
-    return _load_subscription_details(new_tenant)
+    # Generate and send OTP on tenant creation (only if email is provided)
+    if new_tenant.email:
+        try:
+            from .tenant_auth_service import generate_otp
+            # Generate OTP and send via email
+            await generate_otp(new_tenant.slug, session)
+            LOGGER.info(
+                "tenant_creation_otp_sent",
+                extra={
+                    "tenant_id": new_tenant.id,
+                    "tenant_slug": new_tenant.slug,
+                    "email": new_tenant.email,
+                },
+            )
+        except Exception as exc:
+            # Log but don't fail tenant creation if OTP generation fails
+            LOGGER.warning(
+                "tenant_creation_otp_failed",
+                extra={
+                    "tenant_id": new_tenant.id,
+                    "tenant_slug": new_tenant.slug,
+                    "error": str(exc),
+                },
+            )
+
+    # Eagerly load subscriptions before accessing them
+    await session.refresh(new_tenant)
+    result = await session.execute(
+        select(Tenant)
+        .where(Tenant.id == new_tenant.id)
+        .options(selectinload(Tenant.subscriptions).selectinload(Subscription.plan))
+    )
+    tenant_with_subs = result.scalar_one()
+    return await _load_subscription_details(session, tenant_with_subs)
 
 
-def update_tenant(session: Session, slug: str, payload: TenantUpdatePayload) -> TenantResponse:
+async def update_tenant(session: AsyncSession, slug: str, payload: TenantUpdatePayload) -> TenantResponse:
     """Update a tenant and synchronize subscription information."""
 
-    tenant = session.execute(
+    result = await session.execute(
         select(Tenant)
         .options(joinedload(Tenant.subscriptions).joinedload(Subscription.plan))
         .where(Tenant.slug == slug)
-    ).unique().scalar_one_or_none()
+    )
+    tenant = result.unique().scalar_one_or_none()
 
     if tenant is None:
         raise TenantNotFoundError("Tenant not found.", detail={"slug": slug})
@@ -251,11 +320,16 @@ def update_tenant(session: Session, slug: str, payload: TenantUpdatePayload) -> 
         tenant.primary_color = payload.primary_color
     if payload.domain is not None:
         tenant.domain = payload.domain
+    if payload.email is not None:
+        tenant.email = payload.email
+    if payload.phone_number is not None:
+        tenant.phone_number = payload.phone_number
     if payload.usage_quota is not None:
         tenant.usage_quota = payload.usage_quota
 
     if payload.subscription_plan is not None:
-        plan = session.execute(select(Plan).where(Plan.name == payload.subscription_plan)).scalar_one_or_none()
+        result = await session.execute(select(Plan).where(Plan.name == payload.subscription_plan))
+        plan = result.scalar_one_or_none()
         if plan is None:
             raise PlanNotFoundError("Subscription plan not found.", detail={"plan": payload.subscription_plan})
 
@@ -276,13 +350,17 @@ def update_tenant(session: Session, slug: str, payload: TenantUpdatePayload) -> 
         changes["primary_color"] = {"old": tenant.primary_color, "new": payload.primary_color}
     if payload.domain is not None:
         changes["domain"] = {"old": tenant.domain, "new": payload.domain}
+    if payload.email is not None and payload.email != tenant.email:
+        changes["email"] = {"old": tenant.email, "new": payload.email}
+    if payload.phone_number is not None and payload.phone_number != tenant.phone_number:
+        changes["phone_number"] = {"old": tenant.phone_number, "new": payload.phone_number}
     if payload.usage_quota is not None:
         changes["usage_quota"] = {"old": tenant.usage_quota, "new": payload.usage_quota}
     
     try:
-        session.commit()
+        await session.commit()
     except SQLAlchemyError as exc:
-        session.rollback()
+        await session.rollback()
         LOGGER.error("tenant_update_failed", extra={"tenantId": tenant.id, "error": str(exc)})
         raise InvalidOperationError("Tenant update failed due to a database error.") from exc
 
@@ -290,7 +368,7 @@ def update_tenant(session: Session, slug: str, payload: TenantUpdatePayload) -> 
     if changes:
         try:
             from ..services.event_service import log_tenant_updated
-            log_tenant_updated(
+            await log_tenant_updated(
                 session=session,
                 tenant_id=tenant.id,
                 tenant_name=tenant.name,
@@ -300,26 +378,34 @@ def update_tenant(session: Session, slug: str, payload: TenantUpdatePayload) -> 
             # Event logging failed (table might not exist) - log warning but don't fail tenant update
             LOGGER.warning("event_logging_failed", extra={"error": str(e), "event": "tenant_updated"})
 
-    session.refresh(tenant)
-    return _load_subscription_details(tenant)
+    # Reload tenant with subscriptions after refresh (refresh may clear relationships)
+    await session.refresh(tenant)
+    result = await session.execute(
+        select(Tenant)
+        .where(Tenant.id == tenant.id)
+        .options(selectinload(Tenant.subscriptions).selectinload(Subscription.plan))
+    )
+    tenant_with_subs = result.scalar_one()
+    return await _load_subscription_details(session, tenant_with_subs)
 
 
-def get_tenant_by_slug(session: Session, slug: str) -> TenantResponse:
+async def get_tenant_by_slug(session: AsyncSession, slug: str) -> TenantResponse:
     """Return a single tenant by slug."""
 
-    tenant = session.execute(
+    result = await session.execute(
         select(Tenant)
         .options(selectinload(Tenant.subscriptions).selectinload(Subscription.plan))
         .where(Tenant.slug == slug)
-    ).scalar_one_or_none()
+    )
+    tenant = result.scalar_one_or_none()
 
     if tenant is None:
         raise TenantNotFoundError("Tenant not found.", detail={"slug": slug})
 
-    return _load_subscription_details(tenant)
+    return await _load_subscription_details(session, tenant)
 
 
-def get_tenant_deletion_impact(session: Session, slug: str) -> dict:
+async def get_tenant_deletion_impact(session: AsyncSession, slug: str) -> dict:
     """Get a summary of all records that will be deleted with a tenant.
 
     Args:
@@ -341,70 +427,81 @@ def get_tenant_deletion_impact(session: Session, slug: str) -> dict:
     )
     from ..models.llm_config import LLMProjectConfig, LLMAgentConfig
 
-    tenant = session.execute(select(Tenant).where(Tenant.slug == slug)).scalar_one_or_none()
+    result = await session.execute(select(Tenant).where(Tenant.slug == slug))
+    tenant = result.scalar_one_or_none()
     if tenant is None:
         raise TenantNotFoundError("Tenant not found.", detail={"slug": slug})
 
     tenant_id = tenant.id
 
     # Count related records
-    activation_codes_count = session.execute(
+    result = await session.execute(
         select(func.count(ActivationCode.id)).where(ActivationCode.tenant_id == tenant_id)
-    ).scalar_one() or 0
+    )
+    activation_codes_count = result.scalar_one() or 0
 
-    active_codes_count = session.execute(
+    result = await session.execute(
         select(func.count(ActivationCode.id)).where(
             ActivationCode.tenant_id == tenant_id,
             ActivationCode.revoked_at.is_(None),
         )
-    ).scalar_one() or 0
+    )
+    active_codes_count = result.scalar_one() or 0
 
-    devices_count = session.execute(
+    result = await session.execute(
         select(func.count(Device.id)).where(Device.tenant_id == tenant_id)
-    ).scalar_one() or 0
+    )
+    devices_count = result.scalar_one() or 0
 
-    active_devices_count = session.execute(
+    result = await session.execute(
         select(func.count(Device.id)).where(
             Device.tenant_id == tenant_id,
             Device.is_revoked == False,
         )
-    ).scalar_one() or 0
+    )
+    active_devices_count = result.scalar_one() or 0
 
-    subscriptions_count = session.execute(
+    result = await session.execute(
         select(func.count(Subscription.id)).where(Subscription.tenant_id == tenant_id)
-    ).scalar_one() or 0
+    )
+    subscriptions_count = result.scalar_one() or 0
 
-    usage_events_count = session.execute(
+    result = await session.execute(
         select(func.count(UsageEvent.id)).where(UsageEvent.tenant_id == tenant_id)
-    ).scalar_one() or 0
+    )
+    usage_events_count = result.scalar_one() or 0
 
-    usage_rollups_count = session.execute(
+    result = await session.execute(
         select(func.count(MonthlyUsageRollup.id)).where(MonthlyUsageRollup.tenant_id == tenant_id)
-    ).scalar_one() or 0
+    )
+    usage_rollups_count = result.scalar_one() or 0
 
     # Check for LLM projects associated with tenant (by client_name matching tenant name or domain)
     llm_projects_count = 0
     llm_agents_count = 0
     if tenant.name:
-        llm_projects_count = session.execute(
+        result = await session.execute(
             select(func.count(LLMProjectConfig.id)).where(
                 func.lower(LLMProjectConfig.client_name) == func.lower(tenant.name)
             )
-        ).scalar_one() or 0
+        )
+        llm_projects_count = result.scalar_one() or 0
 
         if llm_projects_count > 0:
             # Get project IDs to count agents
-            project_ids = session.execute(
+            result = await session.execute(
                 select(LLMProjectConfig.project_id).where(
                     func.lower(LLMProjectConfig.client_name) == func.lower(tenant.name)
                 )
-            ).scalars().all()
+            )
+            project_ids = result.scalars().all()
             if project_ids:
-                llm_agents_count = session.execute(
+                result = await session.execute(
                     select(func.count(LLMAgentConfig.id)).where(
                         LLMAgentConfig.project_id.in_(project_ids)
                     )
-                ).scalar_one() or 0
+                )
+                llm_agents_count = result.scalar_one() or 0
 
     return {
         "tenant": {
@@ -430,7 +527,7 @@ def get_tenant_deletion_impact(session: Session, slug: str) -> dict:
     }
 
 
-def delete_tenant(session: Session, slug: str) -> None:
+async def delete_tenant(session: AsyncSession, slug: str) -> None:
     """Permanently remove a tenant and all related records.
 
     Deletion order (to avoid foreign key constraint violations):
@@ -461,7 +558,8 @@ def delete_tenant(session: Session, slug: str) -> None:
     )
     from ..models.llm_config import LLMProjectConfig, LLMAgentConfig
 
-    tenant = session.execute(select(Tenant).where(Tenant.slug == slug)).scalar_one_or_none()
+    result = await session.execute(select(Tenant).where(Tenant.slug == slug))
+    tenant = result.scalar_one_or_none()
     if tenant is None:
         raise TenantNotFoundError("Tenant not found.", detail={"slug": slug})
 
@@ -470,7 +568,7 @@ def delete_tenant(session: Session, slug: str) -> None:
 
     try:
         # Step 1: Revoke all active activation codes
-        session.execute(
+        await session.execute(
             update(ActivationCode)
             .where(ActivationCode.tenant_id == tenant_id, ActivationCode.revoked_at.is_(None))
             .values(revoked_at=now)
@@ -478,7 +576,7 @@ def delete_tenant(session: Session, slug: str) -> None:
         LOGGER.info("revoked_activation_codes", extra={"tenantId": tenant_id})
 
         # Step 2: Revoke all active devices
-        session.execute(
+        await session.execute(
             update(Device)
             .where(Device.tenant_id == tenant_id, Device.is_revoked == False)
             .values(is_revoked=True)
@@ -486,38 +584,39 @@ def delete_tenant(session: Session, slug: str) -> None:
         LOGGER.info("revoked_devices", extra={"tenantId": tenant_id})
 
         # Step 3: Delete usage events and rollups
-        session.execute(delete(UsageEvent).where(UsageEvent.tenant_id == tenant_id))
-        session.execute(delete(MonthlyUsageRollup).where(MonthlyUsageRollup.tenant_id == tenant_id))
+        await session.execute(delete(UsageEvent).where(UsageEvent.tenant_id == tenant_id))
+        await session.execute(delete(MonthlyUsageRollup).where(MonthlyUsageRollup.tenant_id == tenant_id))
         LOGGER.info("deleted_usage_records", extra={"tenantId": tenant_id})
 
         # Step 4: Delete subscriptions
-        session.execute(delete(Subscription).where(Subscription.tenant_id == tenant_id))
+        await session.execute(delete(Subscription).where(Subscription.tenant_id == tenant_id))
         LOGGER.info("deleted_subscriptions", extra={"tenantId": tenant_id})
 
         # Step 5: Delete activation codes
-        session.execute(delete(ActivationCode).where(ActivationCode.tenant_id == tenant_id))
+        await session.execute(delete(ActivationCode).where(ActivationCode.tenant_id == tenant_id))
         LOGGER.info("deleted_activation_codes", extra={"tenantId": tenant_id})
 
         # Step 6: Delete devices
-        session.execute(delete(Device).where(Device.tenant_id == tenant_id))
+        await session.execute(delete(Device).where(Device.tenant_id == tenant_id))
         LOGGER.info("deleted_devices", extra={"tenantId": tenant_id})
 
         # Step 7: Delete LLM project configs and agent configs (if associated with tenant)
         if tenant.name:
             # Find projects by client_name matching tenant name
-            project_ids = session.execute(
+            result = await session.execute(
                 select(LLMProjectConfig.project_id).where(
                     func.lower(LLMProjectConfig.client_name) == func.lower(tenant.name)
                 )
-            ).scalars().all()
+            )
+            project_ids = result.scalars().all()
 
             if project_ids:
                 # Delete agent configs first (due to FK constraint)
-                session.execute(
+                await session.execute(
                     delete(LLMAgentConfig).where(LLMAgentConfig.project_id.in_(project_ids))
                 )
                 # Then delete project configs
-                session.execute(
+                await session.execute(
                     delete(LLMProjectConfig).where(LLMProjectConfig.project_id.in_(project_ids))
                 )
                 LOGGER.info(
@@ -529,7 +628,7 @@ def delete_tenant(session: Session, slug: str) -> None:
         # Gracefully handle if table doesn't exist
         try:
             from ..services.event_service import log_tenant_deleted
-            log_tenant_deleted(
+            await log_tenant_deleted(
                 session=session,
                 tenant_id=tenant_id,
                 tenant_name=tenant.name,
@@ -539,11 +638,11 @@ def delete_tenant(session: Session, slug: str) -> None:
             LOGGER.warning("event_logging_failed", extra={"error": str(e), "event": "tenant_deleted"})
         
         # Step 8: Finally delete the tenant
-        session.delete(tenant)
-        session.commit()
+        await session.delete(tenant)
+        await session.commit()
         LOGGER.info("tenant_deleted", extra={"tenantId": tenant_id, "slug": slug})
 
     except SQLAlchemyError as exc:
-        session.rollback()
+        await session.rollback()
         LOGGER.error("tenant_delete_failed", extra={"tenantId": tenant_id, "error": str(exc)})
         raise InvalidOperationError("Failed to delete tenant due to a database error.") from exc

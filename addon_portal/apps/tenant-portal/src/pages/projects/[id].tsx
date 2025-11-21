@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { SessionGuard } from '../../components/SessionGuard';
 import { Navigation } from '../../components/Navigation';
 import { Breadcrumb } from '../../components/Breadcrumb';
-import { getProject, deleteProject, type Project } from '../../lib/projects';
+import { getProject, deleteProject, assignActivationCode, runProject, type Project } from '../../lib/projects';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function ProjectDetailPage() {
@@ -23,6 +23,10 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [showActivationCodeModal, setShowActivationCodeModal] = useState(false);
+  const [activationCodeInput, setActivationCodeInput] = useState('');
+  const [isAssigningCode, setIsAssigningCode] = useState(false);
 
   useEffect(() => {
     if (id && typeof id === 'string') {
@@ -71,6 +75,70 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleAssignActivationCode = async () => {
+    if (!project || !id || typeof id !== 'string' || !activationCodeInput.trim()) {
+      setError('Please enter an activation code');
+      return;
+    }
+
+    setIsAssigningCode(true);
+    setError(null);
+    try {
+      const updatedProject = await assignActivationCode(id, activationCodeInput.trim());
+      setProject(updatedProject);
+      setShowActivationCodeModal(false);
+      setActivationCodeInput('');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to assign activation code';
+      setError(errorMessage);
+    } finally {
+      setIsAssigningCode(false);
+    }
+  };
+
+  const handleRunProject = async () => {
+    if (!project || !id || typeof id !== 'string') return;
+
+    // Validate project can be run
+    if (!project.activation_code_id) {
+      setError('Project must have an activation code assigned before running. Please assign an activation code first.');
+      setShowActivationCodeModal(true);
+      return;
+    }
+
+    if (!project.name || !project.description || !project.objectives) {
+      setError('Project must have Name, Description, and Objectives before running.');
+      return;
+    }
+
+    setIsRunning(true);
+    setError(null);
+    try {
+      const result = await runProject(id);
+      if (result.success) {
+        // Redirect to status page
+        router.push('/status');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to run project';
+      setError(errorMessage);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  const canRunProject = (): { canRun: boolean; reason?: string } => {
+    if (!project) return { canRun: false, reason: 'Project not loaded' };
+    if (!project.activation_code_id) return { canRun: false, reason: 'Activation code required' };
+    if (!project.name || !project.description || !project.objectives) {
+      return { canRun: false, reason: 'Name, Description, and Objectives are required' };
+    }
+    if (project.execution_status === 'running') {
+      return { canRun: false, reason: 'Project is already running' };
+    }
+    return { canRun: true };
+  };
+
   const getStatusColor = (status: Project['status']) => {
     switch (status) {
       case 'active':
@@ -83,6 +151,21 @@ export default function ProjectDetailPage() {
         return 'bg-gray-100 text-gray-800';
       case 'failed':
         return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getExecutionStatusColor = (executionStatus?: string) => {
+    switch (executionStatus) {
+      case 'running':
+        return 'bg-blue-100 text-blue-800';
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'failed':
+        return 'bg-red-100 text-red-800';
+      case 'paused':
+        return 'bg-yellow-100 text-yellow-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -142,7 +225,32 @@ export default function ProjectDetailPage() {
                         <p className="text-gray-600 text-lg">Client: {project.client_name}</p>
                       )}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                      {!project.activation_code_id && (
+                        <button
+                          onClick={() => setShowActivationCodeModal(true)}
+                          className="px-6 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 transition-colors"
+                        >
+                          Assign Activation Code
+                        </button>
+                      )}
+                      {(() => {
+                        const { canRun, reason } = canRunProject();
+                        return (
+                          <button
+                            onClick={handleRunProject}
+                            disabled={!canRun || isRunning}
+                            title={reason}
+                            className={`px-6 py-2 font-semibold rounded-lg transition-colors ${
+                              canRun && !isRunning
+                                ? 'bg-green-500 text-white hover:bg-green-600'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            }`}
+                          >
+                            {isRunning ? 'Running...' : '▶ RUN PROJECT'}
+                          </button>
+                        );
+                      })()}
                       <Link
                         href={`/projects/edit/${project.id}`}
                         className="px-6 py-2 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 transition-colors"
@@ -172,8 +280,16 @@ export default function ProjectDetailPage() {
                     )}
                     {project.activation_code_id && (
                       <div>
-                        <span className="font-semibold">Activation Code ID:</span>{' '}
-                        <span className="font-mono text-xs">{project.activation_code_id}</span>
+                        <span className="font-semibold">Activation Code:</span>{' '}
+                        <span className="font-mono text-xs bg-green-50 px-2 py-1 rounded">Assigned</span>
+                      </div>
+                    )}
+                    {project.execution_status && (
+                      <div>
+                        <span className="font-semibold">Execution Status:</span>{' '}
+                        <span className={`px-2 py-1 rounded text-xs font-semibold capitalize ${getExecutionStatusColor(project.execution_status)}`}>
+                          {project.execution_status}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -208,6 +324,56 @@ export default function ProjectDetailPage() {
             )}
           </div>
         </main>
+
+        {/* Activation Code Assignment Modal */}
+        {showActivationCodeModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full mx-4">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Assign Activation Code</h3>
+              <p className="text-gray-700 mb-4">
+                Enter an activation code to assign to this project. The code must belong to your tenant and be valid.
+              </p>
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Activation Code
+                </label>
+                <input
+                  type="text"
+                  value={activationCodeInput}
+                  onChange={(e) => setActivationCodeInput(e.target.value)}
+                  placeholder="XXXX-XXXX-XXXX-XXXX"
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors font-mono"
+                  disabled={isAssigningCode}
+                />
+              </div>
+              {error && (
+                <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-red-700 text-sm">{error}</p>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowActivationCodeModal(false);
+                    setActivationCodeInput('');
+                    setError(null);
+                  }}
+                  disabled={isAssigningCode}
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAssignActivationCode}
+                  disabled={isAssigningCode || !activationCodeInput.trim()}
+                  className="flex-1 px-4 py-2 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isAssigningCode ? 'Assigning...' : 'Assign Code'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Delete Confirmation Dialog */}
         {showDeleteConfirm && (
