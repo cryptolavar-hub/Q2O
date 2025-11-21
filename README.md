@@ -5,26 +5,26 @@
 
 ---
 
-## 🚨 **LATEST: Tenant Portal Foundation Complete - Week 3 Milestone Achieved (November 20, 2025)** ⭐
+## 🚨 **LATEST: Project Execution Enhancements Complete - November 21, 2025** ⭐
 
-**Major Update**: Q2O Tenant Portal core features are **production-ready** with real-time GraphQL integration:
+**Major Update**: Critical project execution improvements and restart functionality now **production-ready**:
 
-✅ **Week 1-2 Complete**: OTP Authentication, Project Management (CRUD, search, filter), Subscription Validation  
-✅ **Week 3 Complete**: Activation Code System, Project Execution (RUN PROJECT button), Status Page with GraphQL  
-✅ **Task Tracking System**: Dedicated database table with agent integration for real-time progress tracking  
-✅ **GraphQL API**: Real-time subscriptions for live project status updates (no manual refresh needed)  
-✅ **Project Execution**: Full integration with `main.py`, output folder management, execution status tracking  
-✅ **Status Page (Tenant View)**: All active projects with expandable progress bars, search, pagination  
-✅ **Activation Code Usage Tracking**: Real-time usage display in Admin Dashboard (used/total codes)  
+✅ **Restart Functionality**: Failed projects can now be restarted with a single click (failed projects only)  
+✅ **Failed Project Cleanup**: Automatic hourly cleanup job marks stuck projects (>24h) as failed  
+✅ **Workspace Path Fix**: Code files now correctly saved to project output folders  
+✅ **Process Monitoring**: Background task monitors subprocess completion and updates status  
+✅ **Event Loop Fix**: Task tracking now works reliably without event loop binding errors  
+✅ **Project Status Tracking**: Projects correctly marked as "completed" or "failed" upon execution finish  
 
-**Current Progress**: ~60% Complete (7 of 12 weeks) | **Target Launch**: Late December 2025 - Early January 2026
+**Previous Milestones**:
+
+✅ **November 20, 2025**: Tenant Portal Foundation Complete - Week 3 Milestone  
+✅ **November 13, 2025**: Analytics Charts & Data Visualization Complete  
+✅ **November 12, 2025**: Admin Portal Licensing Dashboard Complete (100% production-ready)
+
+**Current Progress**: ~65% Complete (Week 3+ enhancements) | **Target Launch**: Late December 2025 - Early January 2026
 
 **Next Focus**: Tenant Profile & Billing Pages (Week 4-5), then Multi-Agent Dashboard Client View (Week 7-8)
-
-### **Previous Milestones**
-
-**November 13, 2025**: Analytics Charts & Data Visualization Complete  
-**November 12, 2025**: Admin Portal Licensing Dashboard Complete (100% production-ready)
 
 ---
 
@@ -254,6 +254,31 @@ Result: Platform gets smarter and cheaper with every project!
 
 **See**: [Project Status Nov 20, 2025](docs/status_reports/PROJECT_STATUS_NOV20_2025.md) for full details
 
+### **Phase 3.5: Project Execution Enhancements** (November 21, 2025) ✅
+**Critical Bug Fixes & Feature Additions** - Production stability improvements:
+
+**🎯 Achievements**:
+- ✅ **Restart Functionality** - Failed projects can be restarted via API endpoint and UI button
+- ✅ **Failed Project Cleanup** - Hourly background job detects and marks stuck projects (>24h) as failed
+- ✅ **Workspace Path Fix** - Code files now correctly saved to `Tenant_Projects/{project_id}/code/` directory
+- ✅ **Process Monitoring** - Background task monitors subprocess completion and updates `execution_status`
+- ✅ **Event Loop Fix** - Task tracking works reliably without "bound to different event loop" errors
+- ✅ **Project Status Tracking** - Projects correctly marked as "completed" or "failed" upon execution finish
+
+**📊 Implementation**:
+- **New API Endpoint**: `POST /api/tenant/projects/{project_id}/restart` (failed projects only)
+- **Cleanup Job**: FastAPI lifespan context manager with hourly background task
+- **Process Monitoring**: `_monitor_subprocess()` function tracks subprocess completion
+- **Frontend**: Restart button appears automatically for failed projects
+
+**🐛 Critical Bugs Fixed**:
+- ✅ **Workspace Path Issue**: Code files were being written to current directory instead of output folder
+- ✅ **Project Completion Status**: Projects never got marked as "completed" because subprocess was fire-and-forget
+- ✅ **Event Loop Errors**: Database connection pool bound to different event loop causing task tracking failures
+- ✅ **Stuck Projects**: Projects could remain in "running" status indefinitely if process crashed
+
+**See**: [Restart Feature Implementation](docs/implementation_summaries/RESTART_FEATURE_IMPLEMENTATION_COMPLETE.md) | [Fixes Applied Summary](docs/FIXES_APPLIED_SUMMARY.md) | [Project Execution Issues](docs/PROJECT_EXECUTION_ISSUES_AND_FIXES.md)
+
 ### **Phase 4: Tenant Profile & Billing** (In Progress) ⏳
 **Week 4-5** - Profile and Billing pages with Stripe integration
 
@@ -442,9 +467,29 @@ Q2O Platform
 | **Mobile App** | ✅ Ready | iOS & Android (integration testing pending) |
 | **Service Management** | ✅ Automated | Sequential startup with verification |
 
-### **Recent Enhancements (November 13-20, 2025)**
+### **Recent Enhancements (November 13-21, 2025)**
 
-#### **Tenant Portal Foundation - Week 1-3 COMPLETE** ✅
+#### **Project Execution Enhancements - November 21, 2025** ✅
+- ✅ **Restart Functionality**
+  - Restart button appears automatically for failed projects
+  - Only failed projects can be restarted (completed projects cannot)
+  - Validates all requirements before restarting (activation code, subscription, fields)
+  - Resets execution state properly before restarting
+  - User-friendly error messages and loading states
+  
+- ✅ **Failed Project Cleanup**
+  - Hourly background job detects stuck projects (>24 hours)
+  - Automatically marks stuck projects as "failed" with timeout error
+  - Prevents projects from staying in "running" status indefinitely
+  - Configurable timeout via `PROJECT_EXECUTION_TIMEOUT_HOURS` environment variable
+  
+- ✅ **Critical Bug Fixes**
+  - Workspace path now correctly prioritizes `--output-folder` argument
+  - Process monitoring ensures projects are marked as "completed" or "failed"
+  - Event loop binding issues resolved for reliable task tracking
+  - Database connection pool management improved
+
+#### **Tenant Portal Foundation - Week 1-3 COMPLETE** ✅ (November 13-20, 2025)
 - ✅ **OTP Authentication System**
   - Secure login with email/phone OTP delivery
   - Session management (30-min idle, 24h max)
@@ -821,11 +866,14 @@ Q2O includes a **complete licensing and billing system**:
 - ✅ **Activation Code System** - Code generation, assignment, quota tracking, usage counting
 - ✅ **Usage Tracking** (real-time quotas and limits) - Database-backed, real-time updates
 - ✅ **Project Execution** - RUN PROJECT button, `main.py` integration, output folder management
+- ✅ **Project Restart** - Restart failed projects with single click (failed projects only)
+- ✅ **Failed Project Cleanup** - Automatic hourly cleanup of stuck projects (>24h timeout)
 - ✅ **Task Tracking** - Database-backed agent task tracking with LLM usage metrics
 - ✅ **GraphQL API** - Real-time subscriptions for status updates
 
 **Current Implementation Status:**
 - **Week 1-3**: ✅ Complete (OTP Auth, Project Management, Status Page, Execution)
+- **Week 3.5**: ✅ Complete (Restart Functionality, Failed Project Cleanup, Critical Bug Fixes)
 - **Week 4-5**: ⏳ In Progress (Profile Page, Billing Page, Stripe integration)
 - **Week 6-12**: 📅 Planned (Multi-Agent Dashboard Client View, Mobile App, Testing, Documentation)
 
@@ -865,6 +913,14 @@ Q2O includes a **complete licensing and billing system**:
 - [x] Project execution (RUN PROJECT)
 - [x] Status Page with GraphQL
 - [x] Task tracking system
+
+**Phase 3.5: Project Execution Enhancements** (November 21, 2025) ✅
+- [x] Restart functionality for failed projects
+- [x] Failed project cleanup (hourly job)
+- [x] Workspace path fix (code files saved correctly)
+- [x] Process monitoring (subprocess completion tracking)
+- [x] Event loop fix (task tracking reliability)
+- [x] Project status tracking improvements
 
 **Infrastructure** ✅
 - [x] 12 AI agents with task tracking
@@ -960,8 +1016,9 @@ python main.py --project "Your Amazing Project" \
 
 ---
 
-**Platform Version**: 4.1  
-**Last Updated**: November 20, 2025  
+**Platform Version**: 4.2  
+**Last Updated**: November 21, 2025  
 **Repository**: https://github.com/cryptolavar-hub/Q2O  
-**Status**: ✅ Admin Portal 100% Complete | ✅ Tenant Portal Week 1-3 Complete (60% overall) | ⏳ Profile/Billing Pages Next  
-**Implementation Plan**: [See Project Status Report](docs/status_reports/PROJECT_STATUS_NOV20_2025.md) for detailed progress
+**Status**: ✅ Admin Portal 100% Complete | ✅ Tenant Portal Week 1-3 Complete + Execution Enhancements (65% overall) | ⏳ Profile/Billing Pages Next  
+**Recent Updates**: Restart functionality, failed project cleanup, critical bug fixes (workspace path, process monitoring, event loop)  
+**Implementation Plan**: [See Project Status Report](docs/status_reports/PROJECT_STATUS_NOV20_2025.md) | [Restart Feature Docs](docs/implementation_summaries/RESTART_FEATURE_IMPLEMENTATION_COMPLETE.md) | [Bug Fixes Summary](docs/FIXES_APPLIED_SUMMARY.md)
