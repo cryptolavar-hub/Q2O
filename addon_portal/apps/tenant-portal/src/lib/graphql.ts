@@ -213,8 +213,8 @@ export const PROJECT_UPDATES_SUBSCRIPTION = `
 `;
 
 export const SYSTEM_METRICS_STREAM_SUBSCRIPTION = `
-  subscription SystemMetricsStream {
-    systemMetricsStream(intervalSeconds: 5) {
+  subscription SystemMetricsStream($intervalSeconds: Int, $projectId: String) {
+    systemMetricsStream(intervalSeconds: $intervalSeconds, projectId: $projectId) {
       timestamp
       activeAgents
       activeTasks

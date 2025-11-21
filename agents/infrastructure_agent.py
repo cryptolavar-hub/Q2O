@@ -17,8 +17,11 @@ class InfrastructureAgent(BaseAgent):
     """Agent responsible for infrastructure as code tasks."""
 
     def __init__(self, agent_id: str = "infrastructure_main", workspace_path: str = ".", 
-                 project_layout: Optional[ProjectLayout] = None):
-        super().__init__(agent_id, AgentType.INFRASTRUCTURE, project_layout)
+                 project_layout: Optional[ProjectLayout] = None,
+                 project_id: Optional[str] = None,
+                 tenant_id: Optional[int] = None):
+        super().__init__(agent_id, AgentType.INFRASTRUCTURE, project_layout, 
+                        project_id=project_id, tenant_id=tenant_id)
         self.workspace_path = workspace_path
         self.infrastructure_files: List[str] = []
         self.validator = get_validator(workspace_path)

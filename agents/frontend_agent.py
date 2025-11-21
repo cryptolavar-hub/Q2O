@@ -15,8 +15,11 @@ class FrontendAgent(BaseAgent):
     """Agent responsible for Next.js/React/TypeScript frontend development."""
 
     def __init__(self, agent_id: str = "frontend_main", workspace_path: str = ".", 
-                 project_layout: Optional[ProjectLayout] = None):
-        super().__init__(agent_id, AgentType.FRONTEND, project_layout)
+                 project_layout: Optional[ProjectLayout] = None,
+                 project_id: Optional[str] = None,
+                 tenant_id: Optional[int] = None):
+        super().__init__(agent_id, AgentType.FRONTEND, project_layout,
+                        project_id=project_id, tenant_id=tenant_id)
         self.workspace_path = workspace_path
         self.frontend_files: List[str] = []
         self.template_renderer = get_renderer()

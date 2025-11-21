@@ -21,8 +21,11 @@ class NodeAgent(BaseAgent):
     NODEJS_LTS_VERSION = "20.11.0"  # Node.js 20.x LTS
     
     def __init__(self, agent_id: str = "node_main", workspace_path: str = ".", 
-                 project_layout: Optional[ProjectLayout] = None):
-        super().__init__(agent_id, AgentType.NODEJS, project_layout)
+                 project_layout: Optional[ProjectLayout] = None,
+                 project_id: Optional[str] = None,
+                 tenant_id: Optional[int] = None):
+        super().__init__(agent_id, AgentType.NODEJS, project_layout,
+                        project_id=project_id, tenant_id=tenant_id)
         self.workspace_path = workspace_path
         self.node_files: List[str] = []
         self.template_renderer = get_renderer()

@@ -427,6 +427,12 @@ class BaseAgent(ABC):
             try:
                 from agents.task_tracking import create_task_in_db, run_async
                 
+                self.logger.info(
+                    f"Creating database task for {task.id}: "
+                    f"project_id={self.project_id}, tenant_id={self.tenant_id}, "
+                    f"agent_type={self.agent_type.value}"
+                )
+                
                 db_task_id = run_async(create_task_in_db(
                     project_id=self.project_id,
                     agent_type=self.agent_type.value,
@@ -440,9 +446,13 @@ class BaseAgent(ABC):
                 
                 if db_task_id:
                     self.db_task_ids[task.id] = db_task_id
-                    self.logger.info(f"Created database task {db_task_id} for {task.id}")
+                    self.logger.info(f"Successfully created database task {db_task_id} for {task.id}")
+                else:
+                    self.logger.warning(f"Failed to create database task for {task.id} (returned None)")
             except Exception as e:
-                self.logger.warning(f"Failed to create task in database: {e}")
+                self.logger.error(f"Failed to create task in database: {e}", exc_info=True)
+        else:
+            self.logger.warning(f"project_id is None, skipping database task creation for {task.id}")
         
         # Emit dashboard event
         self._emit_task_started(task.id, task)

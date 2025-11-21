@@ -324,9 +324,10 @@ async def calculate_project_progress(
     in_progress_tasks = stats.in_progress or 0
     pending_tasks = stats.pending or 0
     
-    # Calculate completion percentage
+    # Calculate completion percentage (capped at 100%)
     if total_tasks > 0:
         completion_percentage = (completed_tasks / total_tasks) * 100.0
+        completion_percentage = max(0.0, min(100.0, completion_percentage))  # Cap at 100%
     else:
         completion_percentage = 0.0
     

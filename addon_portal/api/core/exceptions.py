@@ -92,6 +92,14 @@ def register_exception_handlers(app: FastAPI) -> None:
             LOGGER.info(f"Skipping Exception for OPTIONS request to {request.url.path}: {type(exc).__name__}: {str(exc)}")
             from starlette.responses import Response
             return Response(status_code=200)
+        
+        # Handle ClientDisconnect gracefully (client closed connection before response)
+        from starlette.requests import ClientDisconnect
+        if isinstance(exc, ClientDisconnect):
+            LOGGER.debug(f"Client disconnected before response: {request.url.path}")
+            from starlette.responses import Response
+            return Response(status_code=499)  # 499 Client Closed Request
+        
         LOGGER.error("unexpected_error", extra={"exception": str(exc), "path": request.url.path, "method": request.method})
         return JSONResponse(
             status_code=int(HTTPStatus.INTERNAL_SERVER_ERROR),

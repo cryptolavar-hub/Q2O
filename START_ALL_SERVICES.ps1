@@ -1,6 +1,6 @@
 # =========================================================================
 # START_ALL_SERVICES.ps1
-# Quick2Odoo Combined - Automated Startup Script with Pre-flight Checks
+# Q2O - Automated Startup Script with Pre-flight Checks
 # =========================================================================
 # This script:
 # 1. Runs comprehensive verification checks
@@ -9,7 +9,7 @@
 # =========================================================================
 
 Write-Host "==========================================================================" -ForegroundColor Cyan
-Write-Host "  Quick2Odoo Combined - Automated Startup Script" -ForegroundColor Cyan
+Write-Host "  Q2O - Automated Startup Script" -ForegroundColor Cyan
 Write-Host "==========================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -580,17 +580,17 @@ if ($newlyStartedPorts.Count -gt 0) {
     Write-Host ""
 
     # Open URLs ONLY for services that were just started (not already running)
-    if ($newlyStartedPorts -contains 8080) {
-        Write-Host "Opening Licensing API documentation..." -ForegroundColor White
-        Start-Process "http://localhost:8080/docs"
-        Start-Sleep -Seconds 2
-    }
+#    if ($newlyStartedPorts -contains 8080) {
+#        Write-Host "Opening Licensing API documentation..." -ForegroundColor White
+#        Start-Process "http://localhost:8080/docs"
+#        Start-Sleep -Seconds 2
+#    }
 
-    if ($newlyStartedPorts -contains 8000) {
-        Write-Host "Opening Dashboard API documentation..." -ForegroundColor White
-        Start-Process "http://localhost:8000/docs"
-        Start-Sleep -Seconds 2
-    }
+#    if ($newlyStartedPorts -contains 8000) {
+#        Write-Host "Opening Dashboard API documentation..." -ForegroundColor White
+#        Start-Process "http://localhost:8000/docs"
+#        Start-Sleep -Seconds 2
+#    }
 
     if ($newlyStartedPorts -contains 3000) {
         Write-Host "Opening Tenant Portal..." -ForegroundColor White
@@ -598,11 +598,11 @@ if ($newlyStartedPorts.Count -gt 0) {
         Start-Sleep -Seconds 2
     }
     
-    if ($newlyStartedPorts -contains 3001) {
-        Write-Host "Opening Dashboard UI..." -ForegroundColor White
-        Start-Process "http://localhost:3001"
-        Start-Sleep -Seconds 2
-    }
+#    if ($newlyStartedPorts -contains 3001) {
+#        Write-Host "Opening Dashboard UI..." -ForegroundColor White
+#        Start-Process "http://localhost:3001"
+#        Start-Sleep -Seconds 2
+#    }
     
     if ($newlyStartedPorts -contains 3002) {
         Write-Host "Opening Admin Portal..." -ForegroundColor White
@@ -637,10 +637,10 @@ Write-Host "  2. Dashboard API:      http://localhost:8000/docs" -ForegroundColo
 Write-Host "  3. Tenant Portal:      http://localhost:3000" -ForegroundColor Cyan
 Write-Host "  4. Mobile (Metro):     Check the Mobile App window" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Demo Credentials:" -ForegroundColor White
-Write-Host "  Tenant Slug:           demo" -ForegroundColor Gray
-Write-Host "  Activation Code:       12RY-S55W-4MZR-KP2J" -ForegroundColor Gray
-Write-Host ""
+#Write-Host "Demo Credentials:" -ForegroundColor White
+#Write-Host "  Tenant Slug:           demo" -ForegroundColor Gray
+#Write-Host "  Activation Code:       12RY-S55W-4MZR-KP2J" -ForegroundColor Gray
+#Write-Host ""
 Write-Host "==========================================================================" -ForegroundColor Green
 Write-Host ""
 

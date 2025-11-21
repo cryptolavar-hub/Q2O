@@ -37,10 +37,11 @@ export function useAuth() {
   useEffect(() => {
     checkAuth();
     
-    // Set up session refresh interval (every 5 minutes)
+    // Set up session refresh interval (every 1 minute to keep session alive)
+    // This ensures active users don't get logged out due to idle timeout
     const refreshInterval = setInterval(() => {
       refreshAuthIfNeeded();
-    }, 5 * 60 * 1000);
+    }, 60 * 1000); // 1 minute - more frequent to prevent timeouts during active use
 
     return () => clearInterval(refreshInterval);
   }, []);
@@ -49,17 +50,35 @@ export function useAuth() {
     try {
       const token = getStoredSessionToken();
       
-      if (!token || isSessionExpired()) {
+      if (!token) {
         setAuthState({
           isAuthenticated: false,
           isLoading: false,
           session: null,
-          error: null, // Don't set error for missing/expired tokens - this is expected
+          error: null,
         });
         return;
       }
 
-      // Verify session is still valid
+      // Check if session is expired locally first (avoid unnecessary API call)
+      if (isSessionExpired()) {
+        // Session expired locally, clear it
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('tenant_session_token');
+          localStorage.removeItem('tenant_session_expires');
+          localStorage.removeItem('tenant_id');
+          localStorage.removeItem('tenant_slug');
+        }
+        setAuthState({
+          isAuthenticated: false,
+          isLoading: false,
+          session: null,
+          error: null,
+        });
+        return;
+      }
+
+      // Verify session is still valid with server
       const session = await getSessionInfo(token);
       
       setAuthState({
@@ -69,21 +88,34 @@ export function useAuth() {
         error: null,
       });
     } catch (error) {
-      // Session invalid, clear it silently (don't show error on initial check)
-      // Errors should only be shown for actual login attempts
-      setAuthState({
-        isAuthenticated: false,
-        isLoading: false,
-        session: null,
-        error: null, // Don't set error on initial auth check - it's expected to fail if not logged in
-      });
+      // Only clear session if it's a 401 (unauthorized) error
+      // Network errors or temporary issues shouldn't log the user out
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isUnauthorized = errorMessage.includes('401') || errorMessage.includes('Session invalid');
       
-      // Clear invalid token from storage
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('tenant_session_token');
-        localStorage.removeItem('tenant_session_expires');
-        localStorage.removeItem('tenant_id');
-        localStorage.removeItem('tenant_slug');
+      if (isUnauthorized) {
+        // Session invalid, clear it
+        setAuthState({
+          isAuthenticated: false,
+          isLoading: false,
+          session: null,
+          error: null,
+        });
+        
+        // Clear invalid token from storage
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('tenant_session_token');
+          localStorage.removeItem('tenant_session_expires');
+          localStorage.removeItem('tenant_id');
+          localStorage.removeItem('tenant_slug');
+        }
+      } else {
+        // Network error or other issue - don't log out, just mark as loading failed
+        // Keep existing auth state if we had one
+        setAuthState((prev) => ({
+          ...prev,
+          isLoading: false,
+        }));
       }
     }
   }, []);
