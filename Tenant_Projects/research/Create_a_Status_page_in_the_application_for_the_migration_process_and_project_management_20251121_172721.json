@@ -1,0 +1,144 @@
+{
+  "query": "Create a Status page in the application for the migration process and project management",
+  "timestamp": "2025-11-21T17:26:55.070946",
+  "depth": "adaptive",
+  "search_results": [
+    {
+      "title": "Planning and Development DallasNow",
+      "url": "https://dallascityhall.com/departments/sustainabledevelopment/Pages/DallasNow.aspx",
+      "snippet": "-Replaces paper applications processes in areas such Planning, Building inspection, Platting, etc. ... My project was migrated into DallasNow, but now I can't see\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Set up a Jira Service Management integration | Statuspage ...",
+      "url": "https://support.atlassian.com/statuspage/docs/set-up-a-jira-service-management-integration/",
+      "snippet": "Learn the basics of the migration process ... Select which Jira Service Management project to configure with the Statuspage app from the dropdown menu.",
+      "source": "google"
+    },
+    {
+      "title": "The Application Rationalization Playbook",
+      "url": "https://www.cio.gov/assets/files/Application-Rationalization-Playbook.pdf",
+      "snippet": "Based on the application scores, develop and execute a change management and application migration strategy for future iterations. Page 7. Application\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Migrating to Notion for Project Management",
+      "url": "https://www.notion.com/help/guides/migrating-to-notion-for-project-management",
+      "snippet": "... create custom statuses to cover every step in your task or project management process. Using and customizing the Status property can add a lot of\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Case Status Online - Case Status Search",
+      "url": "https://egov.uscis.gov/",
+      "snippet": "USCIS Processing Times Information. See an estimate of how much time USCIS is taking to process your application or petition at its offices. Visit Page. Woman\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Django Tutorial in Visual Studio Code",
+      "url": "https://code.visualstudio.com/docs/python/tutorial-django",
+      "snippet": "You run administrative commands for the project using python manage.py <command> [options] . ... Run python manage.py migrate to apply the scripts to the actual\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Building and deploying an Enterprise Django Web App in 16 hours ...",
+      "url": "https://medium.com/python-pandemonium/building-and-deploying-an-enterprise-django-web-app-in-16-hours-79e018f7b94c",
+      "snippet": "Apr 8, 2018 ... Create a Project django-admin startproject dd_badger and then straightaway create an application in the project python manage.py startapp core .",
+      "source": "google"
+    },
+    {
+      "title": "Deploying a Django application to Elastic Beanstalk - AWS Elastic ...",
+      "url": "https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/create-deploy-python-django.html",
+      "snippet": "~/ebdjango$ eb init -p python-3.7 django-tutorial Application django-tutorial has been created. ... manage.py migrate command during the deployment process\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Create and manage API keys | Statuspage | Atlassian Support",
+      "url": "https://support.atlassian.com/statuspage/docs/create-and-manage-api-keys/",
+      "snippet": "Use Statuspage APIs to make changes to your status page. Account owners will learn how to manage API keys to use with Statuspage applications.",
+      "source": "google"
+    },
+    {
+      "title": "Content Management API | Contentful Docs",
+      "url": "https://www.contentful.com/developers/docs/references/content-management-api/",
+      "snippet": "You must opt-in to this feature in the Contentful web app on the Settings > Environments page. During this opt-in process, we create a default alias with the ID\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Google APIs Explorer | Google for Developers",
+      "url": "https://developers.google.com/apis-explorer",
+      "snippet": "Use this REST API to create and manage ... The Google Site Verification API lets applications automate the process of managing ownership records for websites and\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Planning and Development DallasNow",
+      "url": "https://dallascityhall.com/departments/sustainabledevelopment/Pages/DallasNow.aspx",
+      "snippet": "DallasNow is the new land management system for the City of Dallas. The state-of-the-art system is a cloud-based application that integrates 15 systems.",
+      "source": "google"
+    },
+    {
+      "title": "How to migrate to the Authentication methods policy - Microsoft ...",
+      "url": "https://learn.microsoft.com/en-us/entra/identity/authentication/how-to-authentication-methods-manage",
+      "snippet": "Aug 13, 2025 ... In this article. Automated migration guide; Manual migration; Start the migration; Finish the migration; Next steps. You can migrate Microsoft\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Home of Project Management | Project Management Institute",
+      "url": "https://www.pmi.org/",
+      "snippet": "Welcome to PMI! Explore our project management certifications, resources, and global community to unleash your potential and drive your career forward.",
+      "source": "google"
+    },
+    {
+      "title": "Django Tutorial in Visual Studio Code",
+      "url": "https://code.visualstudio.com/docs/python/tutorial-django",
+      "snippet": "Modify hello/views.py to match the following code, which creates a single view for the app's home page: ... Run python manage.py migrate to apply the scripts to\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "pip/python: normal site-packages is not writeable - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/59997065/pip-python-normal-site-packages-is-not-writeable",
+      "snippet": "Jan 31, 2020 ... Each project can have a different Python point version if needed, and gets its own site_packages directory so pip-installed libraries can also\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Python developer reference for Azure Functions | Microsoft Learn",
+      "url": "https://learn.microsoft.com/en-us/azure/azure-functions/functions-reference-python",
+      "snippet": "Jul 31, 2025 ... It's the sample code that's provided when you create a function by using Azure Functions Core Tools or Visual Studio Code. Python Copy. @app.",
+      "source": "google"
+    },
+    {
+      "title": "The Application Rationalization Playbook",
+      "url": "https://www.cio.gov/assets/files/Application-Rationalization-Playbook.pdf",
+      "snippet": "... management (OCM) best practices and ... Page 21. Application Rationalization Playbook. Page 20. 6.4 Develop Migration Strategy and Change Management Plan.",
+      "source": "google"
+    },
+    {
+      "title": "Best Practices for Configuring and Extending Fusion Applications ...",
+      "url": "https://www.ateam-oracle.com/post/best-practices-for-configuring-and-extending-fusion-applications-cloud",
+      "snippet": "May 30, 2025 ... Introduction Oracle's Fusion Cloud Applications cloud is built on a single data model that connects end-to-end business processes across\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Cloud Operations Best Practices and Resource Guide",
+      "url": "https://www.cio.gov/assets/resources/Cloud%20Operations%20Best%20Practices%20&%20Resources%20Guide%20-%20October%202023.pdf",
+      "snippet": "Whether purchasing new cloud services, migrating applications, or simply managing your ... \u2022 Quality: Implement quality management practices to improve processes,\u00a0...",
+      "source": "google"
+    }
+  ],
+  "key_findings": [
+    "Most mentioned concepts: project, management, application, create, python",
+    "Found 2 official documentation sources",
+    "Top result: Planning and Development DallasNow (https://dallascityhall.com/departments/sustainabledevelopment/Pages/DallasNow.aspx)"
+  ],
+  "documentation_urls": [
+    "https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/create-deploy-python-django.html",
+    "https://www.contentful.com/developers/docs/references/content-management-api/"
+  ],
+  "code_examples": [],
+  "best_practices": [],
+  "confidence_score": 80,
+  "sources_consulted": [
+    "quick_search",
+    "deep_search"
+  ],
+  "cached": false
+}

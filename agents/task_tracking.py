@@ -19,12 +19,12 @@ _task_tracking_enabled = None
 
 
 def _get_db_session():
-    """Get or create database session for task tracking."""
-    global _db_session
+    """Get or create database session for task tracking.
     
-    if _db_session is not None:
-        return _db_session
-    
+    Creates a new session each time to avoid stale session issues.
+    Sessions should be closed after use, but for agent code we'll
+    let them auto-close when the process ends.
+    """
     try:
         # Use the same database connection as the API
         # Import here to avoid circular dependencies
@@ -39,11 +39,12 @@ def _get_db_session():
         
         from api.core.db import AsyncSessionLocal
         
-        # Create a new session (same factory as API)
-        _db_session = AsyncSessionLocal()
+        # Create a new session each time (don't reuse global singleton)
+        # This ensures we have a fresh session for each operation
+        db_session = AsyncSessionLocal()
         
-        logger.info("Database session created for task tracking (using API connection)")
-        return _db_session
+        logger.debug("Database session created for task tracking (using API connection)")
+        return db_session
     
     except Exception as e:
         logger.warning(f"Failed to create database session for task tracking: {e}")
@@ -68,31 +69,41 @@ def _get_db_session():
             if database_url.startswith("postgresql://"):
                 database_url = database_url.replace("postgresql://", "postgresql+psycopg://")
             
-            # Create async engine
-            engine = create_async_engine(
-                database_url,
-                pool_pre_ping=True,
-                echo=False,
-                future=True
-            )
+            # Create async engine (reuse global engine if possible)
+            global _task_tracking_engine
+            if '_task_tracking_engine' not in globals():
+                _task_tracking_engine = create_async_engine(
+                    database_url,
+                    pool_pre_ping=True,
+                    echo=False,
+                    future=True
+                )
+                _task_tracking_session_factory = async_sessionmaker(
+                    _task_tracking_engine,
+                    class_=AsyncSession,
+                    expire_on_commit=False,
+                    autoflush=False,
+                    autocommit=False,
+                    future=True
+                )
+            else:
+                from sqlalchemy.ext.asyncio import async_sessionmaker
+                _task_tracking_session_factory = async_sessionmaker(
+                    _task_tracking_engine,
+                    class_=AsyncSession,
+                    expire_on_commit=False,
+                    autoflush=False,
+                    autocommit=False,
+                    future=True
+                )
             
-            # Create session factory
-            async_session = async_sessionmaker(
-                engine,
-                class_=AsyncSession,
-                expire_on_commit=False,
-                autoflush=False,
-                autocommit=False,
-                future=True
-            )
+            # Create new session
+            db_session = _task_tracking_session_factory()
             
-            # Create session
-            _db_session = async_session()
-            
-            logger.info("Database session created for task tracking (fallback method)")
-            return _db_session
+            logger.debug("Database session created for task tracking (fallback method)")
+            return db_session
         except Exception as e2:
-            logger.error(f"Fallback database connection also failed: {e2}")
+            logger.error(f"Fallback database connection also failed: {e2}", exc_info=True)
             return None
 
 
@@ -126,16 +137,42 @@ async def create_task_in_db(
     Returns:
         task_id if successful, None otherwise
     """
-    if not is_task_tracking_enabled():
+    # Check if task tracking is enabled
+    enabled = is_task_tracking_enabled()
+    logger.info(f"Task tracking enabled check: {enabled} (ENABLE_TASK_TRACKING={os.getenv('ENABLE_TASK_TRACKING', 'not set')})")
+    
+    if not enabled:
+        logger.debug(f"Task tracking disabled, skipping task creation for {task_name}")
         return None
     
     try:
-        from addon_portal.api.services.agent_task_service import create_task
+        # Try importing from addon_portal (when running from project root)
+        try:
+            from addon_portal.api.services.agent_task_service import create_task
+            logger.debug("Imported create_task from addon_portal.api.services.agent_task_service")
+        except ImportError as e:
+            logger.debug(f"Failed to import from addon_portal: {e}, trying fallback")
+            # Fallback: try importing directly (when addon_portal is in path)
+            import sys
+            from pathlib import Path
+            project_root = Path(__file__).resolve().parents[2]
+            addon_portal_path = project_root / "addon_portal"
+            if str(addon_portal_path) not in sys.path:
+                sys.path.insert(0, str(addon_portal_path))
+            from api.services.agent_task_service import create_task
+            logger.debug("Imported create_task from api.services.agent_task_service (fallback)")
+        
+        logger.info(
+            f"Creating task in database: project_id={project_id}, agent_type={agent_type}, "
+            f"task_name={task_name}, tenant_id={tenant_id}"
+        )
         
         db = _get_db_session()
         if not db:
-            logger.warning("Database session not available for task tracking")
+            logger.error("Database session not available for task tracking")
             return None
+        
+        logger.debug(f"Database session obtained: {type(db)}")
         
         task = await create_task(
             db=db,
@@ -149,10 +186,12 @@ async def create_task_in_db(
             tenant_id=tenant_id,
         )
         
+        # Note: create_task already commits, so we don't need to commit again
+        logger.info(f"Successfully created task in database: task_id={task.task_id}")
         return task.task_id
     
     except Exception as e:
-        logger.warning(f"Failed to create task in database: {e}")
+        logger.error(f"Failed to create task in database: {e}", exc_info=True)
         return None
 
 
@@ -191,6 +230,7 @@ async def update_task_status_in_db(
             execution_metadata=execution_metadata,
         )
         
+        # Note: update_task_status already commits, so we don't need to commit again
         return True
     
     except Exception as e:
@@ -229,6 +269,7 @@ async def update_task_llm_usage_in_db(
             llm_cost_usd=llm_cost_usd,
         )
         
+        # Note: update_task_llm_usage already commits, so we don't need to commit again
         return True
     
     except Exception as e:
@@ -237,21 +278,58 @@ async def update_task_llm_usage_in_db(
 
 
 def run_async(coro):
-    """Run async function synchronously (for use in sync agent code)."""
+    """Run async function synchronously (for use in sync agent code).
+    
+    Creates a new event loop and database session factory to avoid
+    event loop binding issues with database connection pools.
+    """
     import platform
     import selectors
     
+    # Try to use existing event loop first
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            raise RuntimeError("Event loop is closed")
+        loop = asyncio.get_running_loop()
+        # If we have a running loop, we can't use run_until_complete
+        # Instead, schedule the coroutine and wait for it
+        import concurrent.futures
+        import threading
+        
+        future = concurrent.futures.Future()
+        
+        def run_in_loop():
+            try:
+                result = asyncio.run_coroutine_threadsafe(coro, loop).result()
+                future.set_result(result)
+            except Exception as e:
+                future.set_exception(e)
+        
+        thread = threading.Thread(target=run_in_loop)
+        thread.start()
+        thread.join(timeout=30)  # 30 second timeout
+        
+        if thread.is_alive():
+            raise TimeoutError("Task tracking operation timed out")
+        
+        return future.result()
     except RuntimeError:
+        # No running loop, create a new one
         # Windows compatibility: Use SelectorEventLoop for psycopg async
         if platform.system() == "Windows":
             loop = asyncio.SelectorEventLoop(selectors.SelectSelector())
         else:
             loop = asyncio.new_event_loop()
+        
         asyncio.set_event_loop(loop)
-    
-    return loop.run_until_complete(coro)
+        
+        try:
+            # Create a new database session factory for this event loop
+            # This ensures the connection pool is bound to the correct loop
+            global _task_tracking_session_factory
+            if '_task_tracking_session_factory' in globals():
+                # Reset the session factory to create new connections for this loop
+                _task_tracking_session_factory = None
+            
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
 

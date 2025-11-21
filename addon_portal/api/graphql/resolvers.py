@@ -62,14 +62,14 @@ class Query:
         # Query REAL agents from database (aggregate from tasks and agent configs)
         from ..models.agent_tasks import AgentTask
         from ..models.llm_config import LLMAgentConfig
-        from sqlalchemy import func, and_
+        from sqlalchemy import func, and_, case
         
         # Get distinct agent types from tasks
         stmt = select(
             AgentTask.agent_type,
             func.count(AgentTask.id).label('total_tasks'),
-            func.sum(func.case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
-            func.sum(func.case((AgentTask.status == 'failed', 1), else_=0)).label('failed'),
+            func.sum(case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
+            func.sum(case((AgentTask.status == 'failed', 1), else_=0)).label('failed'),
             func.max(AgentTask.updated_at).label('last_activity')
         ).group_by(AgentTask.agent_type)
         
@@ -341,6 +341,7 @@ class Query:
         from ..models.llm_config import LLMProjectConfig
         from sqlalchemy.orm import selectinload
         
+        logger.info(f"Querying project with id: {id}")
         result = await db.execute(
             select(LLMProjectConfig)
             .options(selectinload(LLMProjectConfig.agent_configs))
@@ -349,7 +350,10 @@ class Query:
         db_project = result.scalar_one_or_none()
         
         if not db_project:
+            logger.warning(f"Project not found with id: {id}")
             return None
+        
+        logger.info(f"Found project: {db_project.project_id}, execution_status: {db_project.execution_status}")
         
         # Map execution_status to ProjectStatus
         status_map = {
@@ -371,6 +375,11 @@ class Query:
         completed_tasks = task_stats["completed_tasks"]
         failed_tasks = task_stats["failed_tasks"]
         completion_percentage = task_stats["completion_percentage"]
+        
+        logger.info(
+            f"Project {id} task stats: total={total_tasks}, completed={completed_tasks}, "
+            f"failed={failed_tasks}, completion={completion_percentage}%"
+        )
         
         # If no tasks exist yet, use status-based fallback
         if total_tasks == 0:
@@ -471,7 +480,9 @@ class Query:
                 now = datetime.now(timezone.utc)
                 elapsed_seconds = (now - started_at).total_seconds()
                 if completion_percentage > 0:
-                    estimated_total_seconds = (elapsed_seconds / completion_percentage) * 100.0
+                    # Cap completion_percentage to prevent division by very small numbers
+                    capped_completion = max(0.1, min(100.0, completion_percentage))
+                    estimated_total_seconds = (elapsed_seconds / capped_completion) * 100.0
                     remaining = max(0, estimated_total_seconds - elapsed_seconds)
                     estimated_time_remaining = int(remaining)
         
@@ -569,10 +580,11 @@ class Query:
         completed_tasks_today = result.scalar() or 0
         
         # Calculate average success rate
+        from sqlalchemy import case
         result = await db.execute(
             select(
                 func.count(AgentTask.id).label('total'),
-                func.sum(func.case((AgentTask.status == 'completed', 1), else_=0)).label('completed')
+                func.sum(case((AgentTask.status == 'completed', 1), else_=0)).label('completed')
             )
         )
         stats = result.first()
@@ -678,7 +690,10 @@ class Query:
         from ..models.agent_tasks import AgentTask
         from ..models.llm_config import LLMProjectConfig, LLMAgentConfig
         from datetime import datetime, timezone, timedelta
-        import psutil
+        try:
+            import psutil
+        except ImportError:
+            psutil = None
         
         # Count active agents (agents with running tasks)
         result = await db.execute(
@@ -732,11 +747,12 @@ class Query:
         avg_duration = result.scalar() or 0.0
         
         # System health score (based on success rate)
+        from sqlalchemy import case
         result = await db.execute(
             select(
                 func.count(AgentTask.id).label('total'),
-                func.sum(func.case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
-                func.sum(func.case((AgentTask.status == 'failed', 1), else_=0)).label('failed')
+                func.sum(case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
+                func.sum(case((AgentTask.status == 'failed', 1), else_=0)).label('failed')
             )
         )
         stats = result.first()
@@ -752,9 +768,13 @@ class Query:
         
         # System resource usage (from psutil)
         try:
-            cpu_usage_percent = psutil.cpu_percent(interval=0.1)
-            memory = psutil.virtual_memory()
-            memory_usage_percent = memory.percent
+            if psutil:
+                cpu_usage_percent = psutil.cpu_percent(interval=0.1)
+                memory = psutil.virtual_memory()
+                memory_usage_percent = memory.percent
+            else:
+                cpu_usage_percent = 0.0
+                memory_usage_percent = 0.0
         except Exception:
             # Fallback if psutil not available
             cpu_usage_percent = 0.0
@@ -956,14 +976,15 @@ class Subscription:
     async def system_metrics_stream(
         self,
         info,
-        interval_seconds: int = 5
+        interval_seconds: int = 5,
+        project_id: Optional[str] = None
     ) -> AsyncGenerator[SystemMetrics, None]:
         """
-        Subscribe to system metrics updates
+        Subscribe to system metrics updates (tenant/project-specific)
         
         Example:
         subscription {
-          systemMetricsStream(intervalSeconds: 10) {
+          systemMetricsStream(intervalSeconds: 10, projectId: "project-123") {
             timestamp
             activeAgents
             activeTasks
@@ -973,23 +994,159 @@ class Subscription:
           }
         }
         """
-        logger.info(f"New subscription: system_metrics_stream (interval: {interval_seconds}s)")
+        logger.info(f"New subscription: system_metrics_stream (interval: {interval_seconds}s, project_id: {project_id})")
+        
+        db: AsyncSession = getattr(info.context, 'db', None) if info.context else None
+        tenant_id = getattr(info.context, 'tenant_id', None) if info.context else None
+        
+        if not db:
+            logger.warning("No database session available for system_metrics_stream")
+            while True:
+                yield SystemMetrics(
+                    timestamp=datetime.now(timezone.utc),
+                    active_agents=0,
+                    active_tasks=0,
+                    tasks_completed_today=0,
+                    tasks_failed_today=0,
+                    average_task_duration_seconds=0.0,
+                    system_health_score=0.0,
+                    cpu_usage_percent=0.0,
+                    memory_usage_percent=0.0
+                )
+                await asyncio.sleep(interval_seconds)
         
         while True:
-            # In production, collect real metrics
-            metrics = SystemMetrics(
-                timestamp=datetime.utcnow(),
-                active_agents=12,
-                active_tasks=5,
-                tasks_completed_today=45,
-                tasks_failed_today=2,
-                average_task_duration_seconds=120.5,
-                system_health_score=98.5,
-                cpu_usage_percent=35.2,
-                memory_usage_percent=62.8
-            )
+            try:
+                # Get REAL metrics filtered by tenant and optionally project
+                from ..models.agent_tasks import AgentTask
+                from datetime import datetime, timezone, timedelta
+                from sqlalchemy import case
+                try:
+                    import psutil
+                except ImportError:
+                    psutil = None
+                
+                # Build query filters
+                query_filters = []
+                if tenant_id:
+                    query_filters.append(AgentTask.tenant_id == tenant_id)
+                if project_id:
+                    query_filters.append(AgentTask.project_id == project_id)
+                
+                # Count active agents (agents with running tasks)
+                active_agents_query = select(func.count(func.distinct(AgentTask.agent_type)))
+                if query_filters:
+                    active_agents_query = active_agents_query.where(and_(*query_filters, AgentTask.status.in_(['started', 'running'])))
+                else:
+                    active_agents_query = active_agents_query.where(AgentTask.status.in_(['started', 'running']))
+                result = await db.execute(active_agents_query)
+                active_agents = result.scalar() or 0
+                
+                # Count active tasks
+                active_tasks_query = select(func.count(AgentTask.id))
+                if query_filters:
+                    active_tasks_query = active_tasks_query.where(and_(*query_filters, AgentTask.status.in_(['started', 'running'])))
+                else:
+                    active_tasks_query = active_tasks_query.where(AgentTask.status.in_(['started', 'running']))
+                result = await db.execute(active_tasks_query)
+                active_tasks = result.scalar() or 0
+                
+                # Tasks completed today (all tasks for project, not just today)
+                # For project-specific metrics, we want all completed tasks, not just today
+                completed_query = select(func.count(AgentTask.id)).where(
+                    AgentTask.status == 'completed'
+                )
+                if query_filters:
+                    # Apply tenant/project filters
+                    base_filters = [f for f in query_filters]
+                    completed_query = completed_query.where(and_(*base_filters))
+                result = await db.execute(completed_query)
+                tasks_completed_today = result.scalar() or 0
+                
+                # Tasks failed (all failed tasks for project)
+                failed_query = select(func.count(AgentTask.id)).where(
+                    AgentTask.status == 'failed'
+                )
+                if query_filters:
+                    base_filters = [f for f in query_filters]
+                    failed_query = failed_query.where(and_(*base_filters))
+                result = await db.execute(failed_query)
+                tasks_failed_today = result.scalar() or 0
+                
+                # Average task duration
+                duration_query = select(func.avg(AgentTask.actual_duration_seconds)).where(
+                    and_(
+                        AgentTask.status == 'completed',
+                        AgentTask.actual_duration_seconds.isnot(None)
+                    )
+                )
+                if query_filters:
+                    base_filters = [f for f in query_filters]
+                    duration_query = duration_query.where(and_(*base_filters))
+                result = await db.execute(duration_query)
+                avg_duration = result.scalar() or 0.0
+                
+                # System health score (success rate, capped at 100%)
+                stats_query = select(
+                    func.count(AgentTask.id).label('total'),
+                    func.sum(case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
+                    func.sum(case((AgentTask.status == 'failed', 1), else_=0)).label('failed')
+                )
+                if query_filters:
+                    stats_query = stats_query.where(and_(*query_filters))
+                result = await db.execute(stats_query)
+                stats = result.first()
+                total = stats.total or 0
+                completed = stats.completed or 0
+                failed = stats.failed or 0
+                
+                if total > 0:
+                    system_health_score = ((completed - failed * 0.5) / total) * 100.0
+                    system_health_score = max(0.0, min(100.0, system_health_score))  # Cap at 100%
+                else:
+                    system_health_score = 100.0
+                
+                # System resource usage (from psutil)
+                try:
+                    if psutil:
+                        cpu_usage_percent = psutil.cpu_percent(interval=0.1)
+                        memory = psutil.virtual_memory()
+                        memory_usage_percent = memory.percent
+                    else:
+                        cpu_usage_percent = 0.0
+                        memory_usage_percent = 0.0
+                except Exception:
+                    cpu_usage_percent = 0.0
+                    memory_usage_percent = 0.0
+                
+                metrics = SystemMetrics(
+                    timestamp=datetime.now(timezone.utc),
+                    active_agents=active_agents,
+                    active_tasks=active_tasks,
+                    tasks_completed_today=tasks_completed_today,
+                    tasks_failed_today=tasks_failed_today,
+                    average_task_duration_seconds=float(avg_duration),
+                    system_health_score=system_health_score,
+                    cpu_usage_percent=cpu_usage_percent,
+                    memory_usage_percent=memory_usage_percent
+                )
+                
+                yield metrics
+            except Exception as e:
+                logger.error(f"Error in system_metrics_stream: {e}", exc_info=True)
+                # Yield default metrics on error
+                yield SystemMetrics(
+                    timestamp=datetime.now(timezone.utc),
+                    active_agents=0,
+                    active_tasks=0,
+                    tasks_completed_today=0,
+                    tasks_failed_today=0,
+                    average_task_duration_seconds=0.0,
+                    system_health_score=0.0,
+                    cpu_usage_percent=0.0,
+                    memory_usage_percent=0.0
+                )
             
-            yield metrics
             await asyncio.sleep(interval_seconds)
     
     @strawberry.subscription

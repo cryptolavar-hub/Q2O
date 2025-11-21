@@ -30,12 +30,14 @@ class GraphQLContext(BaseContext):
         self,
         db: AsyncSession,
         request: Request,
-        user: Optional[dict] = None
+        user: Optional[dict] = None,
+        tenant_id: Optional[int] = None
     ):
         super().__init__()
         self.db = db
         self.request = request
         self.user = user
+        self.tenant_id = tenant_id
         
         # Create DataLoaders (per-request caching)
         self.dataloaders = create_dataloaders(db)
@@ -50,6 +52,27 @@ class GraphQLContext(BaseContext):
             return self.user
         else:
             return self.dataloaders.get(key)
+    
+    async def __aenter__(self):
+        """Async context manager entry"""
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - cleanup database session"""
+        try:
+            if self.db:
+                # Only rollback if there's an exception (normal flow commits)
+                if exc_type is not None:
+                    try:
+                        await self.db.rollback()
+                    except Exception:
+                        pass
+                # Close the session (returns connection to pool)
+                await self.db.close()
+                logger.debug("GraphQL context database session closed")
+        except Exception as e:
+            logger.warning(f"Error closing database session in GraphQL context: {e}")
+        return False  # Don't suppress exceptions
 
 
 async def get_graphql_context(
@@ -64,27 +87,58 @@ async def get_graphql_context(
     - User authentication (from JWT if present)
     
     Note: For WebSocket subscriptions, request might be None or have different structure
+    Note: Database session cleanup is handled by Strawberry's context lifecycle via __aexit__
     """
-    # Create async database session
+    # Create async database session using context manager pattern
+    # This ensures the session is properly managed even if Strawberry doesn't use __aexit__
     db = AsyncSessionLocal()
     
     try:
         # Extract user from JWT token (optional)
         user = None
+        tenant_id = None
+        
         if request:
+            # Try to get tenant_id from session token (X-Session-Token header)
+            session_token = request.headers.get("X-Session-Token")
+            if session_token:
+                from ..services.tenant_auth_service import validate_session
+                try:
+                    session_info = await validate_session(session_token, db)
+                    if session_info:
+                        tenant_id = session_info.get("tenant_id")
+                        # Commit the last_activity update to prevent connection leaks
+                        await db.commit()
+                except Exception as e:
+                    # Session invalid or expired, rollback and continue without tenant_id
+                    await db.rollback()
+                    logger.debug(f"Session validation failed in GraphQL context: {e}")
+                    pass
+            
+            # Also try Authorization header for JWT
             auth_header = request.headers.get("Authorization")
             if auth_header and auth_header.startswith("Bearer "):
-                # In production, decode JWT and extract user
-                # from ..core.auth import decode_jwt
-                # token = auth_header.split(" ")[1]
-                # user = decode_jwt(token)
-                pass
+                token = auth_header.split(" ")[1]
+                try:
+                    from ..services.tenant_auth_service import validate_session
+                    session_info = await validate_session(token, db)
+                    if session_info:
+                        user = {"id": session_info["tenant_id"], "slug": session_info["tenant_slug"]}
+                        tenant_id = session_info["tenant_id"]
+                        # Commit the last_activity update to prevent connection leaks
+                        await db.commit()
+                except Exception as e:
+                    # Session invalid or expired, rollback and continue without user
+                    await db.rollback()
+                    logger.debug(f"JWT validation failed in GraphQL context: {e}")
+                    pass
         
         # Create context
         context = GraphQLContext(
             db=db,
             request=request,
-            user=user
+            user=user,
+            tenant_id=tenant_id
         )
         
         if request:
@@ -96,9 +150,11 @@ async def get_graphql_context(
     
     except Exception as e:
         logger.error(f"Error creating GraphQL context: {e}", exc_info=True)
+        # Ensure session is closed on error
         try:
+            await db.rollback()
             await db.close()
-        except Exception:
-            pass
+        except Exception as close_error:
+            logger.warning(f"Error closing database session after context creation error: {close_error}")
         raise
 

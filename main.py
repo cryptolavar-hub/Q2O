@@ -699,8 +699,10 @@ Examples:
         sys.exit(1)
     
     # Initialize and run the system
+    # Prioritize output_folder over workspace to ensure code files are saved correctly
+    workspace_path = args.output_folder if args.output_folder else (args.workspace or ".")
     system = AgentSystem(
-        workspace_path=args.workspace or (args.output_folder if args.output_folder else "."),
+        workspace_path=workspace_path,
         project_id=args.project_id,
         tenant_id=args.tenant_id
     )

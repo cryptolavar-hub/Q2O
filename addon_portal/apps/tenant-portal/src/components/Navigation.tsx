@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
+import { logout, getStoredSessionToken } from '../lib/auth';
+import { useAuth } from '../hooks/useAuth';
 
 interface NavItem {
   href: string;
@@ -11,15 +13,25 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '/projects', label: 'Projects', icon: '📁' },
   { href: '/status', label: 'Status', icon: '📊' },
+  { href: '/profile', label: 'Profile', icon: '👤' },
+  { href: '/billing', label: 'Billing', icon: '💳' },
   // TODO: Add more navigation items as features are implemented:
   // { href: '/devices', label: 'Devices', icon: '📱' },
   // { href: '/downloads', label: 'Downloads', icon: '⬇️' },
-  // { href: '/profile', label: 'Profile', icon: '👤' },
 ];
 
 export function Navigation() {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
+
+  const handleLogout = async () => {
+    const sessionToken = getStoredSessionToken();
+    if (sessionToken) {
+      await logout(sessionToken);
+    }
+    router.push('/login');
+  };
 
   return (
     <>
@@ -58,30 +70,39 @@ export function Navigation() {
             <Link href="/" className="text-xl font-bold bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent">
               Q2O Tenant Portal
             </Link>
-            <div className="flex items-center space-x-1 overflow-x-auto scrollbar-hide">
-              {navItems.map((item) => {
-                const isActive = router.pathname === item.href;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                      isActive
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-purple-600'
-                    }`}
-                  >
-                    <span className="mr-2">{item.icon}</span>
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
+            {isAuthenticated && (
+              <div className="flex items-center space-x-1 overflow-x-auto scrollbar-hide">
+                {navItems.map((item) => {
+                  const isActive = router.pathname === item.href;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                        isActive
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-purple-600'
+                      }`}
+                    >
+                      <span className="mr-2">{item.icon}</span>
+                      {item.label}
+                    </Link>
+                  );
+                })}
+                <button
+                  onClick={handleLogout}
+                  className="ml-4 px-4 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors whitespace-nowrap"
+                >
+                  <span className="mr-2">🚪</span>
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Mobile menu */}
-        {mobileMenuOpen && (
+        {mobileMenuOpen && isAuthenticated && (
           <div className="md:hidden border-t border-gray-200 bg-white">
             <div className="px-4 py-2 space-y-1">
               {navItems.map((item) => {
@@ -102,6 +123,16 @@ export function Navigation() {
                   </Link>
                 );
               })}
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  handleLogout();
+                }}
+                className="block w-full text-left px-4 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
+              >
+                <span className="mr-2">🚪</span>
+                Logout
+              </button>
             </div>
           </div>
         )}

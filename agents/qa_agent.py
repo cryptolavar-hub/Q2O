@@ -13,8 +13,10 @@ import re
 class QAAgent(BaseAgent):
     """Agent responsible for quality assurance reviews."""
 
-    def __init__(self, agent_id: str = "qa_main", workspace_path: str = "."):
-        super().__init__(agent_id, AgentType.QA)
+    def __init__(self, agent_id: str = "qa_main", workspace_path: str = ".",
+                 project_id: Optional[str] = None,
+                 tenant_id: Optional[int] = None):
+        super().__init__(agent_id, AgentType.QA, project_id=project_id, tenant_id=tenant_id)
         self.workspace_path = workspace_path
         self.reviewed_files: List[str] = []
         self.qa_reports: Dict[str, Dict[str, Any]] = {}
