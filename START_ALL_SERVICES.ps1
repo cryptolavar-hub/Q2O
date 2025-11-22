@@ -351,20 +351,46 @@ Write-Host "PHASE 2: Starting Services..." -ForegroundColor Yellow
 Write-Host "==========================================================================" -ForegroundColor Gray
 Write-Host ""
 
+# Function to load API_BASE_URL from root .env file
+function Get-ApiBaseUrl {
+    $rootEnvPath = Join-Path $CurrentDir.Path ".env"
+    $defaultApiBaseUrl = "http://127.0.0.1:8080"
+    
+    if (Test-Path $rootEnvPath) {
+        $envContent = Get-Content $rootEnvPath -Raw
+        if ($envContent -match '(?m)^API_BASE_URL[=:]\s*(.+)$') {
+            $apiBaseUrl = $matches[1].Trim()
+            # Remove quotes if present
+            $apiBaseUrl = $apiBaseUrl -replace '^["'']|["'']$', ''
+            if ($apiBaseUrl) {
+                return $apiBaseUrl
+            }
+        }
+    }
+    
+    return $defaultApiBaseUrl
+}
+
 # Function to start service in new window
 function Start-ServiceInWindow {
     param(
         [string]$Title,
         [string]$Command,
-        [string]$WorkingDir = (Get-Location).Path
+        [string]$WorkingDir = (Get-Location).Path,
+        [string]$EnvVar = $null,
+        [string]$EnvValue = $null
     )
     
     Write-Host "Starting: $Title" -ForegroundColor Cyan
     Write-Host "  Command: $Command" -ForegroundColor Gray
     Write-Host "  Directory: $WorkingDir" -ForegroundColor Gray
+    if ($EnvVar -and $EnvValue) {
+        Write-Host "  Environment: $EnvVar=$EnvValue" -ForegroundColor Gray
+    }
     
     $scriptBlock = @"
 Set-Location '$WorkingDir'
+$(if ($EnvVar -and $EnvValue) { "`$env:$EnvVar='$EnvValue'" })
 Write-Host '========================================' -ForegroundColor Cyan
 Write-Host ' $Title' -ForegroundColor Cyan
 Write-Host '========================================' -ForegroundColor Cyan
@@ -472,15 +498,20 @@ Write-Host "[3/5] Tenant Portal (Port 3000)..." -ForegroundColor White
 Write-Host "  Dependencies: Licensing API (8080)" -ForegroundColor Gray
 if (-not ($PortsInUse -contains 3000)) {
     $tenantPortalDir = Join-Path $CurrentDir.Path "addon_portal\apps\tenant-portal"
+    $apiBaseUrl = Get-ApiBaseUrl
     if (Test-Path "$tenantPortalDir\node_modules") {
         Start-ServiceInWindow -Title "Tenant Portal (Port 3000)" `
                                -Command "npm run dev" `
-                               -WorkingDir $tenantPortalDir
+                               -WorkingDir $tenantPortalDir `
+                               -EnvVar "API_BASE_URL" `
+                               -EnvValue $apiBaseUrl
     } else {
         Write-Host "  [INFO] Installing npm dependencies first (may take 2-3 minutes)..." -ForegroundColor Yellow
         Start-ServiceInWindow -Title "Tenant Portal (Port 3000)" `
                                -Command "npm install; npm run dev" `
-                               -WorkingDir $tenantPortalDir
+                               -WorkingDir $tenantPortalDir `
+                               -EnvVar "API_BASE_URL" `
+                               -EnvValue $apiBaseUrl
     }
     
     Write-Host "  Verifying service startup (15 seconds)..." -ForegroundColor Yellow
@@ -532,15 +563,20 @@ Write-Host "[5/5] Admin Portal (Port 3002)..." -ForegroundColor White
 Write-Host "  Dependencies: Licensing API (8080)" -ForegroundColor Gray
 if (-not ($PortsInUse -contains 3002)) {
     $adminPortalDir = Join-Path $CurrentDir.Path "addon_portal\apps\admin-portal"
+    $apiBaseUrl = Get-ApiBaseUrl
     if (Test-Path "$adminPortalDir\node_modules") {
         Start-ServiceInWindow -Title "Admin Portal (Port 3002)" `
                                -Command "npm run dev" `
-                               -WorkingDir $adminPortalDir
+                               -WorkingDir $adminPortalDir `
+                               -EnvVar "API_BASE_URL" `
+                               -EnvValue $apiBaseUrl
     } else {
         Write-Host "  [INFO] Installing npm dependencies first (may take 2-3 minutes)..." -ForegroundColor Yellow
         Start-ServiceInWindow -Title "Admin Portal (Port 3002)" `
                                -Command "npm install; npm run dev" `
-                               -WorkingDir $adminPortalDir
+                               -WorkingDir $adminPortalDir `
+                               -EnvVar "API_BASE_URL" `
+                               -EnvValue $apiBaseUrl
     }
     
     Write-Host "  Verifying service startup (15 seconds)..." -ForegroundColor Yellow
