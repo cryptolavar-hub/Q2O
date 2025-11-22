@@ -115,22 +115,37 @@ async def get_graphql_context(
                     logger.debug(f"Session validation failed in GraphQL context: {e}")
                     pass
             
-            # Also try Authorization header for JWT
+            # Also try Authorization header for JWT Bearer tokens
             auth_header = request.headers.get("Authorization")
             if auth_header and auth_header.startswith("Bearer "):
                 token = auth_header.split(" ")[1]
                 try:
-                    from ..services.tenant_auth_service import validate_session
-                    session_info = await validate_session(token, db)
-                    if session_info:
-                        user = {"id": session_info["tenant_id"], "slug": session_info["tenant_slug"]}
-                        tenant_id = session_info["tenant_id"]
-                        # Commit the last_activity update to prevent connection leaks
-                        await db.commit()
+                    from ..core.security import verify_access
+                    import jwt
+                    # Decode and verify JWT token (doesn't use database)
+                    jwt_payload = verify_access(token)
+                    
+                    # Extract tenant_id from JWT subject (format: "tenant:{tenant_id}:device:{device_id}")
+                    if jwt_payload.get("sub"):
+                        sub_parts = jwt_payload["sub"].split(":")
+                        if len(sub_parts) >= 2 and sub_parts[0] == "tenant":
+                            try:
+                                jwt_tenant_id = int(sub_parts[1])
+                                tenant_id = jwt_tenant_id
+                                # Build user info from JWT payload
+                                user = {
+                                    "id": jwt_tenant_id,
+                                    "sub": jwt_payload.get("sub"),
+                                    "entitlements": jwt_payload.get("entitlements", {}),
+                                }
+                            except (ValueError, IndexError):
+                                logger.debug(f"Invalid JWT subject format: {jwt_payload.get('sub')}")
+                except jwt.InvalidTokenError as e:
+                    # JWT token is invalid or expired
+                    logger.debug(f"JWT token validation failed: {e}")
                 except Exception as e:
-                    # Session invalid or expired, rollback and continue without user
-                    await db.rollback()
-                    logger.debug(f"JWT validation failed in GraphQL context: {e}")
+                    # Other JWT validation errors
+                    logger.debug(f"JWT validation error in GraphQL context: {e}")
                     pass
         
         # Create context
