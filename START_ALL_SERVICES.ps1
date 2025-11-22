@@ -390,7 +390,7 @@ function Start-ServiceInWindow {
     
     $scriptBlock = @"
 Set-Location '$WorkingDir'
-$(if ($EnvVar -and $EnvValue) { "`$env:$EnvVar='$EnvValue'" })
+$(if ($EnvVar -and $EnvValue) { "`$env:$EnvVar='$EnvValue'; Write-Host \"Environment: $EnvVar=`$env:$EnvVar\" -ForegroundColor Gray" })
 Write-Host '========================================' -ForegroundColor Cyan
 Write-Host ' $Title' -ForegroundColor Cyan
 Write-Host '========================================' -ForegroundColor Cyan
