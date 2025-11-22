@@ -453,8 +453,13 @@ if (-not ($PortsInUse -contains 8080)) {
     $licensingDir = Join-Path $CurrentDir.Path "addon_portal"
     # Use Windows-specific startup script that sets event loop policy before uvicorn
     $startScript = Join-Path $licensingDir "start_api_windows.py"
+    # Use absolute path to avoid path resolution issues
+    $startScriptAbs = (Resolve-Path $startScript -ErrorAction SilentlyContinue).Path
+    if (-not $startScriptAbs) {
+        $startScriptAbs = $startScript
+    }
     Start-ServiceInWindow -Title "Licensing API (Port 8080)" `
-                           -Command "python $startScript" `
+                           -Command "python `"$startScriptAbs`"" `
                            -WorkingDir $licensingDir
     
     Write-Host "  Verifying service startup (15 seconds)..." -ForegroundColor Yellow
