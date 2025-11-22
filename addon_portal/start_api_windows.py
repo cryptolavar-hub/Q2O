@@ -20,10 +20,13 @@ if __name__ == "__main__":
     
     # Get port from environment or default to 8080
     port = int(os.environ.get("PORT", "8080"))
-    host = os.environ.get("HOST", "0.0.0.0")
+    # Use "::" for dual-stack (IPv4 + IPv6) support
+    # This allows connections from both IPv4 (127.0.0.1) and IPv6 (::1)
+    host = os.environ.get("HOST", "::")
     
     print(f"Starting Q2O Licensing API on {host}:{port}...")
     print("Using SelectorEventLoop for Windows compatibility")
+    print("Dual-stack mode enabled (IPv4 + IPv6)")
     
     uvicorn.run(
         "api.main:app",
