@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from ..models.llm_config import LLMProjectConfig
