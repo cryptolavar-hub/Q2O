@@ -744,10 +744,13 @@ function Show-ServiceMenu {
             }
             
             Write-Host "[START] Starting Licensing API..." -ForegroundColor Yellow
-            Set-Location addon_portal
-            $startScript = Join-Path (Get-Location) "addon_portal\start_api_windows.py"
-            Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd addon_portal; python start_api_windows.py"
-            Set-Location ..
+            $licensingDir = Join-Path $CurrentDir.Path "addon_portal"
+            $startScript = Join-Path $licensingDir "start_api_windows.py"
+            $startScriptAbs = (Resolve-Path $startScript -ErrorAction SilentlyContinue).Path
+            if (-not $startScriptAbs) {
+                $startScriptAbs = $startScript
+            }
+            Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$licensingDir'; python `"$startScriptAbs`""
             Start-Sleep -Seconds 15
             Write-Host "[OK] Licensing API restarted!" -ForegroundColor Green
             Write-Host ""
