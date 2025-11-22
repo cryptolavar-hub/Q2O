@@ -363,6 +363,17 @@ function Get-ApiBaseUrl {
             # Remove quotes if present
             $apiBaseUrl = $apiBaseUrl -replace '^["'']|["'']$', ''
             if ($apiBaseUrl) {
+                # Validate port - warn and correct if using wrong port
+                if ($apiBaseUrl -match ':8000') {
+                    Write-Host "  [WARNING] API_BASE_URL uses port 8000 (Dashboard API) but should use 8080 (Licensing API)" -ForegroundColor Yellow
+                    Write-Host "  [INFO] Auto-correcting to port 8080..." -ForegroundColor Cyan
+                    $apiBaseUrl = $apiBaseUrl -replace ':8000', ':8080'
+                }
+                # Warn if using localhost (may resolve to IPv6)
+                if ($apiBaseUrl -match '^http://localhost:') {
+                    Write-Host "  [WARNING] API_BASE_URL uses 'localhost' which may resolve to IPv6 (::1)" -ForegroundColor Yellow
+                    Write-Host "  [INFO] Consider using 'http://127.0.0.1:8080' for IPv4 to avoid connection issues" -ForegroundColor Cyan
+                }
                 return $apiBaseUrl
             }
         }
