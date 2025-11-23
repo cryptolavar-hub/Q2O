@@ -52,7 +52,17 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Application startup: Starting background tasks...")
     
-    # Start periodic cleanup task (runs every hour, NOT on startup)
+    # Run cleanup immediately on startup to catch any projects already stuck
+    from .services.project_execution_service import cleanup_stuck_projects
+    try:
+        logger.info("Running initial cleanup of stuck projects on startup...")
+        await cleanup_stuck_projects()
+        logger.info("✓ Initial cleanup completed")
+    except Exception as e:
+        logger.error(f"Error during initial cleanup: {e}", exc_info=True)
+        # Don't fail startup if cleanup fails
+    
+    # Start periodic cleanup task (runs every hour)
     cleanup_task = asyncio.create_task(periodic_cleanup_task())
     logger.info("✓ Periodic cleanup task scheduled (runs every hour)")
     

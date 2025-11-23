@@ -17,6 +17,7 @@ export interface StatCardProps {
   trend?: StatTrend;
   action?: React.ReactNode;
   className?: string;
+  valueClassName?: string;
 }
 
 const trendClasses: Record<StatTrend['direction'], string> = {
@@ -32,6 +33,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   trend,
   action,
   className,
+  valueClassName,
 }) => {
   return (
     <Card className={cn('flex flex-col gap-4', className)}>
@@ -42,7 +44,7 @@ export const StatCard: React.FC<StatCardProps> = ({
             <span>{title}</span>
           </div>
           <div className="flex items-end gap-3">
-            <p className="text-4xl font-bold text-gray-900 leading-tight">{value}</p>
+            <p className={cn("text-4xl font-bold text-gray-900 leading-tight", valueClassName)}>{value}</p>
             {trend && (
               <Badge
                 variant={trend.direction === 'up' ? 'success' : 'error'}

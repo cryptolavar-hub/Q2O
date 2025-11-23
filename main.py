@@ -8,7 +8,13 @@ import os
 
 # Load environment variables FIRST (before anything else)
 from dotenv import load_dotenv
-load_dotenv()  # This loads .env file into environment
+from pathlib import Path
+
+# CRITICAL: Load .env from project root (C:\Q2O_Combined\.env)
+# Even if main.py is executed from a subdirectory, we need the root .env file
+project_root = Path(__file__).resolve().parent
+env_path = project_root / ".env"
+load_dotenv(dotenv_path=env_path, override=False)  # Load root .env file
 
 # Check Python version FIRST (before any imports)
 if sys.version_info < (3, 10):

@@ -192,7 +192,7 @@ class LLMCache:
         conn.commit()
         conn.close()
         
-        logging.info(f"💾 Cache hit! (saved ${json.loads(usage_json)['total_cost']:.4f}, access #{access_count + 1})")
+        logging.info(f"[CACHE] Cache hit! (saved ${json.loads(usage_json)['total_cost']:.4f}, access #{access_count + 1})")
         
         return {
             "content": response_content,
@@ -243,7 +243,7 @@ class LLMCache:
         conn.commit()
         conn.close()
         
-        logging.debug(f"💾 Cached response for {provider}")
+        logging.debug(f"[CACHE] Cached response for {provider}")
     
     def get_stats(self) -> Dict:
         """Get cache statistics."""
@@ -358,7 +358,7 @@ class CostMonitor:
         allowed = projected_spent <= self.monthly_budget
         
         if not allowed:
-            logging.error(f"🛑 Budget exceeded: ${projected_spent:.2f} > ${self.monthly_budget}")
+            logging.error(f"[BUDGET] Budget exceeded: ${projected_spent:.2f} > ${self.monthly_budget}")
         
         return allowed, new_alerts
     
@@ -394,7 +394,7 @@ class CostMonitor:
         percentage = (self.monthly_spent / self.monthly_budget) * 100
         
         logging.info(
-            f"💰 Cost recorded: ${cost:.4f} ({provider}) - "
+            f"[COST] Cost recorded: ${cost:.4f} ({provider}) - "
             f"Monthly: ${self.monthly_spent:.2f} / ${self.monthly_budget:.2f} ({percentage:.1f}%)"
         )
     
@@ -483,23 +483,61 @@ class LLMService:
         self._init_openai()
         self._init_anthropic()
         
-        logging.info(f"✅ LLMService initialized (primary: {self.primary}, budget: ${budget}/month)")
+        logging.info(f"[OK] LLMService initialized (primary: {self.primary}, budget: ${budget}/month)")
     
     def _init_gemini(self):
         """Initialize Gemini client."""
         if not GEMINI_AVAILABLE:
             self.gemini_model = None
+            self.gemini_model_name = None
             return
         
-        api_key = os.getenv("GOOGLE_API_KEY")
+            api_key = os.getenv("GOOGLE_API_KEY")
         if api_key:
             genai.configure(api_key=api_key)
-            model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
-            self.gemini_model = genai.GenerativeModel(model_name)
-            logging.info(f"✅ Gemini initialized ({model_name})")
+            # Try to get model name from env, fallback to valid model names
+            user_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            
+            # Try common valid model names if the specified one fails
+            # Updated November 2025: Using actual available models from Google AI Studio
+            valid_models = [
+                user_model,  # Try user-specified first
+                "gemini-2.5-flash",      # Fast, efficient (recommended default)
+                "gemini-2.0-flash",      # Alternative flash model
+                "gemini-2.5-pro",        # More capable, higher rate limits
+                "gemini-3-pro",           # Latest pro model
+                "gemini-2.5-flash-lite",  # Lightweight option
+                "gemini-2.5-pro-exp",     # Experimental pro
+                # Legacy models (may still work)
+                "gemini-1.5-pro-latest",
+                "gemini-1.5-flash-latest",
+                "gemini-pro",
+                "gemini-1.5-pro"
+            ]
+            
+            self.gemini_model = None
+            self.gemini_model_name = None
+            for model in valid_models:
+                try:
+                    # Test if model can be created (this validates the model name)
+                    test_model = genai.GenerativeModel(model)
+                    # Try a simple test call to verify it works
+                    # Actually, just creating the model is enough - we'll handle errors in _gemini_complete
+                    self.gemini_model = test_model
+                    self.gemini_model_name = model
+                    logging.info(f"[OK] Gemini initialized ({model})")
+                    break
+                except Exception as e:
+                    logging.debug(f"Failed to initialize Gemini with model '{model}': {e}")
+                    continue
+            
+            if not self.gemini_model:
+                logging.warning(f"[WARN] Could not initialize Gemini with any model. Tried: {valid_models}")
+                logging.warning("[WARN] Gemini will not be available. Check your GOOGLE_API_KEY and model name.")
         else:
             self.gemini_model = None
-            logging.warning("⚠️  GOOGLE_API_KEY not set - Gemini unavailable")
+            self.gemini_model_name = None
+            logging.warning("[WARN] GOOGLE_API_KEY not set - Gemini unavailable")
     
     def _init_openai(self):
         """Initialize OpenAI client."""
@@ -510,10 +548,10 @@ class LLMService:
         api_key = os.getenv("OPENAI_API_KEY")
         if api_key:
             self.openai_client = openai.OpenAI(api_key=api_key)
-            logging.info("✅ OpenAI initialized")
+            logging.info("[OK] OpenAI initialized")
         else:
             self.openai_client = None
-            logging.warning("⚠️  OPENAI_API_KEY not set - OpenAI unavailable")
+            logging.warning("[WARN] OPENAI_API_KEY not set - OpenAI unavailable")
     
     def _init_anthropic(self):
         """Initialize Anthropic client."""
@@ -524,10 +562,10 @@ class LLMService:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if api_key:
             self.anthropic_client = Anthropic(api_key=api_key)
-            logging.info("✅ Anthropic initialized")
+            logging.info("[OK] Anthropic initialized")
         else:
             self.anthropic_client = None
-            logging.debug("ℹ️  ANTHROPIC_API_KEY not set - Claude unavailable (optional)")
+            logging.debug("[INFO] ANTHROPIC_API_KEY not set - Claude unavailable (optional)")
     
     def _is_provider_available(self, provider: LLMProvider) -> bool:
         """Check if a provider is configured and available."""
@@ -592,7 +630,7 @@ class LLMService:
         # Check budget
         allowed, alerts = self.cost_monitor.check_budget(estimated_cost)
         if not allowed:
-            logging.error("🛑 Budget exceeded - LLM call blocked")
+            logging.error("[BUDGET] Budget exceeded - LLM call blocked")
             return LLMResponse(
                 content="",
                 usage=None,
@@ -664,7 +702,7 @@ class LLMService:
                 return response
         
         # All providers failed
-        logging.error(f"❌ All providers failed after {total_attempts} attempts")
+        logging.error(f"[ERROR] All providers failed after {total_attempts} attempts")
         
         return LLMResponse(
             content="",
@@ -708,12 +746,12 @@ class LLMService:
                 response.usage.duration_seconds = duration
                 response.attempts = attempt
                 
-                logging.info(f"✅ {provider} succeeded on attempt {attempt} ({duration:.2f}s, ${response.usage.total_cost:.4f})")
+                logging.info(f"[OK] {provider} succeeded on attempt {attempt} ({duration:.2f}s, ${response.usage.total_cost:.4f})")
                 
                 return response
                 
             except Exception as e:
-                logging.warning(f"⚠️  {provider} attempt {attempt}/{self.MAX_RETRIES_PER_PROVIDER} failed: {e}")
+                logging.warning(f"[WARN] {provider} attempt {attempt}/{self.MAX_RETRIES_PER_PROVIDER} failed: {e}")
                 
                 if attempt < self.MAX_RETRIES_PER_PROVIDER:
                     # Exponential backoff: 2^attempt seconds
@@ -740,19 +778,72 @@ class LLMService:
         max_tokens: int
     ) -> LLMResponse:
         """Generate completion using Gemini."""
-        if not self.gemini_model:
-            raise ValueError("Gemini not available")
+        if not GEMINI_AVAILABLE:
+            raise ValueError("Gemini library not available")
+        
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY not set")
+        
+        # Configure API if not already configured
+        try:
+            genai.configure(api_key=api_key)
+        except:
+            pass  # Already configured
         
         # Gemini doesn't have separate system/user roles, combine them
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
         
-        response = await self.gemini_model.generate_content_async(
-            full_prompt,
-            generation_config=genai.GenerationConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens
-            )
-        )
+        # Try multiple model names - use models that work with the current API
+        # The error suggests v1beta doesn't support these models, so try v1 models
+        model_names = []
+        user_model = os.getenv("GEMINI_MODEL", "")
+        if user_model:
+            model_names.append(user_model)
+        
+        # Try models that are known to work (updated November 2025 with actual available models)
+        model_names.extend([
+            "gemini-2.5-flash",      # Fast, efficient (recommended)
+            "gemini-2.0-flash",      # Alternative flash model
+            "gemini-2.5-pro",        # More capable
+            "gemini-3-pro",           # Latest pro model
+            "gemini-2.5-flash-lite",  # Lightweight option
+            # Legacy models (fallback)
+            "gemini-pro",             # Original model name
+            "gemini-1.5-pro",         # Try without -latest
+            "gemini-1.5-flash",       # Try without -latest
+        ])
+        
+        last_error = None
+        used_model = None
+        for model_name in model_names:
+            try:
+                # Create model instance
+                model = genai.GenerativeModel(model_name)
+                # Try to generate content
+                response = await model.generate_content_async(
+                    full_prompt,
+                    generation_config=genai.GenerationConfig(
+                        temperature=temperature,
+                        max_output_tokens=max_tokens
+                    )
+                )
+                # Success - use this model name
+                used_model = model_name
+                break
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                # If it's a 404 model not found, try next model
+                if "404" in error_str or "not found" in error_str.lower():
+                    logging.debug(f"Gemini model '{model_name}' not found, trying next...")
+                    continue
+                else:
+                    # Other error - might be rate limit or auth - re-raise
+                    raise
+        
+        if not used_model:
+            raise ValueError(f"All Gemini models failed. Last error: {last_error}")
         
         # Calculate usage and cost
         input_tokens = response.usage_metadata.prompt_token_count
@@ -766,7 +857,7 @@ class LLMService:
         
         usage = LLMUsage(
             provider="gemini",
-            model=os.getenv("GEMINI_MODEL", "gemini-1.5-pro"),
+            model=used_model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=total_tokens,
@@ -797,7 +888,13 @@ class LLMService:
         if not self.openai_client:
             raise ValueError("OpenAI not available")
         
+        # Use valid OpenAI model names
         model = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+        # Validate model name - fallback to gpt-3.5-turbo if invalid
+        valid_openai_models = ["gpt-4-turbo", "gpt-4", "gpt-3.5-turbo", "gpt-4o", "gpt-4o-mini"]
+        if model not in valid_openai_models:
+            logging.warning(f"[WARN] Invalid OpenAI model '{model}', falling back to 'gpt-3.5-turbo'")
+            model = "gpt-3.5-turbo"
         
         response = self.openai_client.chat.completions.create(
             model=model,
@@ -852,18 +949,46 @@ class LLMService:
         if not self.anthropic_client:
             raise ValueError("Anthropic not available")
         
-        model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+        # Try multiple Anthropic model names if one fails
+        user_model = os.getenv("ANTHROPIC_MODEL", "")
+        model_names = []
+        if user_model:
+            model_names.append(user_model)
         
-        response = self.anthropic_client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=[{
-                "role": "user",
-                "content": user_prompt
-            }]
-        )
+        # Add fallback models (known working versions)
+        # Note: Model names must match exactly what Anthropic API accepts
+        model_names.extend([
+            "claude-3-5-sonnet-20240620",  # Known working version (June 2024)
+            "claude-3-5-sonnet-20241022",  # October 2024 version (if available)
+            "claude-3-opus-20240229",  # February 2024 version
+            "claude-3-5-haiku-20241022",  # Haiku model (faster, cheaper)
+            "claude-3-sonnet-20240229"  # Older sonnet version
+        ])
+        
+        last_error = None
+        model = None
+        for test_model in model_names:
+            try:
+                response = self.anthropic_client.messages.create(
+                    model=test_model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    system=system_prompt,
+                    messages=[{
+                        "role": "user",
+                        "content": user_prompt
+                    }]
+                )
+                # Success - use this model
+                model = test_model
+                break
+            except Exception as e:
+                last_error = e
+                logging.debug(f"Anthropic model '{test_model}' failed: {e}")
+                continue
+        
+        if not model:
+            raise ValueError(f"All Anthropic models failed. Last error: {last_error}")
         
         # Calculate usage and cost
         input_tokens = response.usage.input_tokens
@@ -928,14 +1053,14 @@ class LLMService:
         system_prompt = f"""You are an expert {tech_stack_str} developer.
 
 Generate production-quality {language} code with:
-✅ Complete type hints (mypy strict mode compatible)
-✅ Comprehensive docstrings (Google style)
-✅ Proper error handling (try/except with specific exceptions)
-✅ Input validation (Pydantic models if applicable)
-✅ Security best practices (no SQL injection, XSS, eval, exec)
-✅ Structured logging with context
-✅ Best practices for {tech_stack_str}
-✅ Clean, readable, maintainable code
+[REQUIRED] Complete type hints (mypy strict mode compatible)
+[REQUIRED] Comprehensive docstrings (Google style)
+[REQUIRED] Proper error handling (try/except with specific exceptions)
+[REQUIRED] Input validation (Pydantic models if applicable)
+[REQUIRED] Security best practices (no SQL injection, XSS, eval, exec)
+[REQUIRED] Structured logging with context
+[REQUIRED] Best practices for {tech_stack_str}
+[REQUIRED] Clean, readable, maintainable code
 
 {self._format_research_context(research_context) if research_context else ''}
 
@@ -959,7 +1084,7 @@ Generate complete, production-ready implementation."""
         if not research:
             return ""
         
-        context = "\n\n📚 Research Context:\n"
+        context = "\n\n[RESEARCH] Research Context:\n"
         
         if research.get('key_findings'):
             context += "Key Findings:\n"
@@ -1014,7 +1139,7 @@ Generate complete, production-ready implementation."""
     def reset_daily_stats(self):
         """Reset daily statistics (call at midnight)."""
         self.cost_monitor.daily_spent = 0.0
-        logging.info("🔄 Daily LLM stats reset")
+        logging.info("[RESET] Daily LLM stats reset")
 
 
 # Convenience function for agents

@@ -1,0 +1,144 @@
+{
+  "query": "Using best suited technology, to link API to API with a Web Interface that also allows the viewing of progress and statistics.",
+  "timestamp": "2025-11-22T20:04:20.183726",
+  "depth": "adaptive",
+  "search_results": [
+    {
+      "title": "What Is an API (Application Programming Interface)? | IBM",
+      "url": "https://www.ibm.com/think/topics/api",
+      "snippet": "GraphQL APIs enable more flexible, efficient data fetching, which can ... While web services also connect applications, they require a network to do so.",
+      "source": "google"
+    },
+    {
+      "title": "How do you \"connect\" the front-end and back-end? : r ...",
+      "url": "https://www.reddit.com/r/learnprogramming/comments/8xdh5s/how_do_you_connect_the_frontend_and_backend/",
+      "snippet": "Jul 9, 2018 ... I know the super basics of HTML/CSS, how would you for the lack of a better word, \"connect\" the application I built with a webpage/UI so a user\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Files not updating using 'git pull' - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/20581914/files-not-updating-using-git-pull",
+      "snippet": "Dec 14, 2013 ... what worked for me is ,. remove .git folder; copy .git from other repo; now git checkout. Before Removing , You can try git fetch --all git\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Opinion Paper: \u201cSo what if ChatGPT wrote it?\u201d Multidisciplinary ...",
+      "url": "https://www.sciencedirect.com/science/article/pii/S0268401223000233",
+      "snippet": "Generative AI can enhance productivity but may also lead to replacement of human employees. \u2022. Teaching, learning, and academic research will experience some of\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Is the reason SFTP file transfer in banks, healthcare, etc is so ...",
+      "url": "https://www.reddit.com/r/dataengineering/comments/170rvz3/is_the_reason_sftp_file_transfer_in_banks/",
+      "snippet": "Oct 5, 2023 ... Is data integration really that dirty? What can be done to eliminate these file transfer overhead monsters? Is progress with good REST APIs just\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Web Development Technologies - A Practical Guide - YouTube",
+      "url": "https://www.youtube.com/watch?v=8sXRyHI3bLw",
+      "snippet": "Jan 23, 2024 ... My annual guide to every web development technology that you can think of. We cover everything including frontend, backend, full stack,\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Those who have used chatGPT to build an app/website/program ...",
+      "url": "https://www.reddit.com/r/ChatGPTPro/comments/1e7a4le/those_who_have_used_chatgpt_to_build_an/",
+      "snippet": "Jul 19, 2024 ... ... web interface for making and viewing. I've got a soil sensor (moisture, light, temp, nutrients) which the app is also grabbing data on each\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "The Ultimate FastAPI + React Full Stack Project (Deploy This and ...",
+      "url": "https://www.youtube.com/watch?v=_1P0Uqk50Ps",
+      "snippet": "Jul 11, 2025 ... In this video, you'll learn how to build a full stack application using FastAPI in Python and JavaScript and React. Now ... API, and various best\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "What Is an API (Application Programming Interface)? | IBM",
+      "url": "https://www.ibm.com/think/topics/api",
+      "snippet": "GraphQL APIs enable more flexible, efficient data fetching, which can ... While web services also connect applications, they require a network to do so.",
+      "source": "google"
+    },
+    {
+      "title": "Web API Design Best Practices - Azure Architecture Center ...",
+      "url": "https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design",
+      "snippet": "May 8, 2025 ... This article describes best practices for designing RESTful web APIs. It also covers common design patterns and considerations for building web APIs that are\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Release notes for Amazon Connect - Amazon Connect",
+      "url": "https://docs.aws.amazon.com/connect/latest/adminguide/amazon-connect-release-notes.html",
+      "snippet": "For more information, see Use generative AI-powered email conversation overviews and suggested responses. Also see the CreateSession API for updates to support\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "The (Unofficial) Guide to Charles Schwab's Trader APIs : r/Schwab",
+      "url": "https://www.reddit.com/r/Schwab/comments/1c2ioe1/the_unofficial_guide_to_charles_schwabs_trader/",
+      "snippet": "Apr 12, 2024 ... \u201cAccounts and Trading Production\u201d enables your application to get an account's positions, cash available for trading, and make a trade.",
+      "source": "google"
+    },
+    {
+      "title": "What Is an API (Application Programming Interface)? | IBM",
+      "url": "https://www.ibm.com/think/topics/api",
+      "snippet": "An API is a set of rules or protocols that enables software applications to communicate with each other to exchange data, features and functionality.",
+      "source": "google"
+    },
+    {
+      "title": "Web API Design Best Practices - Azure Architecture Center ...",
+      "url": "https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design",
+      "snippet": "May 8, 2025 ... This article describes best practices for designing RESTful web APIs. It also covers common design patterns and considerations for building web APIs that are\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "What Is an API (Application Programming Interface)? | IBM",
+      "url": "https://www.ibm.com/think/topics/api",
+      "snippet": "An API is a set of rules or protocols that enables software applications to communicate with each other to exchange data, features and functionality.",
+      "source": "google"
+    },
+    {
+      "title": "How do you \"connect\" the front-end and back-end? : r ...",
+      "url": "https://www.reddit.com/r/learnprogramming/comments/8xdh5s/how_do_you_connect_the_frontend_and_backend/",
+      "snippet": "Jul 9, 2018 ... Server-Side code in Java, connects w/ Database, send data to HTML via ???? I've never used java, but it should be the same with any web\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Opinion Paper: \u201cSo what if ChatGPT wrote it?\u201d Multidisciplinary ...",
+      "url": "https://www.sciencedirect.com/science/article/pii/S0268401223000233",
+      "snippet": "Generative AI can enhance productivity but may also lead to replacement of human employees. \u2022. Teaching, learning, and academic research will experience some of\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Web API Design Best Practices - Azure Architecture Center ...",
+      "url": "https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design",
+      "snippet": "May 8, 2025 ... This article describes best practices for designing RESTful web APIs. It also covers common design patterns and considerations for building web APIs that are\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Opinion Paper: \u201cSo what if ChatGPT wrote it?\u201d Multidisciplinary ...",
+      "url": "https://www.sciencedirect.com/science/article/pii/S0268401223000233",
+      "snippet": "... best suited to and what challenges its use will bring. Knowing AI can ... using the technology but also the boundaries with respect to the capabilities.",
+      "source": "google"
+    },
+    {
+      "title": "Is the reason SFTP file transfer in banks, healthcare, etc is so ...",
+      "url": "https://www.reddit.com/r/dataengineering/comments/170rvz3/is_the_reason_sftp_file_transfer_in_banks/",
+      "snippet": "Oct 5, 2023 ... Is data integration really that dirty? What can be done to eliminate these file transfer overhead monsters? Is progress with good REST APIs just\u00a0...",
+      "source": "google"
+    }
+  ],
+  "key_findings": [
+    "Most mentioned concepts: which, application, other, generative, article",
+    "Found 2 official documentation sources",
+    "Top result: What Is an API (Application Programming Interface)? | IBM (https://www.ibm.com/think/topics/api)"
+  ],
+  "documentation_urls": [
+    "https://docs.aws.amazon.com/connect/latest/adminguide/amazon-connect-release-notes.html",
+    "https://www.reddit.com/r/Schwab/comments/1c2ioe1/the_unofficial_guide_to_charles_schwabs_trader/"
+  ],
+  "code_examples": [],
+  "best_practices": [],
+  "confidence_score": 80,
+  "sources_consulted": [
+    "quick_search",
+    "deep_search"
+  ],
+  "cached": false
+}

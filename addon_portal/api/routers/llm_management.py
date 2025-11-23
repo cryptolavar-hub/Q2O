@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.logging import get_logger
 from ..deps import get_db
+from ..models.agent_tasks import AgentTask
 from ..schemas.llm import (
     AgentPromptResponse,
     AgentPromptUpdate,
@@ -30,6 +31,7 @@ from ..services.llm_config_service import (
     update_project,
     update_system_config,
 )
+from sqlalchemy import select, func
 
 LOGGER = get_logger(__name__)
 
@@ -148,20 +150,77 @@ async def delete_project_endpoint(
 
 
 @router.get("/stats")
-async def get_llm_stats() -> dict:
-    """Return usage statistics for the LLM stack."""
+async def get_llm_stats(db: AsyncSession = Depends(get_db)) -> dict:
+    """Return usage statistics for the LLM stack.
+    
+    Aggregates data from:
+    1. Database (agent_tasks table) - persistent historical data
+    2. In-memory LLM service - current session data
+    """
 
-    if not LLM_AVAILABLE:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM integration not available")
+    # Aggregate LLM usage from database (agent_tasks table)
+    result = await db.execute(
+        select(
+            func.sum(AgentTask.llm_calls_count).label('total_calls'),
+            func.sum(AgentTask.llm_tokens_used).label('total_tokens'),
+            func.sum(AgentTask.llm_cost_usd).label('total_cost'),
+            func.avg(AgentTask.actual_duration_seconds).label('avg_duration'),
+            func.count(AgentTask.id).filter(AgentTask.status == 'completed').label('completed_tasks'),
+            func.count(AgentTask.id).filter(AgentTask.status == 'failed').label('failed_tasks'),
+        )
+    )
+    db_stats = result.first()
+    
+    db_total_calls = int(db_stats.total_calls or 0)
+    db_total_tokens = int(db_stats.total_tokens or 0)
+    db_total_cost = float(db_stats.total_cost or 0.0)
+    db_avg_duration = float(db_stats.avg_duration or 0.0)
+    db_completed = int(db_stats.completed_tasks or 0)
+    db_failed = int(db_stats.failed_tasks or 0)
+    db_total_tasks = db_completed + db_failed
+    db_success_rate = (db_completed / db_total_tasks * 100) if db_total_tasks > 0 else 0.0
 
-    llm_service = get_llm_service()
-    template_engine = get_template_learning_engine()
+    # Get in-memory stats (current session only)
+    in_memory_stats = {}
+    monthly_budget = 1000.0
+    monthly_spent = db_total_cost  # Use database cost as monthly spent
+    
+    if LLM_AVAILABLE:
+        try:
+            llm_service = get_llm_service()
+            template_engine = get_template_learning_engine()
+            
+            in_memory_stats = llm_service.get_usage_stats()
+            template_stats = template_engine.get_learning_stats()
+            
+            monthly_budget = llm_service.cost_monitor.monthly_budget
+            # Combine in-memory and database costs
+            monthly_spent = db_total_cost + llm_service.cost_monitor.monthly_spent
+        except Exception as e:
+            LOGGER.warning(f"Failed to get in-memory LLM stats: {e}")
+            template_stats = {'total_templates': 0, 'total_uses': 0, 'cost_saved': 0.0}
+    else:
+        template_stats = {'total_templates': 0, 'total_uses': 0, 'cost_saved': 0.0}
 
-    cost_stats = llm_service.get_usage_stats()
-    template_stats = template_engine.get_learning_stats()
+    # Combine database and in-memory stats
+    total_calls = db_total_calls + in_memory_stats.get('total_calls', 0)
+    total_cost = db_total_cost + in_memory_stats.get('total_cost', 0.0)
+    
+    # Calculate success rate from database
+    success_rate = db_success_rate if db_total_tasks > 0 else (in_memory_stats.get('success_rate', 0.0) * 100)
+    
+    # Average response time (prefer database, fallback to in-memory)
+    avg_response_time = db_avg_duration if db_avg_duration > 0 else in_memory_stats.get('avg_duration', 0.0)
 
-    monthly_budget = llm_service.cost_monitor.monthly_budget
-    monthly_spent = llm_service.cost_monitor.monthly_spent
+    # Provider breakdown (from in-memory stats, as database doesn't track provider)
+    provider_breakdown = in_memory_stats.get('by_provider', {})
+    # If no in-memory data, create empty breakdown
+    if not provider_breakdown:
+        provider_breakdown = {
+            'gemini': {'calls': 0, 'total_cost': 0.0, 'avg_cost': 0.0},
+            'openai': {'calls': 0, 'total_cost': 0.0, 'avg_cost': 0.0},
+            'anthropic': {'calls': 0, 'total_cost': 0.0, 'avg_cost': 0.0},
+        }
 
     alerts = []
     if monthly_spent >= monthly_budget:
@@ -169,44 +228,54 @@ async def get_llm_stats() -> dict:
             'id': 'budget_100',
             'level': 'critical',
             'message': 'Budget limit reached',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
         })
     elif monthly_spent >= monthly_budget * 0.95:
         alerts.append({
             'id': 'budget_95',
             'level': 'critical',
             'message': '95% of budget used',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
         })
     elif monthly_spent >= monthly_budget * 0.80:
         alerts.append({
             'id': 'budget_80',
             'level': 'warning',
             'message': '80% of budget used',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
         })
 
+    # Calculate daily costs from database (last 30 days)
     daily_costs = []
+    now = datetime.now(timezone.utc)
     for offset in range(30):
-        day = datetime.utcnow() - timedelta(days=29 - offset)
-        cost_estimate = cost_stats.get('daily_costs', {}).get(day.strftime('%Y-%m-%d'))
-        if cost_estimate is None:
-            cost_estimate = cost_stats.get('total_cost', 0) / 30
-        daily_costs.append({'date': day.strftime('%Y-%m-%d'), 'cost': cost_estimate})
+        day = now - timedelta(days=29 - offset)
+        day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        # Query tasks completed on this day
+        day_result = await db.execute(
+            select(func.sum(AgentTask.llm_cost_usd)).where(
+                AgentTask.completed_at >= day_start,
+                AgentTask.completed_at <= day_end
+            )
+        )
+        day_cost = float(day_result.scalar() or 0.0)
+        daily_costs.append({'date': day.strftime('%Y-%m-%d'), 'cost': day_cost})
 
     return {
-        'totalCalls': cost_stats.get('total_calls', 0),
-        'totalCost': cost_stats.get('total_cost', 0.0),
+        'totalCalls': total_calls,
+        'totalCost': round(total_cost, 2),
         'monthlyBudget': monthly_budget,
-        'budgetUsed': monthly_spent,
-        'avgResponseTime': cost_stats.get('avg_duration', 0.0),
-        'successRate': cost_stats.get('success_rate', 0.0) * 100,
-        'providerBreakdown': cost_stats.get('provider_breakdown', {}),
+        'budgetUsed': round(monthly_spent, 2),
+        'avgResponseTime': round(avg_response_time, 2),
+        'successRate': round(success_rate, 1),
+        'providerBreakdown': provider_breakdown,
         'dailyCosts': daily_costs,
         'templateStats': {
             'total': template_stats.get('total_templates', 0),
             'uses': template_stats.get('total_uses', 0),
-            'saved': template_stats.get('cost_saved', 0.0),
+            'saved': round(template_stats.get('cost_saved', 0.0), 2),
         },
         'alerts': alerts,
     }

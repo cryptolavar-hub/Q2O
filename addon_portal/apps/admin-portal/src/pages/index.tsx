@@ -22,16 +22,19 @@ interface TrendMetric {
 interface DashboardStats {
   activeCodes: number;
   activeDevices: number;
+  activeProjects: number;
   activeTenants: number;
   expiredCodes: number;
   revokedDevices: number;
   successRate: number;
   totalCodes: number;
   totalDevices: number;
+  totalProjects: number;
   totalTenants: number;
   trends: {
     codes: TrendMetric;
     devices: TrendMetric;
+    projects: TrendMetric;
     successRate: TrendMetric;
     tenants: TrendMetric;
   };
@@ -74,16 +77,19 @@ export default function AdminDashboard() {
         setStats({
           activeCodes: data.activeCodes ?? 0,
           activeDevices: data.activeDevices ?? 0,
+          activeProjects: data.activeProjects ?? 0,
           activeTenants: data.activeTenants ?? 0,
           expiredCodes: data.expiredCodes ?? 0,
           revokedDevices: data.revokedDevices ?? 0,
           successRate: data.successRate ?? 0,
           totalCodes: data.totalCodes ?? 0,
           totalDevices: data.totalDevices ?? 0,
+          totalProjects: data.totalProjects ?? 0,
           totalTenants: data.totalTenants ?? 0,
           trends: data.trends ?? {
             codes: { direction: 'up', value: 0 },
             devices: { direction: 'up', value: 0 },
+            projects: { direction: 'up', value: 0 },
             successRate: { direction: 'up', value: 0 },
             tenants: { direction: 'up', value: 0 },
           },
@@ -199,6 +205,13 @@ export default function AdminDashboard() {
         value: stats.totalDevices.toLocaleString(),
       },
       {
+        icon: '📁',
+        subtitle: `${stats.activeProjects} active`,
+        title: 'Authorized Projects',
+        trend: stats.trends.projects,
+        value: stats.totalProjects.toLocaleString(),
+      },
+      {
         icon: '👥',
         subtitle: `${stats.activeTenants} with active subscriptions`,
         title: 'Tenants',
@@ -236,10 +249,10 @@ export default function AdminDashboard() {
         label: 'View Analytics',
       },
       {
-        description: 'View and revoke authorized devices',
+        description: 'View and manage authorized projects and devices',
         icon: '🔒',
-        href: '/devices',
-        label: 'Manage Devices',
+        href: '/projects-devices',
+        label: 'Manage Projects',
       },
     ],
     [],
@@ -280,10 +293,17 @@ export default function AdminDashboard() {
 
         <section className="mb-10">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-            {(isLoading ? Array.from({ length: 4 }) : metrics).map((metric, index) => (
+            {(isLoading ? Array.from({ length: 5 }) : metrics).map((metric, index) => (
               <motion.div key={metric?.title ?? index} animate={{ opacity: 1, y: 0 }} initial={{ opacity: 0, y: 16 }} transition={{ delay: index * 0.05 }}>
                 {metric ? (
-                  <StatCard icon={metric.icon} subtitle={metric.subtitle} title={metric.title} trend={metric.trend} value={metric.value} />
+                  <StatCard 
+                    icon={metric.icon} 
+                    subtitle={metric.subtitle} 
+                    title={metric.title} 
+                    trend={metric.trend} 
+                    value={metric.value}
+                    valueClassName="text-5xl"
+                  />
                 ) : (
                   <Card className="h-full animate-pulse bg-white">
                     <div className="flex h-32 items-center justify-center text-gray-300">Loading…</div>

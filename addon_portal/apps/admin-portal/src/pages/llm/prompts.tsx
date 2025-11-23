@@ -59,6 +59,10 @@ export default function PromptManagement() {
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [editingAgent, setEditingAgent] = useState<{ projectId: string; agentType: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [totalProjects, setTotalProjects] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   const agentTypes = [
     { id: 'coder', name: 'CoderAgent', description: 'Backend services and APIs' },
@@ -71,7 +75,8 @@ export default function PromptManagement() {
 
   useEffect(() => {
     fetchAllData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, activeTab]);
 
   const fetchAllData = async () => {
     try {
@@ -101,14 +106,35 @@ export default function PromptManagement() {
         });
       }
 
-      // Fetch projects
-      const projectsRes = await fetch(`${API_BASE}/api/llm/projects?page_size=100`);
+      // Fetch projects with pagination
+      const projectsRes = await fetch(`${API_BASE}/api/llm/projects?page=${currentPage}&page_size=${pageSize}`);
       if (projectsRes.ok) {
         const projectsData = await projectsRes.json();
+        const total = projectsData.total || 0;
+        const totalPagesFromApi = projectsData.totalPages || projectsData.total_pages;
+        // Always calculate total_pages from total and pageSize to ensure accuracy
+        const calculatedTotalPages = totalPagesFromApi || (total > 0 ? Math.ceil(total / pageSize) : 1);
+        // Use calculated value if API value seems wrong
+        const finalTotalPages = (totalPagesFromApi && totalPagesFromApi > 0) ? totalPagesFromApi : calculatedTotalPages;
+        
         setProjects(projectsData.items || []);
+        setTotalProjects(total);
+        setTotalPages(finalTotalPages);
+        
+        console.log('Pagination Debug:', { 
+          total, 
+          totalPagesFromApi, 
+          calculatedTotalPages, 
+          finalTotalPages,
+          currentPage, 
+          pageSize,
+          shouldShowPagination: finalTotalPages > 1 || total > pageSize
+        });
       } else {
         console.warn('Failed to fetch projects:', projectsRes.status);
         setProjects([]);
+        setTotalProjects(0);
+        setTotalPages(0);
       }
     } catch (error) {
       console.error('Failed to fetch prompts:', error);
@@ -362,7 +388,7 @@ export default function PromptManagement() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Project Prompts ({projects.length})
+              Project Prompts ({totalProjects > 0 ? totalProjects : projects.length})
             </button>
             <button
               onClick={() => setActiveTab('agent')}
@@ -535,6 +561,109 @@ export default function PromptManagement() {
                 );
               })
             )}
+            
+            {/* Pagination Controls for Project Prompts */}
+            {(() => {
+              // Calculate effective totalPages
+              const effectiveTotalPages = totalPages > 0 ? totalPages : (totalProjects > 0 ? Math.ceil(totalProjects / pageSize) : 1);
+              const shouldShowPagination = effectiveTotalPages > 1 || totalProjects > pageSize;
+              
+              if (!shouldShowPagination) {
+                return totalProjects > 0 ? (
+                  <div className="mt-6 text-sm text-gray-500 text-center">
+                    Showing all {totalProjects} project{totalProjects !== 1 ? 's' : ''}
+                  </div>
+                ) : null;
+              }
+              
+              return (
+                <div className="mt-6 bg-gray-50 px-6 py-4 border-t border-gray-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-600">
+                      Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalProjects)} of {totalProjects} projects
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                        className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                          currentPage === 1
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                        }`}
+                        title="First page"
+                      >
+                        ««
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                          currentPage === 1
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                        }`}
+                      >
+                        ← Previous
+                      </button>
+                      
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, effectiveTotalPages) }, (_, i) => {
+                          let pageNum: number;
+                          if (effectiveTotalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= effectiveTotalPages - 2) {
+                            pageNum = effectiveTotalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => setCurrentPage(pageNum)}
+                              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                                currentPage === pageNum
+                                  ? 'bg-purple-600 text-white'
+                                  : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(effectiveTotalPages, prev + 1))}
+                        disabled={currentPage === effectiveTotalPages}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                          currentPage === effectiveTotalPages
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                        }`}
+                      >
+                        Next →
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(effectiveTotalPages)}
+                        disabled={currentPage === effectiveTotalPages}
+                        className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                          currentPage === effectiveTotalPages
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                        }`}
+                        title="Last page"
+                      >
+                        »»
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -631,6 +760,109 @@ export default function PromptManagement() {
                 </Card>
               ))
             )}
+            
+            {/* Pagination Controls for Agent Prompts */}
+            {(() => {
+              // Calculate effective totalPages
+              const effectiveTotalPages = totalPages > 0 ? totalPages : (totalProjects > 0 ? Math.ceil(totalProjects / pageSize) : 1);
+              const shouldShowPagination = effectiveTotalPages > 1 || totalProjects > pageSize;
+              
+              if (!shouldShowPagination) {
+                return totalProjects > 0 ? (
+                  <div className="mt-6 text-sm text-gray-500 text-center">
+                    Showing all {totalProjects} project{totalProjects !== 1 ? 's' : ''}
+                  </div>
+                ) : null;
+              }
+              
+              return (
+                <div className="mt-6 bg-gray-50 px-6 py-4 border-t border-gray-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-600">
+                      Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalProjects)} of {totalProjects} projects
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                        className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                          currentPage === 1
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                        }`}
+                        title="First page"
+                      >
+                        ««
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                          currentPage === 1
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                        }`}
+                      >
+                        ← Previous
+                      </button>
+                      
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, effectiveTotalPages) }, (_, i) => {
+                          let pageNum: number;
+                          if (effectiveTotalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= effectiveTotalPages - 2) {
+                            pageNum = effectiveTotalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => setCurrentPage(pageNum)}
+                              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                                currentPage === pageNum
+                                  ? 'bg-purple-600 text-white'
+                                  : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(effectiveTotalPages, prev + 1))}
+                        disabled={currentPage === effectiveTotalPages}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                          currentPage === effectiveTotalPages
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                        }`}
+                      >
+                        Next →
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(effectiveTotalPages)}
+                        disabled={currentPage === effectiveTotalPages}
+                        className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                          currentPage === effectiveTotalPages
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                        }`}
+                        title="Last page"
+                      >
+                        »»
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>

@@ -12,6 +12,18 @@ DUAL-STACK MODE:
 import asyncio
 import sys
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# CRITICAL: Load .env file from project root BEFORE starting the API
+# This ensures all environment variables (including LLM API keys) are available
+project_root = Path(__file__).resolve().parents[1]  # Go up from addon_portal to Q2O_Combined
+env_path = project_root / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path, override=False)
+    print(f"[OK] Loaded .env file from: {env_path}")
+else:
+    print(f"[WARN] .env file not found at: {env_path}")
 
 # Set event loop policy BEFORE importing uvicorn or the app
 if sys.platform == 'win32':

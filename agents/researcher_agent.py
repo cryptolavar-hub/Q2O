@@ -1,12 +1,24 @@
 """
-Researcher Agent - Conducts web research for project objectives and tasks.
-Searches, scrapes, and synthesizes information from the web to assist other agents.
+Researcher Agent - Conducts research for project objectives and tasks.
 
-Enhanced with LLM synthesis (Phase 2 - November 2025):
-- Intelligently synthesizes research findings using LLM
-- Extracts actionable insights from web research
-- Identifies patterns, best practices, and recommendations
-- Falls back to basic synthesis if LLM unavailable
+NEW PRIORITY (November 2025):
+- PRIMARY: LLM-based research (comprehensive, fast, accurate, single call)
+- FALLBACK: Web search (only if LLM fails or needs additional verification)
+
+LLM Research provides:
+- Key findings and actionable insights
+- Official documentation URLs
+- Code examples in relevant languages/frameworks
+- Best practices and recommendations
+- Common pitfalls to avoid
+- Implementation patterns
+- Integration requirements
+- Performance and security considerations
+
+Web Search Fallback:
+- Used only when LLM is unavailable or fails
+- Provides search results, documentation extraction, and content scraping
+- Results are still synthesized with LLM if available
 """
 
 from typing import Dict, Any, List, Optional, Set
@@ -88,7 +100,7 @@ class ResearchCache:
             
             similar_research = db.find_similar_research(query, limit=1)
             if similar_research:
-                logging.info(f"✅ Found research in PostgreSQL for: {query}")
+                logging.info(f"[OK] Found research in PostgreSQL for: {query}")
                 return similar_research[0]
         except Exception as e:
             logging.debug(f"PostgreSQL check failed, trying file cache: {e}")
@@ -207,7 +219,7 @@ class WebSearcher:
                     results = self._search_google(query, num_results)
                     if results:
                         self._increment_count('google')
-                        self.logger.info(f"✓ Google returned {len(results)} results")
+                        self.logger.info(f"[OK] Google returned {len(results)} results")
                         return results
                     else:
                         self.logger.warning("Google returned 0 results")
@@ -226,7 +238,7 @@ class WebSearcher:
                     results = self._search_bing(query, num_results)
                     if results:
                         self._increment_count('bing')
-                        self.logger.info(f"✓ Bing returned {len(results)} results")
+                        self.logger.info(f"[OK] Bing returned {len(results)} results")
                         return results
                     else:
                         self.logger.warning("Bing returned 0 results")
@@ -244,7 +256,7 @@ class WebSearcher:
                 results = self._search_duckduckgo(query, num_results)
                 if results:
                     self._increment_count('duckduckgo')
-                    self.logger.info(f"✓ DuckDuckGo returned {len(results)} results")
+                    self.logger.info(f"[OK] DuckDuckGo returned {len(results)} results")
                     return results
                 else:
                     self.logger.warning("DuckDuckGo returned 0 results")
@@ -253,7 +265,7 @@ class WebSearcher:
         else:
             self.logger.warning("DuckDuckGo rate limit reached")
         
-        self.logger.error(f"❌ All search providers failed or rate limited for query: '{query}'")
+        self.logger.error(f"[ERROR] All search providers failed or rate limited for query: '{query}'")
         return []
     
     def _search_google(self, query: str, num_results: int) -> List[Dict]:
@@ -358,7 +370,7 @@ class WebSearcher:
                             break
                 
                 if results:
-                    self.logger.info(f"✓ DuckDuckGo returned {len(results)} results for: {query}")
+                    self.logger.info(f"[OK] DuckDuckGo returned {len(results)} results for: {query}")
                     return results
                 else:
                     self.logger.warning(f"DuckDuckGo returned 0 results on attempt {attempt + 1}")
@@ -373,7 +385,7 @@ class WebSearcher:
                         continue  # Retry
                     else:
                         self.logger.error("DuckDuckGo rate limit: All retries exhausted")
-                        self.logger.info("💡 Tip: Wait a few minutes or configure Google/Bing API keys for better reliability")
+                        self.logger.info("[TIP] Wait a few minutes or configure Google/Bing API keys for better reliability")
                 else:
                     self.logger.error(f"DuckDuckGo search error: {e}", exc_info=True)
                 
@@ -386,12 +398,21 @@ class WebSearcher:
 
 class ResearcherAgent(BaseAgent):
     """
-    Agent responsible for conducting web research to assist other agents.
+    Agent responsible for conducting research to assist other agents.
     
-    Enhanced with LLM synthesis (Phase 2):
-    - Intelligently synthesizes research findings
-    - Extracts actionable insights and recommendations
-    - Identifies patterns and best practices
+    Research Priority (November 2025):
+    - PRIMARY: LLM-based research (comprehensive, single call)
+    - FALLBACK: Web search (only if LLM fails)
+    
+    LLM Research:
+    - Provides comprehensive research in one call
+    - Includes documentation, code examples, best practices
+    - High confidence (95%) and fast execution
+    
+    Web Search Fallback:
+    - Multi-provider search (Google, Bing, DuckDuckGo)
+    - Content scraping and recursive research
+    - Results synthesized with LLM if available
     """
     
     def __init__(self, agent_id: str = "researcher_main", workspace_path: str = ".",
@@ -424,15 +445,15 @@ class ResearcherAgent(BaseAgent):
             self.llm_service = get_llm_service()
             self.config_manager = get_configuration_manager()
             self.llm_enabled = True
-            logging.info("✅ ResearcherAgent: LLM synthesis enabled")
+            logging.info("[OK] ResearcherAgent: LLM synthesis enabled")
         else:
             self.llm_service = None
             self.config_manager = None
             self.llm_enabled = False
             if self.use_llm:
-                logging.warning("⚠️  ResearcherAgent: LLM requested but not available, basic synthesis only")
+                logging.warning("[WARN] ResearcherAgent: LLM requested but not available, basic synthesis only")
             else:
-                logging.info("ℹ️  ResearcherAgent: LLM disabled, basic synthesis only")
+                logging.info("[INFO] ResearcherAgent: LLM disabled, basic synthesis only")
         
         # Subscribe to research channel for agent requests
         if hasattr(self, 'message_broker') and self.message_broker:
@@ -538,7 +559,11 @@ class ResearcherAgent(BaseAgent):
     
     def _conduct_research(self, query: str, task: Task) -> Dict[str, Any]:
         """
-        Conduct comprehensive web research.
+        Conduct comprehensive research using LLM as PRIMARY, web search as FALLBACK.
+        
+        NEW PRIORITY (November 2025):
+        - PRIMARY: LLM research (comprehensive, fast, accurate)
+        - FALLBACK: Web search (only if LLM fails or needs additional verification)
         
         Args:
             query: Research query
@@ -565,12 +590,32 @@ class ResearcherAgent(BaseAgent):
             'sources_consulted': []
         }
         
+        # PRIMARY: Try LLM research first (if enabled)
+        if self.llm_enabled:
+            try:
+                self.logger.info("[LLM] Attempting LLM-based research (PRIMARY method)...")
+                llm_results = self._conduct_research_with_llm(query, task, depth)
+                if llm_results and llm_results.get('key_findings'):
+                    # LLM research succeeded - use it as primary source
+                    research_results.update(llm_results)
+                    research_results['sources_consulted'].append('llm_research')
+                    research_results['confidence_score'] = self._calculate_confidence_score(research_results)
+                    self.logger.info(f"[LLM] LLM research completed successfully: {len(llm_results.get('key_findings', []))} findings")
+                    return research_results
+                else:
+                    self.logger.warning("[LLM] LLM research returned empty results, falling back to web search")
+            except Exception as e:
+                self.logger.warning(f"[LLM] LLM research failed: {e}, falling back to web search")
+        
+        # FALLBACK: Web search (only if LLM failed or not enabled)
+        self.logger.info("[SEARCH] Using web search as fallback method...")
+        
         # Phase 1: Quick search (top results)
         # More results for high-depth research
         initial_results = 10 if depth == 'comprehensive' else 5
         quick_results = self.searcher.search(query, num_results=initial_results)
         research_results['search_results'].extend(quick_results)
-        research_results['sources_consulted'].append('quick_search')
+        research_results['sources_consulted'].append('web_search_fallback')
         self.logger.info(f"Phase 1: Retrieved {len(quick_results)} initial results")
         
         # Phase 2: Deep search if needed
@@ -662,6 +707,286 @@ class ResearcherAgent(BaseAgent):
         # Phase 6: Quality validation and confidence scoring
         confidence = self._calculate_confidence_score(research_results)
         research_results['confidence_score'] = confidence
+        
+        return research_results
+    
+    def _conduct_research_with_llm(self, query: str, task: Task, depth: str) -> Optional[Dict[str, Any]]:
+        """
+        Conduct research using LLM as PRIMARY method.
+        
+        This method uses LLM to provide comprehensive research in a single call,
+        including documentation URLs, code examples, best practices, and insights.
+        
+        Args:
+            query: Research query
+            task: The research task
+            depth: Research depth level
+            
+        Returns:
+            Research results dictionary or None if LLM fails
+        """
+        if not self.llm_service:
+            return None
+        
+        try:
+            # Check if we're already in async context
+            try:
+                loop = asyncio.get_running_loop()
+                # Already in async - need to handle differently
+                self.logger.warning("[LLM] Already in async context, cannot use LLM research synchronously")
+                return None
+            except RuntimeError:
+                # No running loop - safe to create new one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    llm_results = loop.run_until_complete(
+                        self._conduct_research_with_llm_async(query, task, depth)
+                    )
+                    return llm_results
+                finally:
+                    loop.close()
+        except Exception as e:
+            self.logger.error(f"[LLM] Error in LLM research: {e}", exc_info=True)
+            return None
+    
+    async def _conduct_research_with_llm_async(self, query: str, task: Task, depth: str) -> Optional[Dict[str, Any]]:
+        """
+        Async method to conduct research using LLM.
+        
+        Args:
+            query: Research query
+            task: The research task
+            depth: Research depth level
+            
+        Returns:
+            Research results dictionary or None if LLM fails
+        """
+        if not self.llm_service:
+            return None
+        
+        # Build comprehensive LLM prompt for research
+        system_prompt = """You are an expert software researcher and technical analyst.
+
+Your task: Provide comprehensive research on a given topic, including:
+1. Key findings and insights (5-10 actionable points)
+2. Official documentation URLs (prioritize official sources)
+3. Code examples (if applicable, in the requested language/framework)
+4. Best practices and recommendations
+5. Common pitfalls to avoid
+6. Implementation patterns and approaches
+7. Integration requirements (APIs, authentication, data formats)
+8. Performance and security considerations
+
+Return your research as JSON:
+{
+  "key_findings": [
+    "Finding 1: Specific, actionable insight",
+    "Finding 2: Another specific insight",
+    ...
+  ],
+  "documentation_urls": [
+    "https://official-docs.com/api",
+    "https://developer.example.com/guide",
+    ...
+  ],
+  "code_examples": [
+    {
+      "language": "python",
+      "description": "Example: API authentication",
+      "code": "import requests\\n\\ndef authenticate():\\n    ..."
+    },
+    ...
+  ],
+  "best_practices": [
+    "Practice 1: Specific recommendation",
+    "Practice 2: Another recommendation",
+    ...
+  ],
+  "common_pitfalls": [
+    "Pitfall 1: What to avoid and why",
+    "Pitfall 2: Another common mistake",
+    ...
+  ],
+  "implementation_patterns": [
+    "Pattern 1: Description of approach",
+    "Pattern 2: Alternative approach",
+    ...
+  ],
+  "integration_requirements": {
+    "authentication": "OAuth 2.0, API keys, etc.",
+    "apis_required": ["API 1", "API 2"],
+    "data_formats": ["JSON", "XML"]
+  },
+  "performance_considerations": [
+    "Consideration 1: Performance tip",
+    ...
+  ],
+  "security_considerations": [
+    "Security tip 1: What to secure",
+    ...
+  ]
+}
+
+Be specific, accurate, and actionable. Focus on what developers NEED to know."""
+        
+        # Build user prompt with context
+        tech_stack = task.tech_stack or []
+        tech_context = f"Tech Stack: {', '.join(tech_stack)}" if tech_stack else "No specific tech stack"
+        
+        user_prompt = f"""Research Query: {query}
+
+Context:
+{tech_context}
+Task Complexity: {task.metadata.get('complexity', 'medium')}
+Research Depth: {depth}
+
+Please provide comprehensive research on this topic. Include:
+- Official documentation URLs (verify these are real, official sources)
+- Code examples in the relevant language/framework
+- Best practices specific to this technology
+- Implementation patterns and approaches
+- Integration requirements
+- Performance and security considerations
+
+Be thorough and specific. This research will be used to implement the solution."""
+        
+        # Generate research with LLM
+        self.logger.info(f"[LLM] Requesting comprehensive research from LLM...")
+        response = await self.llm_service.complete(
+            system_prompt,
+            user_prompt,
+            temperature=0.3,  # Lower temperature for factual research
+            max_tokens=4096  # Allow comprehensive responses
+        )
+        
+        if not response.success:
+            self.logger.warning(f"[LLM] LLM research failed: {response.error}")
+            if hasattr(response, 'attempts'):
+                self.logger.warning(f"[LLM] Attempts made: {response.attempts}")
+            return None
+        
+        # Log LLM usage
+        if response.usage:
+            self.logger.info(
+                f"[COST] LLM research cost: ${response.usage.total_cost:.4f} "
+                f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens, "
+                f"provider: {response.provider})"
+            )
+        
+        # Parse JSON response
+        try:
+            import json
+            content = response.content.strip()
+            
+            # Extract JSON if wrapped in markdown
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content and "{" in content:
+                # Try to extract JSON from code block
+                json_start = content.find("{")
+                json_end = content.rfind("}") + 1
+                if json_start >= 0 and json_end > json_start:
+                    content = content[json_start:json_end]
+            
+            result = json.loads(content)
+            
+            # Build research results structure
+            research_results = {
+                'query': query,
+                'timestamp': datetime.now().isoformat(),
+                'depth': depth,
+                'search_results': [],  # Empty for LLM research
+                'key_findings': result.get('key_findings', []),
+                'documentation_urls': result.get('documentation_urls', []),
+                'code_examples': result.get('code_examples', []),
+                'best_practices': result.get('best_practices', []),
+                'common_pitfalls': result.get('common_pitfalls', []),
+                'implementation_patterns': result.get('implementation_patterns', []),
+                'integration_requirements': result.get('integration_requirements', {}),
+                'performance_considerations': result.get('performance_considerations', []),
+                'security_considerations': result.get('security_considerations', []),
+                'confidence_score': 95,  # High confidence for LLM research
+                'sources_consulted': ['llm_research'],
+                'llm_provider': response.provider,
+                'llm_model': response.model
+            }
+            
+            self.logger.info(
+                f"[LLM] LLM research completed: {len(research_results['key_findings'])} findings, "
+                f"{len(research_results['documentation_urls'])} docs, "
+                f"{len(research_results['code_examples'])} code examples"
+            )
+            
+            return research_results
+            
+        except json.JSONDecodeError as e:
+            self.logger.error(f"[LLM] Failed to parse LLM JSON response: {e}")
+            self.logger.debug(f"[LLM] Response content (first 500 chars): {response.content[:500]}")
+            
+            # Try to extract structured information from plain text
+            return self._parse_llm_research_from_text(response.content, query, depth)
+        except Exception as e:
+            self.logger.error(f"[LLM] Error processing LLM research: {e}", exc_info=True)
+            return None
+    
+    def _parse_llm_research_from_text(self, content: str, query: str, depth: str) -> Dict[str, Any]:
+        """
+        Parse LLM research from plain text if JSON parsing fails.
+        
+        Args:
+            content: LLM response text
+            query: Original query
+            depth: Research depth
+            
+        Returns:
+            Research results dictionary
+        """
+        research_results = {
+            'query': query,
+            'timestamp': datetime.now().isoformat(),
+            'depth': depth,
+            'search_results': [],
+            'key_findings': [],
+            'documentation_urls': [],
+            'code_examples': [],
+            'best_practices': [],
+            'confidence_score': 80,  # Lower confidence for text parsing
+            'sources_consulted': ['llm_research_text']
+        }
+        
+        # Extract URLs
+        url_pattern = r'https?://[^\s\)]+'
+        urls = re.findall(url_pattern, content)
+        research_results['documentation_urls'] = list(set(urls[:10]))  # Limit to 10 unique URLs
+        
+        # Extract findings (lines that look like insights)
+        lines = content.split('\n')
+        findings = []
+        for line in lines:
+            line = line.strip()
+            # Look for lines that are insights (not headers, not too short, not URLs)
+            if (len(line) > 30 and 
+                not line.startswith('#') and 
+                not line.startswith('http') and
+                not line.startswith('*') and
+                ':' in line):  # Usually insights have colons
+                findings.append(line)
+        
+        research_results['key_findings'] = findings[:10]  # Top 10 findings
+        
+        # Extract code blocks
+        code_pattern = r'```(\w+)?\n(.*?)```'
+        code_matches = re.findall(code_pattern, content, re.DOTALL)
+        for lang, code in code_matches:
+            if len(code.strip()) > 20:  # Meaningful code blocks
+                research_results['code_examples'].append({
+                    'language': lang or 'unknown',
+                    'description': 'Code example from LLM research',
+                    'code': code.strip()[:1000]  # Limit length
+                })
+        
+        self.logger.info(f"[LLM] Parsed text research: {len(findings)} findings, {len(urls)} URLs, {len(code_matches)} code examples")
         
         return research_results
     
@@ -931,7 +1256,7 @@ class ResearcherAgent(BaseAgent):
                             self._synthesize_findings_with_llm(research_results, query)
                         )
                         if llm_findings:
-                            self.logger.info(f"🤖 LLM synthesis: {len(llm_findings)} insights generated")
+                            self.logger.info(f"[LLM] LLM synthesis: {len(llm_findings)} insights generated")
                             return llm_findings
                     finally:
                         loop.close()
@@ -1012,6 +1337,10 @@ Please synthesize these findings into 5-10 actionable insights."""
         
         if not response.success:
             self.logger.warning(f"LLM synthesis failed: {response.error}")
+            self.logger.warning(f"LLM synthesis attempts: {response.attempts}")
+            # Log which providers were tried
+            if hasattr(response, 'provider'):
+                self.logger.warning(f"LLM provider tried: {response.provider}")
             return []
         
         # Parse JSON response
@@ -1031,7 +1360,7 @@ Please synthesize these findings into 5-10 actionable insights."""
             # Log LLM usage
             if response.usage:
                 self.logger.info(
-                    f"💰 LLM synthesis cost: ${response.usage.total_cost:.4f} "
+                    f"[COST] LLM synthesis cost: ${response.usage.total_cost:.4f} "
                     f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens)"
                 )
             
@@ -1168,7 +1497,7 @@ Please synthesize these findings into 5-10 actionable insights."""
                 project_id=project_id
             )
             
-            self.logger.info(f"✅ Stored research in PostgreSQL: {research_id}")
+            self.logger.info(f"[OK] Stored research in PostgreSQL: {research_id}")
             
         except Exception as e:
             self.logger.warning(f"Could not store in PostgreSQL, using files only: {e}")
@@ -1195,7 +1524,7 @@ Please synthesize these findings into 5-10 actionable insights."""
         self.research_files.append(json_path)
         self.research_files.append(md_path)
         
-        self.logger.info(f"📁 Backup files: {json_filename}, {md_filename}")
+        self.logger.info(f"Backup files: {json_filename}, {md_filename}")
         
         return research_id
     
@@ -1257,10 +1586,15 @@ Please synthesize these findings into 5-10 actionable insights."""
             lines.append("")
             for i, example in enumerate(results['code_examples'][:5], 1):
                 lines.append(f"#### Example {i}")
-                lines.append(f"**Source**: {example['source_title']}")
-                lines.append(f"**URL**: {example['source_url']}")
+                # Handle both LLM-generated and web-scraped code examples
+                if 'source_title' in example:
+                    lines.append(f"**Source**: {example['source_title']}")
+                elif 'description' in example:
+                    lines.append(f"**Description**: {example['description']}")
+                if 'source_url' in example:
+                    lines.append(f"**URL**: {example['source_url']}")
                 lines.append("```")
-                lines.append(example['code'])
+                lines.append(example.get('code', ''))
                 lines.append("```")
                 lines.append("")
         

@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
+import zipfile
+import tempfile
+import os
+from pathlib import Path
 
 from ..core.exceptions import ConfigurationError, InvalidOperationError, TenantNotFoundError
 from ..models.licensing import Tenant, Subscription, SubscriptionState, ActivationCode
@@ -1214,5 +1218,197 @@ async def restart_tenant_project(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to restart project: {str(e)}"
+        )
+
+
+@router.get("/projects/{project_id}/download")
+async def download_project_files(
+    project_id: str,
+    tenant_info: dict = Depends(get_tenant_from_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """Download project files as a ZIP archive.
+    
+    Requirements:
+    - Project must have execution_status='completed'
+    - Project must have output_folder_path set
+    - Output folder must exist and contain files
+    """
+    # Get project
+    result = await db.execute(
+        select(LLMProjectConfig).where(
+            LLMProjectConfig.project_id == project_id,
+            LLMProjectConfig.tenant_id == tenant_info["tenant_id"]
+        )
+    )
+    project = result.scalar_one_or_none()
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    # Validate project is completed
+    if project.execution_status != 'completed':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Project must be completed to download files. Current status: {project.execution_status}"
+        )
+    
+    # Check if output folder path exists
+    if not project.output_folder_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project output folder not found. Project may not have been executed yet."
+        )
+    
+    output_folder = Path(project.output_folder_path)
+    
+    if not output_folder.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project output folder does not exist: {output_folder}"
+        )
+    
+    # Zip the entire folder structure, preserving all subdirectories
+    # BLACKLIST APPROACH: Exclude only specific files/directories, include everything else
+    # This ensures we don't miss any generated files regardless of project type
+    
+    files_to_zip = []
+    
+    # File extensions to exclude (log files, temporary files, cache files)
+    excluded_file_extensions = ['.log', '.tmp', '.pyc', '.pyo', '.pyd', '.cache']
+    
+    # Directory names to exclude (build artifacts, cache, version control, coverage)
+    excluded_dir_names = [
+        '__pycache__',      # Python bytecode cache
+        '.pytest_cache',    # Pytest cache
+        '.coverage_reports', # Coverage reports (can be regenerated)
+        '.git',             # Git repository
+        '.svn',             # SVN repository
+        '.hg',              # Mercurial repository
+        'node_modules',     # Node.js dependencies (if any)
+        '.venv',            # Python virtual environment
+        'venv',             # Python virtual environment (alternative)
+        'env',              # Python virtual environment (alternative)
+        '.env',             # Environment files (may contain secrets)
+        'dist',             # Distribution/build artifacts
+        'build',            # Build artifacts
+        '.next',            # Next.js build output
+        '.nuxt',            # Nuxt.js build output
+        '.temp_downloads',  # Our own temp download folder
+    ]
+    
+    LOGGER.info(
+        "project_download_scanning",
+        extra={
+            "project_id": project_id,
+            "output_folder": str(output_folder),
+            "folder_exists": output_folder.exists(),
+        }
+    )
+    
+    # Walk through the entire folder structure recursively
+    for root, dirs, files in os.walk(output_folder):
+        # Filter out excluded directories from os.walk to avoid traversing them
+        dirs[:] = [d for d in dirs if d not in excluded_dir_names]
+        
+        for file in files:
+            file_path = Path(root) / file
+            
+            # Skip files with excluded extensions
+            if any(file.lower().endswith(ext.lower()) for ext in excluded_file_extensions):
+                continue
+            
+            # Skip files in excluded directories (double-check in case we missed any)
+            relative_path = file_path.relative_to(output_folder)
+            path_parts = relative_path.parts
+            if any(excluded_dir in path_parts for excluded_dir in excluded_dir_names):
+                continue
+            
+            # Include everything else
+            files_to_zip.append(file_path)
+    
+    LOGGER.info(
+        "project_download_files_found",
+        extra={
+            "project_id": project_id,
+            "total_files": len(files_to_zip),
+            "sample_files": [str(f.relative_to(output_folder)) for f in files_to_zip[:10]],
+        }
+    )
+    
+    if not files_to_zip:
+        LOGGER.warning(
+            "project_download_no_files",
+            extra={
+                "project_id": project_id,
+                "output_folder": str(output_folder),
+                "folder_contents": list(output_folder.iterdir()) if output_folder.exists() else [],
+            }
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No project files found to download. Project may not have generated any code files."
+        )
+    
+    try:
+        # Create ZIP archive in memory to avoid Windows file locking issues
+        # This approach is cleaner and doesn't require temporary files
+        from io import BytesIO
+        
+        zip_buffer = BytesIO()
+        
+        # Create ZIP archive with the entire folder structure preserved
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for file_path in files_to_zip:
+                # Get relative path from output folder to preserve directory structure
+                arcname = file_path.relative_to(output_folder)
+                zipf.write(file_path, arcname)
+        
+        # Get the ZIP content from memory buffer
+        zip_content = zip_buffer.getvalue()
+        zip_buffer.close()
+        
+        # Generate filename
+        safe_project_name = "".join(c for c in project.client_name if c.isalnum() or c in (' ', '-', '_')).strip()
+        if not safe_project_name:
+            safe_project_name = project_id
+        filename = f"{safe_project_name}_{project_id}.zip"
+        
+        LOGGER.info(
+            "project_files_downloaded",
+            extra={
+                "project_id": project_id,
+                "tenant_id": tenant_info["tenant_id"],
+                "zip_filename": filename,
+                "file_size": len(zip_content),
+            }
+        )
+        
+        # Return ZIP file as download
+        return Response(
+            content=zip_content,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(zip_content)),
+            }
+        )
+            
+    except Exception as e:
+        LOGGER.error(
+            "project_download_failed",
+            extra={
+                "project_id": project_id,
+                "tenant_id": tenant_info["tenant_id"],
+                "error": str(e),
+            },
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create download archive: {str(e)}"
         )
 

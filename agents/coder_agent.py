@@ -59,16 +59,16 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             self.template_learning = get_template_learning_engine()
             self.config_manager = get_configuration_manager()
             self.llm_enabled = True
-            logging.info("✅ CoderAgent: LLM integration enabled (hybrid mode)")
+            logging.info("[OK] CoderAgent: LLM integration enabled (hybrid mode)")
         else:
             self.llm_service = None
             self.template_learning = None
             self.config_manager = None
             self.llm_enabled = False
             if self.use_llm:
-                logging.warning("⚠️  CoderAgent: LLM requested but not available, template-only mode")
+                logging.warning("[WARN] CoderAgent: LLM requested but not available, template-only mode")
             else:
-                logging.info("ℹ️  CoderAgent: LLM disabled, template-only mode")
+                logging.info("[INFO] CoderAgent: LLM disabled, template-only mode")
 
     def process_task(self, task: Task) -> Task:
         """
@@ -321,7 +321,7 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
                 f.write(code_content)
             
             implemented_files.append(file_path)
-            self.logger.info(f"✅ Created file: {file_path}")
+            self.logger.info(f"[OK] Created file: {file_path}")
 
         return implemented_files
     
@@ -360,14 +360,14 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
                 task_desc, tech_stack
             )
             if learned_template:
-                self.logger.info(f"📚 Using learned template: {learned_template.name} (saved ${0.52:.2f}!)")
+                self.logger.info(f"[TEMPLATE] Using learned template: {learned_template.name} (saved ${0.52:.2f}!)")
                 self.template_learning.increment_usage(learned_template.template_id)
                 return learned_template.template_content
         
         # STEP 2: Try traditional template (FAST)
         try:
             code_content = self._generate_code_content(file_type, file_info, objective, task)
-            self.logger.info(f"📄 Used traditional template for {file_type}")
+            self.logger.info(f"[TEMPLATE] Used traditional template for {file_type}")
             return code_content
         except Exception as template_error:
             self.logger.debug(f"Traditional template not available: {template_error}")
@@ -377,7 +377,7 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             # No LLM available and no template - fail
             raise ValueError(f"No template for {file_type} and LLM not available")
         
-        self.logger.info(f"🤖 Generating with LLM for {file_type} (no template available)")
+        self.logger.info(f"[LLM] Generating with LLM for {file_type} (no template available)")
         
         # Get configuration for this task
         system_prompt, user_prompt = self.config_manager.get_prompt_for_task(
@@ -402,7 +402,7 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
         # Log usage
         if response.usage:
             self.logger.info(
-                f"💰 LLM cost: ${response.usage.total_cost:.4f} "
+                f"[COST] LLM cost: ${response.usage.total_cost:.4f} "
                 f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens, "
                 f"{response.usage.duration_seconds:.2f}s)"
             )
@@ -426,7 +426,7 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             )
             
             if template_id:
-                self.logger.info(f"✨ Learned new template: {template_id} (future similar tasks will be FREE!)")
+                self.logger.info(f"[LEARNED] Learned new template: {template_id} (future similar tasks will be FREE!)")
         
         return code_content
     

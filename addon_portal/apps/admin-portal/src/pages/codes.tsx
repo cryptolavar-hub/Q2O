@@ -6,7 +6,8 @@ import { AdminHeader } from '../components/AdminHeader';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { Footer } from '../components/Footer';
 import { getCodes, generateCodes, revokeCode, type ActivationCode } from '../lib/api';
-import { getTenants, type Tenant } from '../lib/api';
+import { getTenants, type Tenant, type TenantPage, type TenantQueryParams } from '../lib/api';
+import { Badge } from '@/design-system';
 
 export default function CodesPage() {
   const [codes, setCodes] = useState<ActivationCode[]>([]);
@@ -23,8 +24,16 @@ export default function CodesPage() {
   const [loading, setLoading] = useState(false);
   const [loadingCodes, setLoadingCodes] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [totalTenants, setTotalTenants] = useState(0);
   const [loadingTenants, setLoadingTenants] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showTenantModal, setShowTenantModal] = useState(false);
+  const [tenantModalPage, setTenantModalPage] = useState(1);
+  const [tenantModalPageSize, setTenantModalPageSize] = useState(10);
+  const [tenantModalSearch, setTenantModalSearch] = useState('');
+  const [tenantModalStatus, setTenantModalStatus] = useState('all');
+  const [tenantModalData, setTenantModalData] = useState<TenantPage | null>(null);
+  const [loadingTenantModal, setLoadingTenantModal] = useState(false);
 
   // Load tenants on mount
   useEffect(() => {
@@ -39,13 +48,49 @@ export default function CodesPage() {
   const loadTenants = async () => {
     try {
       setLoadingTenants(true);
-      const response = await getTenants({ page: 1, pageSize: 100 });
+      // Only load first 10 tenants for the dropdown, but get total count
+      const response = await getTenants({ page: 1, pageSize: 10 });
       setTenants(response.items);
+      setTotalTenants(response.total);
     } catch (error) {
       console.error('Error loading tenants:', error);
     } finally {
       setLoadingTenants(false);
     }
+  };
+
+  const loadTenantModalData = async () => {
+    try {
+      setLoadingTenantModal(true);
+      const params: TenantQueryParams = {
+        page: tenantModalPage,
+        pageSize: tenantModalPageSize,
+        search: tenantModalSearch.trim() || undefined,
+        status: tenantModalStatus !== 'all' ? tenantModalStatus : undefined,
+        sortField: 'created_at',
+        sortDirection: 'desc',
+      };
+      const response = await getTenants(params);
+      setTenantModalData(response);
+    } catch (error) {
+      console.error('Error loading tenant modal data:', error);
+      setTenantModalData(null);
+    } finally {
+      setLoadingTenantModal(false);
+    }
+  };
+
+  // Load tenant modal data when modal opens or filters change
+  useEffect(() => {
+    if (showTenantModal) {
+      loadTenantModalData();
+    }
+  }, [showTenantModal, tenantModalPage, tenantModalPageSize, tenantModalSearch, tenantModalStatus]);
+
+  const handleSelectTenantFromModal = (tenant: Tenant) => {
+    setSelectedTenant(tenant.slug);
+    setShowTenantModal(false);
+    setCurrentPage(1); // Reset to first page when filter changes
   };
 
   const loadCodes = async () => {
@@ -223,19 +268,35 @@ export default function CodesPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Tenant</label>
-              <select
-                value={selectedTenant}
-                onChange={(e) => {
-                  setSelectedTenant(e.target.value);
-                  setCurrentPage(1); // Reset to first page when filter changes
-                }}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="all">All Tenants</option>
-                {tenants.map(tenant => (
-                  <option key={tenant.slug} value={tenant.slug}>{tenant.name} ({tenant.slug})</option>
-                ))}
-              </select>
+              <div className="space-y-2">
+                <select
+                  value={selectedTenant}
+                  onChange={(e) => {
+                    setSelectedTenant(e.target.value);
+                    setCurrentPage(1); // Reset to first page when filter changes
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="all">All Tenants</option>
+                  {tenants.map(tenant => (
+                    <option key={tenant.slug} value={tenant.slug}>{tenant.name} ({tenant.slug})</option>
+                  ))}
+                </select>
+                {totalTenants > 10 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTenantModal(true);
+                      setTenantModalPage(1);
+                      setTenantModalSearch('');
+                      setTenantModalStatus('all');
+                    }}
+                    className="w-full text-sm text-purple-600 hover:text-purple-800 font-medium text-left underline mt-1"
+                  >
+                    See More →
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
@@ -605,6 +666,193 @@ export default function CodesPage() {
           </motion.div>
         </div>
       )}
+      {/* Tenant Selection Modal */}
+      {showTenantModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col"
+          >
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Select Tenant</h2>
+                <p className="text-sm text-gray-600 mt-1">Choose a tenant from the list below</p>
+              </div>
+              <button
+                onClick={() => setShowTenantModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Modal Search and Filters */}
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                  <input
+                    type="text"
+                    placeholder="Search tenants..."
+                    value={tenantModalSearch}
+                    onChange={(e) => {
+                      setTenantModalSearch(e.target.value);
+                      setTenantModalPage(1);
+                    }}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <select
+                    value={tenantModalStatus}
+                    onChange={(e) => {
+                      setTenantModalStatus(e.target.value);
+                      setTenantModalPage(1);
+                    }}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="trialing">Trialing</option>
+                    <option value="past_due">Past Due</option>
+                    <option value="canceled">Canceled</option>
+                    <option value="unpaid">Unpaid</option>
+                    <option value="suspended">Suspended</option>
+                    <option value="none">No Subscription</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Items Per Page</label>
+                  <select
+                    value={tenantModalPageSize}
+                    onChange={(e) => {
+                      setTenantModalPageSize(Number(e.target.value));
+                      setTenantModalPage(1);
+                    }}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Table */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {loadingTenantModal ? (
+                <div className="text-center py-12 text-gray-500">Loading tenants...</div>
+              ) : !tenantModalData || tenantModalData.items.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  {tenantModalSearch || tenantModalStatus !== 'all'
+                    ? 'No tenants match your filters'
+                    : 'No tenants available'}
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600">Tenant</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600">Plan</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600">Activation Codes</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {tenantModalData.items.map((tenant) => {
+                      const statusLabels: Record<string, string> = {
+                        active: 'Active',
+                        trialing: 'Trialing',
+                        past_due: 'Past Due',
+                        canceled: 'Canceled',
+                        unpaid: 'Unpaid',
+                        suspended: 'Suspended',
+                        none: 'No Subscription',
+                      };
+                      const statusBadgeVariants: Record<string, { className: string; label: string }> = {
+                        active: { className: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Active' },
+                        trialing: { className: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Trialing' },
+                        past_due: { className: 'bg-amber-100 text-amber-700 border-amber-200', label: 'Past Due' },
+                        canceled: { className: 'bg-gray-100 text-gray-600 border-gray-200', label: 'Canceled' },
+                        unpaid: { className: 'bg-rose-100 text-rose-700 border-rose-200', label: 'Unpaid' },
+                        suspended: { className: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Suspended' },
+                        none: { className: 'bg-slate-100 text-slate-600 border-slate-200', label: 'No Subscription' },
+                      };
+                      const status = tenant.subscription.status ?? 'none';
+                      const statusMeta = statusBadgeVariants[status] ?? statusBadgeVariants.none;
+                      
+                      return (
+                        <tr
+                          key={tenant.id}
+                          onClick={() => handleSelectTenantFromModal(tenant)}
+                          className="hover:bg-purple-50 cursor-pointer transition-colors"
+                        >
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className="h-10 w-10 rounded-lg border border-gray-200"
+                                style={{ backgroundColor: tenant.primaryColor ?? '#875A7B' }}
+                              />
+                              <div>
+                                <p className="font-semibold text-gray-900">{tenant.name}</p>
+                                <p className="text-xs font-mono text-gray-500">{tenant.slug}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-gray-600">
+                            {tenant.subscription.planName ?? 'Not Assigned'}
+                          </td>
+                          <td className="px-4 py-4 text-gray-600">
+                            {tenant.activationCodesUsed ?? 0} / {tenant.activationCodesTotal ?? 0}
+                          </td>
+                          <td className="px-4 py-4">
+                            <Badge className={statusMeta.className}>{statusMeta.label}</Badge>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Modal Pagination */}
+            {tenantModalData && tenantModalData.total > 0 && (
+              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  Showing {tenantModalData.items.length > 0 ? ((tenantModalPage - 1) * tenantModalPageSize + 1) : 0} to{' '}
+                  {Math.min(tenantModalPage * tenantModalPageSize, tenantModalData.total)} of {tenantModalData.total} tenants
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setTenantModalPage(Math.max(1, tenantModalPage - 1))}
+                    disabled={tenantModalPage === 1}
+                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    ← Previous
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    Page {tenantModalPage} of {Math.ceil(tenantModalData.total / tenantModalPageSize) || 1}
+                  </span>
+                  <button
+                    onClick={() => setTenantModalPage(Math.min(Math.ceil(tenantModalData.total / tenantModalPageSize), tenantModalPage + 1))}
+                    disabled={tenantModalPage >= Math.ceil(tenantModalData.total / tenantModalPageSize)}
+                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
+
       <Footer />
     </div>
   );

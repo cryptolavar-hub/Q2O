@@ -3,9 +3,11 @@ from pydantic import AnyHttpUrl
 from typing import Optional, List
 from pathlib import Path
 
-# .env file is located at project root: C:\Q2O_Combined\.env
-# Using explicit path to ensure it's always found
-ENV_FILE_PATH = Path(r'C:\Q2O_Combined\.env')
+# .env file is located at project root (e.g., C:\Q2O_Combined\.env)
+# Calculate path dynamically: go up from this file to project root
+# This file is at: addon_portal/api/core/settings.py
+# Project root is: parents[3] (addon_portal -> Q2O_Combined)
+ENV_FILE_PATH = Path(__file__).resolve().parents[3] / '.env'
 
 class Settings(BaseSettings):
     APP_NAME: str = "Q2O"

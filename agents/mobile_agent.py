@@ -58,16 +58,16 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
             self.template_learning = get_template_learning_engine()
             self.config_manager = get_configuration_manager()
             self.llm_enabled = True
-            logging.info("✅ MobileAgent: LLM integration enabled (hybrid mode)")
+            logging.info("[OK] MobileAgent: LLM integration enabled (hybrid mode)")
         else:
             self.llm_service = None
             self.template_learning = None
             self.config_manager = None
             self.llm_enabled = False
             if self.use_llm:
-                logging.warning("⚠️  MobileAgent: LLM requested but not available, template-only mode")
+                logging.warning("[WARN] MobileAgent: LLM requested but not available, template-only mode")
             else:
-                logging.info("ℹ️  MobileAgent: LLM disabled, template-only mode")
+                logging.info("[INFO] MobileAgent: LLM disabled, template-only mode")
     
     def process_task(self, task: Task) -> Task:
         """
@@ -218,7 +218,7 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
                 task_desc, tech_stack
             )
             if learned_template:
-                self.logger.info(f"📚 Using learned template for {feature}")
+                self.logger.info(f"[TEMPLATE] Using learned template for {feature}")
                 self.template_learning.increment_usage(learned_template.template_id)
                 # BUG FIX: Use sanitize_for_filename instead of raw feature name
                 sanitized_name = sanitize_for_filename(feature)
@@ -228,7 +228,7 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
         try:
             content = self._generate_screen_template(feature, platforms)
             if content:
-                self.logger.info(f"📄 Used traditional template for {feature}")
+                self.logger.info(f"[TEMPLATE] Used traditional template for {feature}")
                 # BUG FIX: Use sanitize_for_filename instead of raw feature name
                 sanitized_name = sanitize_for_filename(feature)
                 return [self._write_file(f"src/screens/{sanitized_name}Screen.tsx", content)]
@@ -239,7 +239,7 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
         if not self.llm_service:
             raise ValueError(f"No template for {feature} and LLM not available")
         
-        self.logger.info(f"🤖 Generating {feature} with LLM (no template available)")
+        self.logger.info(f"[LLM] Generating {feature} with LLM (no template available)")
         
         # Get research context
         research_context = task.metadata.get('research_context')
@@ -296,7 +296,7 @@ Generate a complete, working screen component with:
         # Log usage
         if response.usage:
             self.logger.info(
-                f"💰 LLM cost: ${response.usage.total_cost:.4f} "
+                f"[COST] LLM cost: ${response.usage.total_cost:.4f} "
                 f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens)"
             )
         
@@ -318,7 +318,7 @@ Generate a complete, working screen component with:
             )
             
             if template_id:
-                self.logger.info(f"✨ Learned new mobile template: {template_id}")
+                self.logger.info(f"[LEARNED] Learned new mobile template: {template_id}")
         
         # Write file (BUG FIX: Use sanitize_for_filename)
         sanitized_name = sanitize_for_filename(feature)

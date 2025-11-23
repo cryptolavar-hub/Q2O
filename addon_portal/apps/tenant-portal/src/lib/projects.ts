@@ -459,3 +459,52 @@ export async function restartProject(projectId: string): Promise<{
   return await response.json();
 }
 
+/**
+ * Download project files as a ZIP archive (for completed projects only)
+ */
+export async function downloadProject(projectId: string, projectName: string): Promise<void> {
+  const token = getStoredSessionToken();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const response = await fetch(`${API_BASE}/api/tenant/projects/${projectId}/download`, {
+    method: 'GET',
+    headers: {
+      'X-Session-Token': token,
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Session expired. Please login again.');
+    }
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    const errorMessage = typeof error.detail === 'string' 
+      ? error.detail 
+      : (error.message || response.statusText || `Failed to download project: ${response.status}`);
+    throw new Error(errorMessage);
+  }
+
+  // Get filename from Content-Disposition header or use default
+  const contentDisposition = response.headers.get('Content-Disposition');
+  let filename = `${projectName || projectId}.zip`;
+  if (contentDisposition) {
+    const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+    if (filenameMatch) {
+      filename = filenameMatch[1];
+    }
+  }
+
+  // Create blob and trigger download
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+

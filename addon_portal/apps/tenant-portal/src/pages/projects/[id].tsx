@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { SessionGuard } from '../../components/SessionGuard';
 import { Navigation } from '../../components/Navigation';
 import { Breadcrumb } from '../../components/Breadcrumb';
-import { getProject, deleteProject, assignActivationCode, runProject, restartProject, type Project } from '../../lib/projects';
+import { getProject, deleteProject, assignActivationCode, runProject, restartProject, downloadProject, type Project } from '../../lib/projects';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function ProjectDetailPage() {
@@ -25,6 +25,7 @@ export default function ProjectDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [showActivationCodeModal, setShowActivationCodeModal] = useState(false);
   const [activationCodeInput, setActivationCodeInput] = useState('');
   const [isAssigningCode, setIsAssigningCode] = useState(false);
@@ -166,6 +167,21 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleDownloadProject = async () => {
+    if (!project || !id || typeof id !== 'string') return;
+
+    setIsDownloading(true);
+    setError(null);
+    try {
+      await downloadProject(id, project.name);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to download project files';
+      setError(errorMessage);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const canRunProject = (): { canRun: boolean; reason?: string } => {
     if (!project) return { canRun: false, reason: 'Project not loaded' };
     if (!project.activation_code_id) return { canRun: false, reason: 'Activation code required' };
@@ -267,11 +283,11 @@ export default function ProjectDetailPage() {
                       <div className="flex items-center gap-3 mb-2">
                         <h1 className="text-3xl font-bold text-gray-900">{project.name}</h1>
                         <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${getStatusColor(
-                            project.status
+                          className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${getExecutionStatusColor(
+                            project.execution_status
                           )}`}
                         >
-                          {project.status}
+                          {project.execution_status || project.status}
                         </span>
                       </div>
                       {project.client_name && (
@@ -285,6 +301,20 @@ export default function ProjectDetailPage() {
                           className="px-6 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 transition-colors"
                         >
                           Assign Activation Code
+                        </button>
+                      )}
+                      {/* Download button (only for completed projects) */}
+                      {project.execution_status === 'completed' && (
+                        <button
+                          onClick={handleDownloadProject}
+                          disabled={isDownloading}
+                          className={`px-6 py-2 font-semibold rounded-lg transition-colors ${
+                            !isDownloading
+                              ? 'bg-blue-500 text-white hover:bg-blue-600'
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                        >
+                          {isDownloading ? 'Downloading...' : '⬇ DOWNLOAD'}
                         </button>
                       )}
                       {/* Restart button (only for failed projects) */}
@@ -305,8 +335,10 @@ export default function ProjectDetailPage() {
                           </button>
                         );
                       })()}
-                      {/* Run button (for pending/new projects) */}
-                      {project.execution_status !== 'failed' && project.execution_status !== 'running' && (() => {
+                      {/* Run button (for pending/new projects, not completed) */}
+                      {project.execution_status !== 'failed' && 
+                       project.execution_status !== 'running' && 
+                       project.execution_status !== 'completed' && (() => {
                         const { canRun, reason } = canRunProject();
                         return (
                           <button
@@ -323,12 +355,15 @@ export default function ProjectDetailPage() {
                           </button>
                         );
                       })()}
-                      <Link
-                        href={`/projects/edit/${project.id}`}
-                        className="px-6 py-2 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 transition-colors"
-                      >
-                        Edit
-                      </Link>
+                      {/* Edit button (hidden for completed projects) */}
+                      {project.execution_status !== 'completed' && (
+                        <Link
+                          href={`/projects/edit/${project.id}`}
+                          className="px-6 py-2 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 transition-colors"
+                        >
+                          Edit
+                        </Link>
+                      )}
                       <button
                         onClick={() => setShowDeleteConfirm(true)}
                         className="px-6 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition-colors"

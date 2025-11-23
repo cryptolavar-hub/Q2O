@@ -44,10 +44,15 @@ export default function ConfigureLLM() {
   const [copiedSample, setCopiedSample] = useState<string | null>(null);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [totalProjects, setTotalProjects] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   useEffect(() => {
     fetchConfiguration();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage]);
 
   const fetchConfiguration = async () => {
     try {
@@ -87,10 +92,31 @@ export default function ConfigureLLM() {
         });
       }
 
-      // Fetch project prompts from database
-      const promptsRes = await fetch('/api/llm/projects?page_size=100');
+      // Fetch project prompts from database with pagination
+      const searchParam = searchTerm ? `&search=${encodeURIComponent(searchTerm)}` : '';
+      const promptsRes = await fetch(`/api/llm/projects?page=${currentPage}&page_size=${pageSize}${searchParam}`);
       if (promptsRes.ok) {
         const promptsData = await promptsRes.json();
+        const total = promptsData.total || 0;
+        const totalPagesFromApi = promptsData.totalPages || promptsData.total_pages;
+        // Always calculate total_pages from total and pageSize to ensure accuracy
+        const calculatedTotalPages = totalPagesFromApi || (total > 0 ? Math.ceil(total / pageSize) : 1);
+        // Use calculated value if API value seems wrong
+        const finalTotalPages = (totalPagesFromApi && totalPagesFromApi > 0) ? totalPagesFromApi : calculatedTotalPages;
+        
+        setTotalProjects(total);
+        setTotalPages(finalTotalPages);
+        
+        console.log('Pagination Debug:', { 
+          total, 
+          totalPagesFromApi, 
+          calculatedTotalPages, 
+          finalTotalPages,
+          currentPage, 
+          pageSize,
+          shouldShowPagination: finalTotalPages > 1 || total > pageSize
+        });
+        
         // Also fetch tenants to get proper tenant names
         const tenantsRes = await fetch('/admin/api/tenants?page_size=100');
         let tenantsMap: Record<number, string> = {};
@@ -117,6 +143,8 @@ export default function ConfigureLLM() {
       } else {
         console.error('Failed to fetch project prompts');
         setProjectPrompts([]);
+        setTotalProjects(0);
+        setTotalPages(0);
       }
 
       setLoading(false);
@@ -182,52 +210,80 @@ export default function ConfigureLLM() {
     }
   };
 
+  // Filter by tenant (search is handled server-side via API)
   const filteredPrompts = projectPrompts.filter(prompt => {
-    const matchesSearch = 
-      prompt.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      prompt.tenantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      prompt.label.toLowerCase().includes(searchTerm.toLowerCase());
-    
     const matchesTenant = tenantFilter === 'all' || prompt.tenantName === tenantFilter;
-    
-    return matchesSearch && matchesTenant;
+    return matchesTenant;
   });
 
   const uniqueTenants = ['all', ...new Set(projectPrompts.map(p => p.tenantName))];
+  
+  // Handle search - trigger API fetch when search term changes
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setCurrentPage(1); // Reset to page 1 when searching
+      fetchConfiguration();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, 500); // Debounce search
+    
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
 
   const sampleCommands = {
-    app: `# Sample Application Build using LLM
-from utils.llm_service import get_llm_service
+    app: `# Build a complete REST API for customer management
 
-llm = get_llm_service()
-result = llm.generate_code(
-    task_description="Build a REST API for customer management",
-    tech_stack=["FastAPI", "PostgreSQL", "SQLAlchemy"],
-    quality_threshold=95.0
-)
-print(result.code)`,
+python main.py --project "Customer Management API" \\
+               --objective "Build a production-ready REST API for customer management" \\
+               --objective "Support CRUD operations for customers, orders, and products" \\
+               --objective "Include authentication, validation, and error handling" \\
+               --workspace ./customer_management_api
+
+# What happens:
+# 1. ResearcherAgent searches for best practices and API design patterns
+# 2. CoderAgent generates FastAPI application structure
+# 3. CoderAgent creates database models with SQLAlchemy
+# 4. CoderAgent implements REST endpoints with validation
+# 5. TestingAgent generates & runs unit and integration tests
+# 6. QAAgent validates code quality and API standards
+# 7. SecurityAgent reviews for vulnerabilities
+# 8. Result: Complete REST API in ./customer_management_api/`,
     
-    mobile: `# Sample Mobile App Build using LLM
-from agents.mobile_agent import MobileAgent
+    mobile: `# Build a complete mobile app for product management
 
-mobile_agent = MobileAgent()
-result = mobile_agent.generate_mobile_feature(
-    task="Create a product listing screen with infinite scroll",
-    platform="react_native",
-    features=["navigation", "state_management", "api_integration"]
-)
-print(result.code)`,
+python main.py --project "Product Management Mobile App" \\
+               --objective "Create a cross-platform mobile app for product listing" \\
+               --objective "Support infinite scroll, search, and product details" \\
+               --objective "Include navigation, state management, and API integration" \\
+               --workspace ./product_mobile_app
+
+# What happens:
+# 1. ResearcherAgent searches for React Native best practices
+# 2. MobileAgent designs app architecture and navigation structure
+# 3. FrontendAgent creates UI components and screens
+# 4. IntegrationAgent connects to backend API
+# 5. CoderAgent implements state management and data flow
+# 6. TestingAgent generates & runs mobile app tests
+# 7. QAAgent validates UI/UX and performance
+# 8. Result: Complete mobile app in ./product_mobile_app/`,
     
-    saas: `# Sample SaaS Application Build using LLM
-from agents.orchestrator import Orchestrator
+    saas: `# Build a complete multi-tenant SaaS platform
 
-orchestrator = Orchestrator()
-result = orchestrator.build_saas_app(
-    objective="Multi-tenant task management SaaS",
-    features=["auth", "billing", "admin_panel", "real_time"],
-    tech_stack={"backend": "FastAPI", "frontend": "Next.js"}
-)
-print(result.workspace_path)`
+python main.py --project "Task Management SaaS Platform" \\
+               --objective "Create a multi-tenant task management SaaS application" \\
+               --objective "Support user authentication, subscription billing, and admin portal" \\
+               --objective "Include real-time updates, analytics dashboard, and mobile app" \\
+               --workspace ./task_management_saas
+
+# What happens:
+# 1. ResearcherAgent searches for SaaS architecture patterns
+# 2. InfrastructureAgent designs multi-tenant database schema
+# 3. CoderAgent builds backend API with tenant isolation
+# 4. FrontendAgent creates admin portal and user dashboard
+# 5. IntegrationAgent implements Stripe billing integration
+# 6. MobileAgent generates iOS and Android apps
+# 7. TestingAgent generates & runs comprehensive test suite
+# 8. QAAgent validates security, scalability, and performance
+# 9. Result: Complete SaaS platform in ./task_management_saas/`
   };
 
   if (loading) {
@@ -304,7 +360,7 @@ print(result.workspace_path)`
             {/* Sample Application Build */}
             <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold text-gray-900">Sample Application Build using LLM</h3>
+                <h3 className="text-lg font-semibold text-gray-900">REST API Project Example</h3>
                 <button
                   onClick={() => copyToClipboard(sampleCommands.app, 'app')}
                   className="text-gray-500 hover:text-gray-700 transition-colors"
@@ -327,7 +383,7 @@ print(result.workspace_path)`
             {/* Sample Mobile App Build */}
             <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold text-gray-900">Sample Mobile App Build using LLM</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Mobile App Project Example</h3>
                 <button
                   onClick={() => copyToClipboard(sampleCommands.mobile, 'mobile')}
                   className="text-gray-500 hover:text-gray-700 transition-colors"
@@ -350,7 +406,7 @@ print(result.workspace_path)`
             {/* Sample SaaS Build */}
             <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold text-gray-900">Sample SaaS Application Build using LLM</h3>
+                <h3 className="text-lg font-semibold text-gray-900">SaaS Platform Project Example</h3>
                 <button
                   onClick={() => copyToClipboard(sampleCommands.saas, 'saas')}
                   className="text-gray-500 hover:text-gray-700 transition-colors"
@@ -369,177 +425,6 @@ print(result.workspace_path)`
                 <code>{sampleCommands.saas}</code>
               </pre>
             </div>
-          </div>
-        </div>
-
-          {/* Project & Agent Prompts Management */}
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-            📝 Project & Agent Prompts
-          </h2>
-          
-          {/* Error Message */}
-          {errorMessage && (
-            <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-start">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-red-800">Error</p>
-                  <p className="text-sm text-red-700 mt-1">{errorMessage}</p>
-                </div>
-                <div className="ml-auto pl-3">
-                  <button
-                    onClick={() => setErrorMessage(null)}
-                    className="text-red-400 hover:text-red-600"
-                  >
-                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {/* Search and Filter */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-                <input
-                  type="text"
-                  placeholder="Search project, tenant, or label..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tenant</label>
-                <select
-                  value={tenantFilter}
-                  onChange={(e) => setTenantFilter(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  {uniqueTenants.map(tenant => (
-                    <option key={tenant} value={tenant}>
-                      {tenant === 'all' ? 'All Tenants' : tenant}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="mt-4 text-sm text-gray-600">
-              Showing {filteredPrompts.length} of {projectPrompts.length} projects
-            </div>
-          </div>
-
-          {/* Prompts Table */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tenant</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Label</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project Prompt</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent Prompts</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredPrompts.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                      No project prompts found. {searchTerm && 'Try adjusting your search.'}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredPrompts.map((prompt) => (
-                    <>
-                      <tr key={prompt.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{prompt.projectName}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-500">{prompt.tenantName}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                            {prompt.label}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm text-gray-900 max-w-md truncate">{prompt.projectPrompt}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <button
-                            onClick={() => toggleRow(prompt.id)}
-                            className="text-blue-600 hover:text-blue-800 font-medium text-sm"
-                          >
-                            {expandedRows.has(prompt.id) ? '▼ Hide' : '▶ Show'} ({prompt.agentPrompts.length})
-                          </button>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <button 
-                            onClick={() => router.push(`/llm/prompts?project=${prompt.id}`)}
-                            className="text-blue-600 hover:text-blue-800 mr-3"
-                          >
-                            Edit
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteProject(prompt.id, prompt.projectName)}
-                            disabled={deletingProjectId === prompt.id}
-                            className="text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {deletingProjectId === prompt.id ? 'Deleting...' : 'Delete'}
-                          </button>
-                        </td>
-                      </tr>
-                      {expandedRows.has(prompt.id) && (
-                        <tr>
-                          <td colSpan={6} className="px-6 py-4 bg-gray-50">
-                            <div className="space-y-3">
-                              <h4 className="font-semibold text-gray-700 text-sm">Agent-Specific Prompts:</h4>
-                              {prompt.agentPrompts.map((agentPrompt, idx) => (
-                                <div key={idx} className="bg-white p-4 rounded border border-gray-200">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-semibold rounded">
-                                      {agentPrompt.agentType.toUpperCase()}
-                                    </span>
-                                    <div>
-                                      <button className="text-blue-600 hover:text-blue-800 text-xs mr-2">Edit</button>
-                                      <button className="text-red-600 hover:text-red-800 text-xs">Remove</button>
-                                    </div>
-                                  </div>
-                                  <p className="text-sm text-gray-700">{agentPrompt.prompt}</p>
-                                </div>
-                              ))}
-                              <button className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
-                                + Add Agent Prompt
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-4">
-            <button 
-              onClick={() => router.push('/llm/prompts')}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
-            >
-              + Add New Project Prompt
-            </button>
           </div>
         </div>
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -27,9 +28,11 @@ from ..schemas.llm import (
 from ..utils.env_manager import read_env_value, write_env_value
 
 LOGGER = get_logger(__name__)
-# Path to .env file in project root: C:\Q2O_Combined\.env
-# Using explicit path to ensure it's always found
-ENV_PATH = Path(r'C:\Q2O_Combined\.env')
+# Path to .env file in project root (e.g., C:\Q2O_Combined\.env)
+# Calculate path dynamically: go up from this file to project root
+# This file is at: addon_portal/api/services/llm_config_service.py
+# Project root is: parents[3] (addon_portal -> Q2O_Combined)
+ENV_PATH = Path(__file__).resolve().parents[3] / '.env'
 SYSTEM_PROMPT_KEY = 'LLM_SYSTEM_PROMPT'
 
 
@@ -186,11 +189,15 @@ async def list_projects(
     )
     projects = result.scalars().all()
 
+    # Calculate total pages
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+
     return ProjectCollectionResponse(
         items=[_serialize_project(project) for project in projects],
         total=total,
         page=page,
         page_size=page_size,
+        total_pages=total_pages,
     )
 
 
@@ -331,7 +338,7 @@ async def delete_project(
     project_id: str,
     tenant_id: Optional[int] = None,  # Verify tenant ownership (None = admin can delete any)
 ) -> None:
-    """Delete a project configuration."""
+    """Delete a project configuration and its output folder/files."""
 
     stmt = select(LLMProjectConfig).where(LLMProjectConfig.project_id == project_id)
     
@@ -345,9 +352,69 @@ async def delete_project(
     if project is None:
         raise ConfigurationError('Project not found.', detail={'projectId': project_id})
 
+    # Get output folder path before deleting the project record
+    output_folder_path = project.output_folder_path
+    
     try:
+        # Delete the project from database first
         await session.delete(project)
         await session.commit()
+        
+        # Delete the output folder and all its contents if it exists
+        if output_folder_path:
+            try:
+                output_folder = Path(output_folder_path)
+                
+                # Safety check: Only delete folders within Tenant_Projects directory
+                # Use the same path calculation as project_execution_service.py
+                tenant_projects_root = Path(__file__).resolve().parents[3] / "Tenant_Projects"
+                tenant_projects_root = tenant_projects_root.resolve()
+                
+                # Resolve the output folder path to absolute
+                output_folder = output_folder.resolve()
+                
+                # Verify the folder is within Tenant_Projects for safety
+                try:
+                    output_folder.relative_to(tenant_projects_root)
+                except ValueError:
+                    # Folder is not within Tenant_Projects, skip deletion for safety
+                    LOGGER.warning(
+                        'project_folder_outside_safe_zone',
+                        extra={
+                            'projectId': project_id,
+                            'outputFolder': str(output_folder),
+                            'tenantProjectsRoot': str(tenant_projects_root),
+                        }
+                    )
+                else:
+                    # Folder is safe to delete
+                    if output_folder.exists() and output_folder.is_dir():
+                        shutil.rmtree(output_folder)
+                        LOGGER.info(
+                            'project_folder_deleted',
+                            extra={
+                                'projectId': project_id,
+                                'outputFolder': str(output_folder),
+                            }
+                        )
+                    else:
+                        LOGGER.debug(
+                            'project_folder_not_found',
+                            extra={
+                                'projectId': project_id,
+                                'outputFolder': str(output_folder),
+                            }
+                        )
+            except Exception as folder_exc:
+                # Log the error but don't fail the deletion - database record is already deleted
+                LOGGER.error(
+                    'project_folder_deletion_failed',
+                    extra={
+                        'projectId': project_id,
+                        'outputFolder': output_folder_path,
+                        'error': str(folder_exc),
+                    }
+                )
     except SQLAlchemyError as exc:
         await session.rollback()
         LOGGER.error('project_deletion_failed', extra={'projectId': project_id, 'error': str(exc)})

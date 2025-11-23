@@ -76,12 +76,12 @@ class Agent:
     # Computed fields (resolved dynamically)
     @strawberry.field
     def success_rate(self) -> float:
-        """Calculate agent success rate"""
+        """Calculate agent success rate (rounded to whole number)"""
         total = self.tasks_completed + self.tasks_failed
         if total == 0:
             return 0.0  # No tasks = 0% success rate, not 100%
         rate = (self.tasks_completed / total) * 100.0
-        return min(100.0, max(0.0, rate))  # Cap between 0% and 100%
+        return round(min(100.0, max(0.0, rate)), 0)  # Cap between 0% and 100%, round to whole number
 
 
 @strawberry.type
@@ -156,11 +156,11 @@ class Project:
     
     @strawberry.field
     def success_rate(self) -> float:
-        """Calculate project success rate (capped at 100%)"""
+        """Calculate project success rate (capped at 100%, rounded to whole number)"""
         if self.total_tasks == 0:
             return 0.0
         rate = (self.completed_tasks / self.total_tasks) * 100.0
-        return max(0.0, min(100.0, rate))  # Cap at 100%
+        return round(max(0.0, min(100.0, rate)), 0)  # Cap at 100% and round to whole number
 
 
 @strawberry.type

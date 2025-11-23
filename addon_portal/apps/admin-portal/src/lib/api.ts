@@ -538,8 +538,15 @@ export async function deleteTenant(slug: string): Promise<void> {
   });
   
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(error.detail || 'Failed to delete tenant');
+    let errorMessage = 'Failed to delete tenant';
+    try {
+      const error = await response.json();
+      errorMessage = error.detail || error.message || errorMessage;
+    } catch {
+      // If response is not JSON, use status text
+      errorMessage = response.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
   }
 }
 

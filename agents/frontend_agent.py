@@ -207,7 +207,7 @@ const OnboardingPage: NextPage = () => {
             </button>
             {qboConnected && (
               <div className="mt-4 text-green-600">
-                ✓ QuickBooks connected successfully
+                [OK] QuickBooks connected successfully
               </div>
             )}
           </div>
@@ -282,7 +282,7 @@ const OnboardingPage: NextPage = () => {
 
             {odooConnected && (
               <div className="mt-4 text-green-600">
-                ✓ Odoo connected successfully
+                [OK] Odoo connected successfully
               </div>
             )}
           </div>
@@ -510,7 +510,7 @@ const MappingsPage: NextPage = () => {
             {loading ? "Saving..." : "Save Mapping"}
           </button>
           <p className="mt-2 text-sm text-gray-600">
-            Map: {selectedQbo.name} → {selectedOdoo.name}
+            Map: {selectedQbo.name} -> {selectedOdoo.name}
           </p>
         </div>
       )}
@@ -856,7 +856,7 @@ const ThemeToggle: React.FC = () => {
       className="p-2 rounded-md bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
       aria-label="Toggle theme"
     >
-      {theme === "light" ? "🌙" : "☀️"}
+      {theme === "light" ? "Moon" : "Sun"}
     </button>
   );
 };

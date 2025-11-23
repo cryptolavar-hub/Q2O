@@ -424,6 +424,7 @@ async def get_tenant_deletion_impact(session: AsyncSession, slug: str) -> dict:
         Subscription,
         UsageEvent,
         MonthlyUsageRollup,
+        TenantSession,
     )
     from ..models.llm_config import LLMProjectConfig, LLMAgentConfig
 
@@ -476,32 +477,32 @@ async def get_tenant_deletion_impact(session: AsyncSession, slug: str) -> dict:
     )
     usage_rollups_count = result.scalar_one() or 0
 
-    # Check for LLM projects associated with tenant (by client_name matching tenant name or domain)
-    llm_projects_count = 0
-    llm_agents_count = 0
-    if tenant.name:
-        result = await session.execute(
-            select(func.count(LLMProjectConfig.id)).where(
-                func.lower(LLMProjectConfig.client_name) == func.lower(tenant.name)
-            )
-        )
-        llm_projects_count = result.scalar_one() or 0
+    # Check for LLM projects associated with tenant (by tenant_id)
+    result = await session.execute(
+        select(func.count(LLMProjectConfig.id)).where(LLMProjectConfig.tenant_id == tenant_id)
+    )
+    llm_projects_count = result.scalar_one() or 0
 
-        if llm_projects_count > 0:
-            # Get project IDs to count agents
+    llm_agents_count = 0
+    if llm_projects_count > 0:
+        # Get project IDs to count agents
+        result = await session.execute(
+            select(LLMProjectConfig.project_id).where(LLMProjectConfig.tenant_id == tenant_id)
+        )
+        project_ids = result.scalars().all()
+        if project_ids:
             result = await session.execute(
-                select(LLMProjectConfig.project_id).where(
-                    func.lower(LLMProjectConfig.client_name) == func.lower(tenant.name)
+                select(func.count(LLMAgentConfig.id)).where(
+                    LLMAgentConfig.project_id.in_(project_ids)
                 )
             )
-            project_ids = result.scalars().all()
-            if project_ids:
-                result = await session.execute(
-                    select(func.count(LLMAgentConfig.id)).where(
-                        LLMAgentConfig.project_id.in_(project_ids)
-                    )
-                )
-                llm_agents_count = result.scalar_one() or 0
+            llm_agents_count = result.scalar_one() or 0
+
+    # Count tenant sessions
+    result = await session.execute(
+        select(func.count(TenantSession.id)).where(TenantSession.tenant_id == tenant_id)
+    )
+    sessions_count = result.scalar_one() or 0
 
     return {
         "tenant": {
@@ -524,6 +525,7 @@ async def get_tenant_deletion_impact(session: AsyncSession, slug: str) -> dict:
         "usage_rollups": {"total": usage_rollups_count},
         "llm_projects": {"total": llm_projects_count},
         "llm_agents": {"total": llm_agents_count},
+        "sessions": {"total": sessions_count},
     }
 
 
@@ -531,14 +533,15 @@ async def delete_tenant(session: AsyncSession, slug: str) -> None:
     """Permanently remove a tenant and all related records.
 
     Deletion order (to avoid foreign key constraint violations):
-    1. Revoke all active activation codes
-    2. Revoke all active devices
-    3. Delete usage events and rollups
-    4. Delete subscriptions
-    5. Delete activation codes
-    6. Delete devices
-    7. Delete LLM project configs and agent configs (if associated)
-    8. Finally delete the tenant
+    1. Delete LLM project configs and agent configs (if associated)
+    2. Revoke all active activation codes
+    3. Revoke all active devices
+    4. Delete usage events and rollups
+    5. Delete subscriptions
+    6. Delete activation codes
+    7. Delete devices
+    8. Delete tenant sessions (must be before tenant due to NOT NULL constraint)
+    9. Finally delete the tenant
 
     Args:
         session: Active database session.
@@ -555,6 +558,7 @@ async def delete_tenant(session: AsyncSession, slug: str) -> None:
         Subscription,
         UsageEvent,
         MonthlyUsageRollup,
+        TenantSession,
     )
     from ..models.llm_config import LLMProjectConfig, LLMAgentConfig
 
@@ -567,7 +571,67 @@ async def delete_tenant(session: AsyncSession, slug: str) -> None:
     now = datetime.utcnow()
 
     try:
-        # Step 1: Revoke all active activation codes
+        # Step 1: Delete LLM project configs and agent configs (if associated with tenant)
+        # Find projects by tenant_id and get their output folder paths
+        result = await session.execute(
+            select(LLMProjectConfig.project_id, LLMProjectConfig.output_folder_path).where(
+                LLMProjectConfig.tenant_id == tenant_id
+            )
+        )
+        projects_data = result.all()
+        project_ids = [row.project_id for row in projects_data]
+
+        if project_ids:
+            # Delete agent configs first (due to FK constraint)
+            await session.execute(
+                delete(LLMAgentConfig).where(LLMAgentConfig.project_id.in_(project_ids))
+            )
+            
+            # Delete project folders before deleting database records
+            import shutil
+            from pathlib import Path
+            for project_id, output_folder_path in projects_data:
+                if output_folder_path:
+                    try:
+                        output_folder = Path(output_folder_path)
+                        # Safety check: Only delete folders within Tenant_Projects directory
+                        # tenant_service.py is in addon_portal/api/services/, so parents[3] gets us to addon_portal/
+                        tenant_projects_root = Path(__file__).resolve().parents[3] / "Tenant_Projects"
+                        tenant_projects_root = tenant_projects_root.resolve()
+                        output_folder = output_folder.resolve()
+                        
+                        # Verify the folder is within Tenant_Projects for safety
+                        try:
+                            output_folder.relative_to(tenant_projects_root)
+                            if output_folder.exists() and output_folder.is_dir():
+                                shutil.rmtree(output_folder)
+                                LOGGER.info(
+                                    "deleted_project_folder",
+                                    extra={"tenantId": tenant_id, "projectId": project_id, "folder": str(output_folder)},
+                                )
+                        except ValueError:
+                            # Folder is not within Tenant_Projects, skip deletion for safety
+                            LOGGER.warning(
+                                "project_folder_outside_safe_zone",
+                                extra={"tenantId": tenant_id, "projectId": project_id, "folder": str(output_folder)},
+                            )
+                    except Exception as folder_exc:
+                        # Log the error but don't fail the deletion
+                        LOGGER.error(
+                            "project_folder_deletion_failed",
+                            extra={"tenantId": tenant_id, "projectId": project_id, "error": str(folder_exc)},
+                        )
+            
+            # Then delete project configs from database
+            await session.execute(
+                delete(LLMProjectConfig).where(LLMProjectConfig.tenant_id == tenant_id)
+            )
+            LOGGER.info(
+                "deleted_llm_configs",
+                extra={"tenantId": tenant_id, "projectsDeleted": len(project_ids)},
+            )
+
+        # Step 2: Revoke all active activation codes
         await session.execute(
             update(ActivationCode)
             .where(ActivationCode.tenant_id == tenant_id, ActivationCode.revoked_at.is_(None))
@@ -575,7 +639,7 @@ async def delete_tenant(session: AsyncSession, slug: str) -> None:
         )
         LOGGER.info("revoked_activation_codes", extra={"tenantId": tenant_id})
 
-        # Step 2: Revoke all active devices
+        # Step 3: Revoke all active devices
         await session.execute(
             update(Device)
             .where(Device.tenant_id == tenant_id, Device.is_revoked == False)
@@ -583,46 +647,26 @@ async def delete_tenant(session: AsyncSession, slug: str) -> None:
         )
         LOGGER.info("revoked_devices", extra={"tenantId": tenant_id})
 
-        # Step 3: Delete usage events and rollups
+        # Step 4: Delete usage events and rollups
         await session.execute(delete(UsageEvent).where(UsageEvent.tenant_id == tenant_id))
         await session.execute(delete(MonthlyUsageRollup).where(MonthlyUsageRollup.tenant_id == tenant_id))
         LOGGER.info("deleted_usage_records", extra={"tenantId": tenant_id})
 
-        # Step 4: Delete subscriptions
+        # Step 5: Delete subscriptions
         await session.execute(delete(Subscription).where(Subscription.tenant_id == tenant_id))
         LOGGER.info("deleted_subscriptions", extra={"tenantId": tenant_id})
 
-        # Step 5: Delete activation codes
+        # Step 6: Delete activation codes
         await session.execute(delete(ActivationCode).where(ActivationCode.tenant_id == tenant_id))
         LOGGER.info("deleted_activation_codes", extra={"tenantId": tenant_id})
 
-        # Step 6: Delete devices
+        # Step 7: Delete devices
         await session.execute(delete(Device).where(Device.tenant_id == tenant_id))
         LOGGER.info("deleted_devices", extra={"tenantId": tenant_id})
 
-        # Step 7: Delete LLM project configs and agent configs (if associated with tenant)
-        if tenant.name:
-            # Find projects by client_name matching tenant name
-            result = await session.execute(
-                select(LLMProjectConfig.project_id).where(
-                    func.lower(LLMProjectConfig.client_name) == func.lower(tenant.name)
-                )
-            )
-            project_ids = result.scalars().all()
-
-            if project_ids:
-                # Delete agent configs first (due to FK constraint)
-                await session.execute(
-                    delete(LLMAgentConfig).where(LLMAgentConfig.project_id.in_(project_ids))
-                )
-                # Then delete project configs
-                await session.execute(
-                    delete(LLMProjectConfig).where(LLMProjectConfig.project_id.in_(project_ids))
-                )
-                LOGGER.info(
-                    "deleted_llm_configs",
-                    extra={"tenantId": tenant_id, "projectsDeleted": len(project_ids)},
-                )
+        # Step 8: Delete tenant sessions (must be deleted before tenant due to NOT NULL constraint)
+        await session.execute(delete(TenantSession).where(TenantSession.tenant_id == tenant_id))
+        LOGGER.info("deleted_tenant_sessions", extra={"tenantId": tenant_id})
 
         # Log tenant deletion event BEFORE deleting (so we have tenant info)
         # Gracefully handle if table doesn't exist
@@ -637,12 +681,33 @@ async def delete_tenant(session: AsyncSession, slug: str) -> None:
             # Event logging failed (table might not exist) - log warning but don't fail tenant deletion
             LOGGER.warning("event_logging_failed", extra={"error": str(e), "event": "tenant_deleted"})
         
-        # Step 8: Finally delete the tenant
+        # Step 9: Finally delete the tenant
         await session.delete(tenant)
         await session.commit()
         LOGGER.info("tenant_deleted", extra={"tenantId": tenant_id, "slug": slug})
 
     except SQLAlchemyError as exc:
         await session.rollback()
-        LOGGER.error("tenant_delete_failed", extra={"tenantId": tenant_id, "error": str(exc)})
-        raise InvalidOperationError("Failed to delete tenant due to a database error.") from exc
+        import traceback
+        error_details = {
+            "tenantId": tenant_id,
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+            "traceback": traceback.format_exc(),
+        }
+        # Try to get more details from the exception
+        if hasattr(exc, 'orig'):
+            error_details["original_error"] = str(exc.orig)
+            error_details["original_error_type"] = type(exc.orig).__name__
+        LOGGER.error("tenant_delete_failed", extra=error_details)
+        raise InvalidOperationError(f"Failed to delete tenant due to a database error: {str(exc)}") from exc
+    except Exception as exc:
+        await session.rollback()
+        import traceback
+        LOGGER.error("tenant_delete_failed_unexpected", extra={
+            "tenantId": tenant_id,
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+            "traceback": traceback.format_exc(),
+        })
+        raise InvalidOperationError(f"Failed to delete tenant: {str(exc)}") from exc

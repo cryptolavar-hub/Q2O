@@ -114,6 +114,7 @@ export default function TenantsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletionImpact, setDeletionImpact] = useState<TenantDeletionImpact | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [confirmDeleteChecked, setConfirmDeleteChecked] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState(false);
   const [slugValue, setSlugValue] = useState('');
@@ -330,6 +331,7 @@ export default function TenantsPage() {
     async (tenant: Tenant) => {
       setIsSubmitting(true);
       setErrorMessage(null);
+      setConfirmDeleteChecked(false); // Reset checkbox when opening modal
 
       try {
         // Fetch deletion impact first
@@ -861,6 +863,7 @@ export default function TenantsPage() {
             setShowDeleteConfirm(false);
             setDeletionImpact(null);
             setSelectedTenant(null);
+            setConfirmDeleteChecked(false);
           }}
           role="presentation"
         >
@@ -874,6 +877,7 @@ export default function TenantsPage() {
                 setShowDeleteConfirm(false);
                 setDeletionImpact(null);
                 setSelectedTenant(null);
+                setConfirmDeleteChecked(false);
               }}>
                 Close
               </Button>
@@ -932,18 +936,18 @@ export default function TenantsPage() {
                 <strong>Deletion Process:</strong>
               </p>
               <ol className="text-sm text-amber-800 mt-2 ml-4 list-decimal space-y-1">
-                <li>All active activation codes will be revoked</li>
-                <li>All active devices will be revoked</li>
-                <li>All usage events and rollups will be deleted</li>
-                <li>All subscriptions will be deleted</li>
-                <li>All activation codes will be permanently deleted</li>
-                <li>All devices will be permanently deleted</li>
                 {deletionImpact.llmProjects.total > 0 && (
                   <>
                     <li>All LLM agent configs will be deleted</li>
                     <li>All LLM project configs will be deleted</li>
                   </>
                 )}
+                <li>All active activation codes will be revoked</li>
+                <li>All active devices will be revoked</li>
+                <li>All usage events and rollups will be deleted</li>
+                <li>All subscriptions will be deleted</li>
+                <li>All activation codes will be permanently deleted</li>
+                <li>All devices will be permanently deleted</li>
                 <li>The tenant will be permanently deleted</li>
               </ol>
             </div>
@@ -955,6 +959,23 @@ export default function TenantsPage() {
               </div>
             )}
 
+            {/* Confirmation Checkbox */}
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={confirmDeleteChecked}
+                  onChange={(e) => setConfirmDeleteChecked(e.target.checked)}
+                  className="mt-1 w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500 focus:ring-2"
+                />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-yellow-900">
+                    I understand that this action will permanently delete all related records and the tenant itself. This cannot be undone.
+                  </p>
+                </div>
+              </label>
+            </div>
+
             <div className="flex justify-end gap-3">
               <Button
                 disabled={isSubmitting}
@@ -962,6 +983,7 @@ export default function TenantsPage() {
                   setShowDeleteConfirm(false);
                   setDeletionImpact(null);
                   setSelectedTenant(null);
+                  setConfirmDeleteChecked(false);
                 }}
                 size="sm"
                 variant="ghost"
@@ -969,12 +991,12 @@ export default function TenantsPage() {
                 Cancel
               </Button>
               <Button
-                disabled={isSubmitting}
+                disabled={isSubmitting || !confirmDeleteChecked}
                 onClick={handleConfirmDelete}
                 size="sm"
-                className="bg-red-600 hover:bg-red-700 text-white"
+                className="bg-red-600 hover:bg-red-700 text-white disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Deleting...' : 'Delete Forever'}
+                {isSubmitting ? 'Deleting All...' : 'Delete All'}
               </Button>
             </div>
           </Card>

@@ -21,7 +21,7 @@ import {
 } from '../lib/graphql';
 import { listProjects, type Project } from '../lib/projects';
 
-// Mock data structure (will be replaced with WebSocket/API integration)
+  // Mock data structure (will be replaced with WebSocket/API integration)
 interface DashboardState {
   project: {
     name: string;
@@ -41,6 +41,10 @@ interface DashboardState {
     status: 'pending' | 'in_progress' | 'completed' | 'failed';
     agent?: string;
     progress?: number;
+    createdAt?: string;
+    startedAt?: string;
+    completedAt?: string;
+    durationSeconds?: number;
   }>;
   metrics: {
     cpu: number;
@@ -97,13 +101,18 @@ export default function StatusPage() {
     requestPolicy: 'cache-and-network', // Always fetch fresh data
   });
 
-  // Poll project query every 2 seconds for real-time updates (if project selected)
+  // Get selected project data (declare BEFORE use in useEffect hooks)
+  const selectedProject = projectResult.data?.project;
+  const selectedProjectRest = availableProjects.find(p => p.id === selectedProjectId);
+
+  // Poll project query every 5 seconds for real-time updates (if project selected)
+  // Reduced from 2s to 5s to reduce database connection pressure
   useEffect(() => {
     if (!selectedProjectId) return;
     
     const interval = setInterval(() => {
       reexecuteProject({ requestPolicy: 'network-only' });
-    }, 2000); // Poll every 2 seconds
+    }, 5000); // Poll every 5 seconds (reduced from 2s to reduce connection pool pressure)
     
     return () => clearInterval(interval);
   }, [selectedProjectId, reexecuteProject]);
@@ -125,7 +134,36 @@ export default function StatusPage() {
   const agentActivities = agentActivityResult.data?.agentActivity ? [agentActivityResult.data.agentActivity] : [];
   
   // Collect task updates from subscription (real-time)
+  // Initialize with tasks from project query, then update from subscriptions
   const [taskUpdatesList, setTaskUpdatesList] = useState<any[]>([]);
+  
+  // Initialize tasks from project query when project loads
+  useEffect(() => {
+    if (selectedProject?.tasks && selectedProject.tasks.length > 0) {
+      // Initialize with tasks from project query (chronological order)
+      const projectTasks = selectedProject.tasks
+        .map((task: any) => ({
+          id: task.id,
+          title: task.title || 'Unknown Task',
+          status: task.status,
+          agentType: task.agentType,
+          agent: task.agent,
+          createdAt: task.createdAt,
+          startedAt: task.startedAt,
+          completedAt: task.completedAt,
+          durationSeconds: task.durationSeconds,
+        }))
+        .sort((a: any, b: any) => {
+          // Sort by createdAt (oldest first) for chronological timeline
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return aTime - bTime;
+        });
+      setTaskUpdatesList(projectTasks);
+    }
+  }, [selectedProject?.tasks]);
+  
+  // Update tasks from subscription (real-time updates)
   useEffect(() => {
     if (taskUpdatesResult.data?.taskUpdates) {
       const update = taskUpdatesResult.data.taskUpdates;
@@ -134,10 +172,28 @@ export default function StatusPage() {
         const existingIndex = prev.findIndex(t => t.id === update.id);
         if (existingIndex >= 0) {
           const updated = [...prev];
-          updated[existingIndex] = update;
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            ...update,
+            title: update.title || updated[existingIndex].title,
+            status: update.status || updated[existingIndex].status,
+            agentType: update.agentType || updated[existingIndex].agentType,
+            agent: update.agent || updated[existingIndex].agent,
+          };
           return updated;
         }
-        return [...prev, update];
+        // Add new task
+        return [...prev, {
+          id: update.id,
+          title: update.title || 'Unknown Task',
+          status: update.status,
+          agentType: update.agentType,
+          agent: update.agent,
+        }].sort((a: any, b: any) => {
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return aTime - bTime;
+        });
       });
     }
   }, [taskUpdatesResult.data]);
@@ -149,10 +205,6 @@ export default function StatusPage() {
       setCurrentMetrics(metricsStreamResult.data.systemMetricsStream);
     }
   }, [metricsStreamResult.data]);
-
-  // Get selected project data (declare before use)
-  const selectedProject = projectResult.data?.project;
-  const selectedProjectRest = availableProjects.find(p => p.id === selectedProjectId);
 
   // Collect project updates from GraphQL query (real-time via polling or subscription)
   const [currentProject, setCurrentProject] = useState(selectedProject);
@@ -212,7 +264,7 @@ export default function StatusPage() {
     agents: projectAgents.length > 0
       ? projectAgents.map((agent: any) => ({
           name: agent.name || agent.agentType || 'Unknown Agent',
-          status: (agent.status === 'active' ? 'active' : agent.status === 'idle' ? 'idle' : 'busy') as const,
+          status: (agent.status === 'active' ? 'active' : agent.status === 'idle' ? 'idle' : 'busy'),
           currentTask: agent.currentTaskId || undefined,
           tasksCompleted: agent.tasksCompleted || 0,
         }))
@@ -228,6 +280,10 @@ export default function StatusPage() {
       status: task.status?.toLowerCase() || 'pending',
       agent: task.agent?.name || task.agentType || undefined,
       progress: task.progress || 0,
+      createdAt: task.createdAt,
+      startedAt: task.startedAt,
+      completedAt: task.completedAt,
+      durationSeconds: task.durationSeconds,
     })),
     metrics: {
       cpu: currentMetrics?.cpuUsagePercent || systemMetrics?.cpuUsagePercent || 0,
@@ -413,7 +469,7 @@ export default function StatusPage() {
                 <div className="text-3xl">📊</div>
               </div>
               <h3 className="text-gray-600 text-sm font-medium mb-2">Success Rate</h3>
-              <p className="text-3xl font-bold text-gray-900 mb-1">{metrics.successRate}%</p>
+              <p className="text-3xl font-bold text-gray-900 mb-1">{Math.round(metrics.successRate)}%</p>
               <p className="text-sm text-gray-500">All time</p>
             </div>
 
@@ -486,42 +542,74 @@ export default function StatusPage() {
                     <p className="text-gray-500">
                       {connected ? 'No tasks yet...' : 'Waiting for tasks...'}
                     </p>
+                    {selectedProjectId && (
+                      <p className="text-sm text-gray-400 mt-2">
+                        Tasks will appear here as agents start working on the project
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {tasks.map((task) => (
-                      <div key={task.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-center">
-                          <div className="flex-1">
-                            <div className="font-semibold text-gray-800">{task.title}</div>
-                            {task.agent && (
-                              <div className="text-sm text-gray-600 mt-1">Agent: {task.agent}</div>
-                            )}
-                            {task.progress !== undefined && (
-                              <div className="mt-2">
-                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                  <div
-                                    className="bg-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
-                                    style={{ width: `${task.progress}%` }}
-                                  />
-                                </div>
+                    {tasks.map((task) => {
+                      // Format timestamps for display
+                      const formatTime = (timestamp?: string) => {
+                        if (!timestamp) return '';
+                        try {
+                          const date = new Date(timestamp);
+                          return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                        } catch {
+                          return '';
+                        }
+                      };
+                      
+                      return (
+                        <div key={task.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="font-semibold text-gray-800">{task.title}</div>
+                              <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 flex-wrap">
+                                {task.agent && (
+                                  <span>Agent: <span className="font-medium">{task.agent}</span></span>
+                                )}
+                                {task.createdAt && (
+                                  <span>Created: {formatTime(task.createdAt)}</span>
+                                )}
+                                {task.startedAt && (
+                                  <span>Started: {formatTime(task.startedAt)}</span>
+                                )}
+                                {task.completedAt && (
+                                  <span>Completed: {formatTime(task.completedAt)}</span>
+                                )}
+                                {task.durationSeconds && task.durationSeconds > 0 && (
+                                  <span>Duration: {Math.round(task.durationSeconds)}s</span>
+                                )}
                               </div>
-                            )}
+                              {task.progress !== undefined && task.progress > 0 && (
+                                <div className="mt-2">
+                                  <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div
+                                      className="bg-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
+                                      style={{ width: `${Math.min(100, task.progress)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            <span className={`px-3 py-1 rounded text-sm font-semibold ml-4 whitespace-nowrap ${
+                              task.status === 'completed'
+                                ? 'bg-green-100 text-green-800'
+                                : task.status === 'failed'
+                                ? 'bg-red-100 text-red-800'
+                                : task.status === 'in_progress'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {task.status.replace('_', ' ')}
+                            </span>
                           </div>
-                          <span className={`px-3 py-1 rounded text-sm font-semibold ml-4 ${
-                            task.status === 'completed'
-                              ? 'bg-green-100 text-green-800'
-                              : task.status === 'failed'
-                              ? 'bg-red-100 text-red-800'
-                              : task.status === 'in_progress'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {task.status}
-                          </span>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -540,7 +628,7 @@ export default function StatusPage() {
                         {(() => {
                           // Use project completion percentage if available, otherwise calculate from metrics
                           const completion = selectedProject?.completionPercentage !== undefined
-                            ? selectedProject.completionPercentage
+                            ? Math.round(selectedProject.completionPercentage)
                             : (metrics.totalTasks > 0 ? Math.min(100, Math.round((metrics.completedTasks / metrics.totalTasks) * 100)) : 0);
                           return `${Math.min(100, Math.max(0, completion))}%`;
                         })()}
@@ -552,8 +640,8 @@ export default function StatusPage() {
                         style={{ 
                           width: `${(() => {
                             const completion = selectedProject?.completionPercentage !== undefined
-                              ? selectedProject.completionPercentage
-                              : (metrics.totalTasks > 0 ? Math.min(100, (metrics.completedTasks / metrics.totalTasks) * 100) : 0);
+                              ? Math.round(selectedProject.completionPercentage)
+                              : (metrics.totalTasks > 0 ? Math.min(100, Math.round((metrics.completedTasks / metrics.totalTasks) * 100)) : 0);
                             return Math.min(100, Math.max(0, completion));
                           })()}%` 
                         }}
@@ -564,12 +652,12 @@ export default function StatusPage() {
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-medium text-gray-700">Success Rate</span>
-                      <span className="text-sm font-bold text-blue-600">{metrics.successRate.toFixed(1)}%</span>
+                      <span className="text-sm font-bold text-blue-600">{Math.round(metrics.successRate)}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-blue-500 h-2 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${metrics.successRate}%` }}
+                        style={{ width: `${Math.round(metrics.successRate)}%` }}
                       />
                     </div>
                   </div>
@@ -577,12 +665,12 @@ export default function StatusPage() {
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-medium text-gray-700">CPU Usage</span>
-                      <span className="text-sm font-bold text-purple-600">{metrics.cpu.toFixed(1)}%</span>
+                      <span className="text-sm font-bold text-purple-600">{Math.round(metrics.cpu)}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${metrics.cpu}%` }}
+                        style={{ width: `${Math.round(metrics.cpu)}%` }}
                       />
                     </div>
                   </div>
@@ -590,12 +678,12 @@ export default function StatusPage() {
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-medium text-gray-700">Memory Usage</span>
-                      <span className="text-sm font-bold text-orange-600">{metrics.memory.toFixed(1)}%</span>
+                      <span className="text-sm font-bold text-orange-600">{Math.round(metrics.memory)}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-orange-500 h-2 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${metrics.memory}%` }}
+                        style={{ width: `${Math.round(metrics.memory)}%` }}
                       />
                     </div>
                   </div>

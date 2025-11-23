@@ -282,6 +282,33 @@ async def _monitor_process_completion(
                 waited += check_interval
                 continue
         
+        # Check if we timed out (process still running after max_wait_time)
+        if waited >= max_wait_time:
+            # Process has been running for more than 24 hours - mark as failed
+            return_code = -1
+            timeout_error = f"Project execution exceeded maximum wait time of {max_wait_time/3600} hours"
+            LOGGER.error(
+                "project_execution_timeout",
+                extra={
+                    "project_id": project_id,
+                    "tenant_id": tenant_id,
+                    "process_id": process_id,
+                    "hours_waited": waited / 3600,
+                }
+            )
+        elif 'return_code' not in locals():
+            # Process check failed but we don't know the return code
+            return_code = -1
+            timeout_error = "Process monitoring failed - unable to determine completion status"
+            LOGGER.error(
+                "project_execution_monitoring_failed",
+                extra={
+                    "project_id": project_id,
+                    "tenant_id": tenant_id,
+                    "process_id": process_id,
+                }
+            )
+        
         # Update project status in database
         db = AsyncSessionLocal()
         try:
@@ -292,19 +319,72 @@ async def _monitor_process_completion(
             
             if project:
                 if return_code == 0:
-                    project.execution_status = 'completed'
-                    project.execution_completed_at = datetime.now(timezone.utc)
-                    LOGGER.info(
-                        "project_execution_completed",
-                        extra={
-                            "project_id": project_id,
-                            "tenant_id": tenant_id,
-                            "process_id": process_id,
-                        }
-                    )
+                    # Process exited successfully - but check if all tasks are actually completed
+                    from .agent_task_service import calculate_project_progress
+                    task_stats = await calculate_project_progress(db, project_id)
+                    completion_percentage = task_stats["completion_percentage"]
+                    total_tasks = task_stats["total_tasks"]
+                    completed_tasks = task_stats["completed_tasks"]
+                    
+                    # CRITICAL: Only mark as 'completed' if tasks are 100% done
+                    if completion_percentage >= 100.0 and total_tasks > 0:
+                        project.execution_status = 'completed'
+                        project.execution_completed_at = datetime.now(timezone.utc)
+                        LOGGER.info(
+                            "project_execution_completed",
+                            extra={
+                                "project_id": project_id,
+                                "tenant_id": tenant_id,
+                                "process_id": process_id,
+                                "completion_percentage": completion_percentage,
+                                "completed_tasks": completed_tasks,
+                                "total_tasks": total_tasks,
+                            }
+                        )
+                    elif total_tasks == 0:
+                        # Process exited but no tasks were created - mark as failed
+                        project.execution_status = 'failed'
+                        project.execution_error = (
+                            "Process exited successfully but no tasks were created. "
+                            "Project cannot be completed without any tasks."
+                        )
+                        project.execution_completed_at = datetime.now(timezone.utc)
+                        LOGGER.warning(
+                            "project_execution_no_tasks",
+                            extra={
+                                "project_id": project_id,
+                                "tenant_id": tenant_id,
+                                "process_id": process_id,
+                            }
+                        )
+                    else:
+                        # Process exited but tasks aren't complete - mark as failed
+                        project.execution_status = 'failed'
+                        project.execution_error = (
+                            f"Process exited successfully but project is incomplete. "
+                            f"Completion: {completion_percentage:.1f}% "
+                            f"({completed_tasks}/{total_tasks} tasks completed). "
+                            f"Project cannot be marked as completed until all tasks reach 100%."
+                        )
+                        project.execution_completed_at = datetime.now(timezone.utc)
+                        LOGGER.warning(
+                            "project_execution_incomplete",
+                            extra={
+                                "project_id": project_id,
+                                "tenant_id": tenant_id,
+                                "process_id": process_id,
+                                "completion_percentage": completion_percentage,
+                                "completed_tasks": completed_tasks,
+                                "total_tasks": total_tasks,
+                            }
+                        )
                 else:
+                    # Process exited with error code
                     project.execution_status = 'failed'
-                    project.execution_error = f"Process exited with code {return_code}"
+                    project.execution_error = (
+                        timeout_error if 'timeout_error' in locals() 
+                        else f"Process exited with code {return_code}"
+                    )
                     project.execution_completed_at = datetime.now(timezone.utc)
                     LOGGER.error(
                         "project_execution_failed",
@@ -416,7 +496,7 @@ async def cleanup_stuck_projects():
                             "project_id": project.project_id,
                             "tenant_id": project.tenant_id,
                             "started_at": project.execution_started_at.isoformat() if project.execution_started_at else None,
-                            "hours_running": (datetime.now(timezone.utc) - project.execution_started_at).total_seconds() / 3600 if project.execution_started_at else None,
+                            "hours_running": (datetime.now(timezone.utc) - (project.execution_started_at.replace(tzinfo=timezone.utc) if project.execution_started_at and project.execution_started_at.tzinfo is None else project.execution_started_at)).total_seconds() / 3600 if project.execution_started_at else None,
                         }
                     )
             except Exception as e:

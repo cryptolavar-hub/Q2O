@@ -199,13 +199,13 @@ Write-Host ""
 # Check 10: Licensing database
 Write-Host "[10/10] Checking licensing database..." -ForegroundColor White
 
-# Check if .env exists and determine database type
-$envPath = "addon_portal\.env"
+# Check if .env exists in ROOT directory ONLY (C:\Q2O_Combined\.env)
+$rootEnvPath = Join-Path $CurrentDir.Path ".env"
 $usingPostgreSQL = $false
 $usingSQLite = $false
 
-if (Test-Path $envPath) {
-    $envContent = Get-Content $envPath -Raw
+if (Test-Path $rootEnvPath) {
+    $envContent = Get-Content $rootEnvPath -Raw
     if ($envContent -match "postgresql") {
         $usingPostgreSQL = $true
         Write-Host "  [INFO] Using PostgreSQL database" -ForegroundColor Cyan
@@ -283,7 +283,10 @@ if (Test-Path $envPath) {
         }
     }
 } else {
-    Write-Host "  [WARNING] .env file not found, checking default SQLite" -ForegroundColor Yellow
+    Write-Host "  [WARNING] .env file not found in root directory" -ForegroundColor Yellow
+    Write-Host "  [INFO] Expected location: C:\Q2O_Combined\.env" -ForegroundColor Cyan
+    Write-Host "  [INFO] Creating .env from template: copy addon_portal\env.example.txt .env" -ForegroundColor Cyan
+    Write-Host "  [INFO] Checking default SQLite database..." -ForegroundColor Cyan
     $usingSQLite = $true
     
     if (Test-Path "addon_portal\q2o_licensing.db") {

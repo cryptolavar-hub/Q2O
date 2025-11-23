@@ -153,11 +153,18 @@ export const PROJECT_QUERY = `
         lastActivity
         successRate
       }
-      tasks(status: IN_PROGRESS, limit: 20) {
+      tasks(limit: 100) {
         id
         title
         status
         agentType
+        agent {
+          name
+          agentType
+        }
+        createdAt
+        startedAt
+        completedAt
         durationSeconds
       }
     }

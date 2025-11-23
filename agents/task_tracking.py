@@ -174,21 +174,28 @@ async def create_task_in_db(
         
         logger.debug(f"Database session obtained: {type(db)}")
         
-        task = await create_task(
-            db=db,
-            project_id=project_id,
-            agent_type=agent_type,
-            task_name=task_name,
-            task_description=task_description,
-            task_type=task_type,
-            agent_id=agent_id,
-            priority=priority,
-            tenant_id=tenant_id,
-        )
-        
-        # Note: create_task already commits, so we don't need to commit again
-        logger.info(f"Successfully created task in database: task_id={task.task_id}")
-        return task.task_id
+        try:
+            task = await create_task(
+                db=db,
+                project_id=project_id,
+                agent_type=agent_type,
+                task_name=task_name,
+                task_description=task_description,
+                task_type=task_type,
+                agent_id=agent_id,
+                priority=priority,
+                tenant_id=tenant_id,
+            )
+            
+            # Note: create_task already commits, so we don't need to commit again
+            logger.info(f"Successfully created task in database: task_id={task.task_id}")
+            return task.task_id
+        finally:
+            # CRITICAL: Close the session to return connection to pool
+            try:
+                await db.close()
+            except Exception as close_error:
+                logger.warning(f"Error closing database session: {close_error}")
     
     except Exception as e:
         logger.error(f"Failed to create task in database: {e}", exc_info=True)
@@ -220,18 +227,25 @@ async def update_task_status_in_db(
             logger.warning("Database session not available for task tracking")
             return False
         
-        await update_task_status(
-            db=db,
-            task_id=task_id,
-            status=status,
-            progress_percentage=progress_percentage,
-            error_message=error_message,
-            error_stack_trace=error_stack_trace,
-            execution_metadata=execution_metadata,
-        )
-        
-        # Note: update_task_status already commits, so we don't need to commit again
-        return True
+        try:
+            await update_task_status(
+                db=db,
+                task_id=task_id,
+                status=status,
+                progress_percentage=progress_percentage,
+                error_message=error_message,
+                error_stack_trace=error_stack_trace,
+                execution_metadata=execution_metadata,
+            )
+            
+            # Note: update_task_status already commits, so we don't need to commit again
+            return True
+        finally:
+            # CRITICAL: Close the session to return connection to pool
+            try:
+                await db.close()
+            except Exception as close_error:
+                logger.warning(f"Error closing database session: {close_error}")
     
     except Exception as e:
         logger.warning(f"Failed to update task status in database: {e}")
@@ -261,16 +275,23 @@ async def update_task_llm_usage_in_db(
             logger.warning("Database session not available for task tracking")
             return False
         
-        await update_task_llm_usage(
-            db=db,
-            task_id=task_id,
-            llm_calls_count=llm_calls_count,
-            llm_tokens_used=llm_tokens_used,
-            llm_cost_usd=llm_cost_usd,
-        )
-        
-        # Note: update_task_llm_usage already commits, so we don't need to commit again
-        return True
+        try:
+            await update_task_llm_usage(
+                db=db,
+                task_id=task_id,
+                llm_calls_count=llm_calls_count,
+                llm_tokens_used=llm_tokens_used,
+                llm_cost_usd=llm_cost_usd,
+            )
+            
+            # Note: update_task_llm_usage already commits, so we don't need to commit again
+            return True
+        finally:
+            # CRITICAL: Close the session to return connection to pool
+            try:
+                await db.close()
+            except Exception as close_error:
+                logger.warning(f"Error closing database session: {close_error}")
     
     except Exception as e:
         logger.warning(f"Failed to update LLM usage in database: {e}")

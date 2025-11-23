@@ -51,15 +51,15 @@ class OrchestratorAgent(BaseAgent):
             self.llm_service = get_llm_service()
             self.config_manager = get_configuration_manager()
             self.llm_enabled = True
-            logging.info("✅ OrchestratorAgent: LLM task breakdown enabled")
+            logging.info("[OK] OrchestratorAgent: LLM task breakdown enabled")
         else:
             self.llm_service = None
             self.config_manager = None
             self.llm_enabled = False
             if self.use_llm:
-                logging.warning("⚠️  OrchestratorAgent: LLM requested but not available, using rules only")
+                logging.warning("[WARN] OrchestratorAgent: LLM requested but not available, using rules only")
             else:
-                logging.info("ℹ️  OrchestratorAgent: LLM disabled, using rules only")
+                logging.info("[INFO] OrchestratorAgent: LLM disabled, using rules only")
 
     def register_agent(self, agent: BaseAgent):
         """
@@ -136,7 +136,7 @@ class OrchestratorAgent(BaseAgent):
                             self._analyze_objective_with_llm(objective, context, start_counter)
                         )
                         if llm_tasks:
-                            self.logger.info(f"🤖 LLM breakdown: {len(llm_tasks)} tasks created for '{objective}'")
+                            self.logger.info(f"[LLM] LLM breakdown: {len(llm_tasks)} tasks created for '{objective}'")
                             return llm_tasks
                     finally:
                         loop.close()
@@ -290,7 +290,7 @@ Break this objective into a sequence of tasks with proper agent assignments and 
             # Log LLM usage
             if response.usage:
                 self.logger.info(
-                    f"💰 LLM breakdown cost: ${response.usage.total_cost:.4f} "
+                    f"[COST] LLM breakdown cost: ${response.usage.total_cost:.4f} "
                     f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens)"
                 )
             
@@ -418,15 +418,30 @@ Break this objective into a sequence of tasks with proper agent assignments and 
             tasks.append(frontend_task)
             start_counter += 1
         
-        # Create backend/coder tasks (if needed - for non-specialized code)
-        if objective_type in ["api", "backend", "service", "model"] or not tasks:
+        # Create backend/coder tasks
+        # CRITICAL FIX: Always create a coder task if there are implementation tasks that need backend code
+        # OR if no specialized tasks were created (fallback to generic implementation)
+        impl_tasks_exist = any(t.agent_type in [AgentType.INTEGRATION, AgentType.WORKFLOW, AgentType.FRONTEND] for t in tasks)
+        needs_coder = (
+            objective_type in ["api", "backend", "service", "model"] or 
+            not tasks or 
+            impl_tasks_exist  # Integration/workflow/frontend tasks often need backend support
+        )
+        
+        if needs_coder:
+            # Build dependencies: coder tasks depend on research, infrastructure, and integration tasks
+            coder_dependencies = [
+                t.id for t in tasks 
+                if t.agent_type in [AgentType.INFRASTRUCTURE, AgentType.INTEGRATION, AgentType.RESEARCHER]
+            ]
+            
             coder_task = Task(
                 id=f"task_{start_counter:04d}_coder",
                 title=f"Backend: {objective}",
                 description=f"Implement backend functionality for: {objective}\n\nContext: {context}",
                 agent_type=AgentType.CODER,
                 tech_stack=tech_stack,
-                dependencies=[t.id for t in tasks if t.agent_type in [AgentType.INFRASTRUCTURE, AgentType.INTEGRATION]],
+                dependencies=coder_dependencies,
                 metadata={
                     "objective": objective,
                     "complexity": self._estimate_complexity(objective)

@@ -1,0 +1,147 @@
+{
+  "query": "Application must have the ability to migrate from QuickBooks to Odoo and Odoo to QuickBooks, whatever choice the user decides.",
+  "timestamp": "2025-11-22T17:49:12.040360",
+  "depth": "adaptive",
+  "search_results": [
+    {
+      "title": "Switching from Quickbooks Online to Odoo Accounting - Will We ...",
+      "url": "https://www.reddit.com/r/Odoo/comments/16beul6/switching_from_quickbooks_online_to_odoo/",
+      "snippet": "Sep 6, 2023 ... It seems Odoo must have native direct deposit capability as if it didn't it would make their Payroll app pretty useless if you still had to\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Alternative to QuickBooks for accounting?",
+      "url": "https://www.facebook.com/groups/6figurevirtualbookkeeper/posts/3522710137865094/",
+      "snippet": "Aug 19, 2025 ... That sounds so frustrating \u2014 you're not alone, a lot of business owners run into these same QuickBooks issues with payments and banking\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Using Odoo was an awful experience. I deeply regret it. : r/Odoo",
+      "url": "https://www.reddit.com/r/Odoo/comments/1deb36y/using_odoo_was_an_awful_experience_i_deeply/",
+      "snippet": "Jun 12, 2024 ... Right now, I'm migrating my entire business to Shopify, so I can manage it easily and develop my business with complete peace of mind. We'll see\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Quickbooks vs Odoo, 2024 Comparison Whitepaper",
+      "url": "https://www.odoo.com/page/odoo-vs-quickbooks",
+      "snippet": "... need for disjointed, non-integrated software applications. Odoo shines as a ... use and setup can vary significantly among these options. Conclusion.",
+      "source": "google"
+    },
+    {
+      "title": "Has anyone had a positive experience going from Desktop to Online ...",
+      "url": "https://www.reddit.com/r/QuickBooks/comments/1bvrbz3/has_anyone_had_a_positive_experience_going_from/",
+      "snippet": "Apr 4, 2024 ... I use QB desktop for accounting and payroll. Twice I have tried migrating my data and switch to QBO for cost savings and because Intuit is\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Seeking Advice and Support for Migrating from QuickBooks Desktop ...",
+      "url": "https://www.reddit.com/r/Odoo/comments/1f3cvl5/seeking_advice_and_support_for_migrating_from/",
+      "snippet": "Aug 28, 2024 ... At this point, we no longer want to use QBD and have decided to move to Odoo 17 Community Edition. We are currently in the process of\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "Git will not init/sync/update new submodules - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/3336995/git-will-not-init-sync-update-new-submodules",
+      "snippet": "Jul 26, 2010 ... running 1.7.7.1 and having the same problem: \"git submodule sync\" does not update .git/config after a change to .gitmodules.",
+      "source": "google"
+    },
+    {
+      "title": "Self Hosted vs Odoo.SH Third Part Apps? : r/Odoo",
+      "url": "https://www.reddit.com/r/Odoo/comments/1bkf17s/self_hosted_vs_odoosh_third_part_apps/",
+      "snippet": "Mar 22, 2024 ... ... app ability, we need to go with Odoo.SH. Does anyone have any ... Or has anyone successfully gotten a Quickbooks connector to work with Odoo\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "QuickBooks Online",
+      "url": "https://developer.intuit.com/app/developer/qbo/docs/develop",
+      "snippet": "Visit the API Explorer to see all entities, operations, and fields. ../../_images/group-19.svg. Learn about the QuickBooks Online Accounting API. Learn the\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "How to integrate with QuickBooks API",
+      "url": "https://help.developer.intuit.com/s/article/How-to-integrate-with-QuickBooks-API",
+      "snippet": "Integration with QuickBooks Online API takes only 3 steps Create a developer account Create an app Generate OAuth Tokens.",
+      "source": "google"
+    },
+    {
+      "title": "QuickBooks Desktop API Reference",
+      "url": "https://developer.intuit.com/app/developer/qbdesktop/docs/api-reference/qbdesktop",
+      "snippet": "QuickBooks Desktop API Reference. This set of pages provides detailed information on the qbXML messages sent to, and received from, QuickBooks Desktop.",
+      "source": "google"
+    },
+    {
+      "title": "QuickBooks Online API Reference",
+      "url": "https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/account",
+      "snippet": "",
+      "source": "google"
+    },
+    {
+      "title": "How to store card info with QuickBooks api for future payments?",
+      "url": "https://help.developer.intuit.com/s/question/0D54R00008FkmKASAZ/how-to-store-card-info-with-quickbooks-api-for-future-payments",
+      "snippet": "Oct 9, 2021 ... API for get card: https://developer.intuit.com/app/developer/qbpayments/docs/api/resources/all-entities/cards#get-a-card. API for create token :\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "QuickBooks Online",
+      "url": "https://developer.intuit.com/app/developer/qbo/docs/develop",
+      "snippet": "Visit the API Explorer to see all entities, operations, and fields. ../../_images/group-19.svg. Learn about the QuickBooks Online Accounting API. Learn the\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "set up OAuth 2.0",
+      "url": "https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0",
+      "snippet": "Set up OAuth 2.0 \u00b7 Add a \u00e2\u20ac\u0153Connect to\u00e2\u20ac button somewhere in your app. When users select it, your app should redirect them and start the authorization flow. \u00b7 If\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "The pain of integrating with QuickBooks' oAuth 2.0 API - DEV ...",
+      "url": "https://dev.to/bstewart/the-pain-of-integrating-with-quickbooks-oauth-20-api-1mb0",
+      "snippet": "Jul 29, 2023 ... I hit a wall, I could not get the authentication working with the QuickBooks API, there fore nothing else I wanted to set up would work.",
+      "source": "google"
+    },
+    {
+      "title": "QuickBooks API OAuth 2.0 and authorization FAQ",
+      "url": "https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/faq",
+      "snippet": "OAuth 2.0 is our authorization standard. Only registered apps can connect to the Intuit OAuth2.0 server, call our API, and end-users\u00e2\u20ac\u2122 QuickBooks Online\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "QuickBooks Online",
+      "url": "https://developer.intuit.com/app/developer/qbo/docs/develop",
+      "snippet": "Learn about the QuickBooks Online Accounting API. Learn the capabilities of ... You can use common workflow examples as a foundation for your app.",
+      "source": "google"
+    },
+    {
+      "title": "Getting the \"bank balance\" from a bank account via the quickbooks ...",
+      "url": "https://help.developer.intuit.com/s/question/0D5G000004Dk6KDKAZ/getting-the-bank-balance-from-a-bank-account-via-the-quickbooks-online-api",
+      "snippet": "Dec 22, 2015 ... Getting the \"bank balance\" from a bank account via the quickbooks online api ... quickbooks online homepage of an example company. As you\u00a0...",
+      "source": "google"
+    },
+    {
+      "title": "See example OAuth 2.0 integrations",
+      "url": "https://developer.intuit.com/app/developer/qbpayments/docs/develop/authentication-and-authorization/sample-apps-and-code",
+      "snippet": "Even though you plan to only utilize the QuickBooks Payments API, you may also want to check out integration examples for the QuickBooks Online Accounting API:.",
+      "source": "google"
+    }
+  ],
+  "key_findings": [
+    "Most mentioned concepts: quickbooks, online, learn, accounting, business",
+    "Found 5 official documentation sources",
+    "Top result: Switching from Quickbooks Online to Odoo Accounting - Will We ... (https://www.reddit.com/r/Odoo/comments/16beul6/switching_from_quickbooks_online_to_odoo/)"
+  ],
+  "documentation_urls": [
+    "https://developer.intuit.com/app/developer/qbo/docs/develop",
+    "https://help.developer.intuit.com/s/article/How-to-integrate-with-QuickBooks-API",
+    "https://developer.intuit.com/app/developer/qbdesktop/docs/api-reference/qbdesktop",
+    "https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/account",
+    "https://help.developer.intuit.com/s/question/0D54R00008FkmKASAZ/how-to-store-card-info-with-quickbooks-api-for-future-payments"
+  ],
+  "code_examples": [],
+  "best_practices": [],
+  "confidence_score": 85,
+  "sources_consulted": [
+    "quick_search",
+    "deep_search"
+  ],
+  "cached": false
+}

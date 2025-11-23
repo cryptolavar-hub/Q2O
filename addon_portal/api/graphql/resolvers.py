@@ -65,12 +65,21 @@ class Query:
         from sqlalchemy import func, and_, case
         
         # Get distinct agent types from tasks
+        # AgentTask model has: created_at, started_at, completed_at, failed_at (no updated_at)
+        # Use COALESCE to get the most recent timestamp from available fields
         stmt = select(
             AgentTask.agent_type,
             func.count(AgentTask.id).label('total_tasks'),
             func.sum(case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
             func.sum(case((AgentTask.status == 'failed', 1), else_=0)).label('failed'),
-            func.max(AgentTask.updated_at).label('last_activity')
+            func.max(
+                func.coalesce(
+                    AgentTask.completed_at,
+                    AgentTask.failed_at,
+                    AgentTask.started_at,
+                    AgentTask.created_at
+                )
+            ).label('last_activity')
         ).group_by(AgentTask.agent_type)
         
         # Filter by agent_type if provided
@@ -381,6 +390,10 @@ class Query:
             f"failed={failed_tasks}, completion={completion_percentage}%"
         )
         
+        # Note: For read-only queries, we don't need to commit/rollback
+        # The session will be cleaned up by the GraphQL context's __aexit__ method
+        # This is just a read operation, so no transaction management needed here
+        
         # If no tasks exist yet, use status-based fallback
         if total_tasks == 0:
             if db_project.execution_status == 'completed':
@@ -391,25 +404,48 @@ class Query:
                 completion_percentage = 0.0
             else:
                 completion_percentage = 0.0
+        # Note: If tasks exist, completion_percentage comes from calculate_project_progress()
+        # and reflects actual task completion. A project should only be 'completed' if tasks are 100% done.
         
         # Map agent_configs to Agent objects with REAL task statistics
+        # Also build agents from actual tasks if agent_configs don't exist
         agents = []
+        
+        # Get task counts per agent type from actual tasks
+        agent_task_counts = {}
+        agent_types_seen = set()
+        
+        if total_tasks > 0:
+            agent_tasks = await get_project_tasks(db, id)
+            for task in agent_tasks:
+                agent_type = task.agent_type
+                agent_types_seen.add(agent_type)
+                if agent_type not in agent_task_counts:
+                    agent_task_counts[agent_type] = {"completed": 0, "failed": 0, "running": None, "last_activity": None}
+                if task.status == 'completed':
+                    agent_task_counts[agent_type]["completed"] += 1
+                elif task.status == 'failed':
+                    agent_task_counts[agent_type]["failed"] += 1
+                elif task.status in ('started', 'running') and not agent_task_counts[agent_type]["running"]:
+                    agent_task_counts[agent_type]["running"] = task.task_id
+                # Track last activity from task timestamps (use most recent available timestamp)
+                # AgentTask model has: created_at, started_at, completed_at, failed_at (no updated_at)
+                last_activity = None
+                if task.completed_at:
+                    last_activity = task.completed_at
+                elif task.failed_at:
+                    last_activity = task.failed_at
+                elif task.started_at:
+                    last_activity = task.started_at
+                elif task.created_at:
+                    last_activity = task.created_at
+                
+                if last_activity:
+                    if not agent_task_counts[agent_type]["last_activity"] or last_activity > agent_task_counts[agent_type]["last_activity"]:
+                        agent_task_counts[agent_type]["last_activity"] = last_activity
+        
+        # Build agents from agent_configs if they exist
         if db_project.agent_configs:
-            # Get task counts per agent type
-            agent_task_counts = {}
-            if total_tasks > 0:
-                agent_tasks = await get_project_tasks(db, id)
-                for task in agent_tasks:
-                    agent_type = task.agent_type
-                    if agent_type not in agent_task_counts:
-                        agent_task_counts[agent_type] = {"completed": 0, "failed": 0, "running": None}
-                    if task.status == 'completed':
-                        agent_task_counts[agent_type]["completed"] += 1
-                    elif task.status == 'failed':
-                        agent_task_counts[agent_type]["failed"] += 1
-                    elif task.status in ('started', 'running') and not agent_task_counts[agent_type]["running"]:
-                        agent_task_counts[agent_type]["running"] = task.task_id
-            
             for agent_config in db_project.agent_configs:
                 try:
                     # Map agent_type string to AgentType enum
@@ -419,7 +455,7 @@ class Query:
                     agent_type = AgentType.CODER
                 
                 # Get real task statistics for this agent
-                agent_stats = agent_task_counts.get(agent_config.agent_type, {"completed": 0, "failed": 0, "running": None})
+                agent_stats = agent_task_counts.get(agent_config.agent_type, {"completed": 0, "failed": 0, "running": None, "last_activity": None})
                 tasks_completed = agent_stats["completed"]
                 tasks_failed = agent_stats["failed"]
                 current_task_id = agent_stats["running"]
@@ -449,7 +485,47 @@ class Query:
                     tasks_completed=tasks_completed,
                     tasks_failed=tasks_failed,
                     current_task_id=current_task_id,
-                    last_activity=agent_config.updated_at or agent_config.created_at or datetime.now(timezone.utc)
+                    last_activity=agent_stats["last_activity"] or agent_config.updated_at or agent_config.created_at or datetime.now(timezone.utc)
+                ))
+        else:
+            # No agent_configs - build agents from actual tasks
+            for agent_type_str in agent_types_seen:
+                try:
+                    agent_type_upper = agent_type_str.upper()
+                    agent_type = AgentType[agent_type_upper] if agent_type_upper in [e.name for e in AgentType] else AgentType.CODER
+                except (KeyError, AttributeError):
+                    agent_type = AgentType.CODER
+                
+                agent_stats = agent_task_counts.get(agent_type_str, {"completed": 0, "failed": 0, "running": None, "last_activity": None})
+                tasks_completed = agent_stats["completed"]
+                tasks_failed = agent_stats["failed"]
+                current_task_id = agent_stats["running"]
+                
+                # Agent is "active" if project is running AND has active tasks
+                agent_status = "active" if (
+                    db_project.execution_status == 'running' 
+                    and current_task_id is not None
+                ) else ("idle" if (tasks_completed + tasks_failed) > 0 else "idle")
+                
+                # Health score based on success rate
+                total_agent_tasks = tasks_completed + tasks_failed
+                if total_agent_tasks > 0:
+                    health_score = (tasks_completed / total_agent_tasks) * 100.0
+                elif agent_status == "active":
+                    health_score = 100.0
+                else:
+                    health_score = 0.0
+                
+                agents.append(Agent(
+                    id=f"{db_project.project_id}-{agent_type_str}",
+                    type=agent_type,
+                    name=f"{agent_type_str.title()} Agent",
+                    status=agent_status,
+                    health_score=health_score,
+                    tasks_completed=tasks_completed,
+                    tasks_failed=tasks_failed,
+                    current_task_id=current_task_id,
+                    last_activity=agent_stats["last_activity"] or datetime.now(timezone.utc)
                 ))
         
         # Calculate estimated time remaining based on REAL task data
@@ -495,7 +571,7 @@ class Query:
             status=project_status,
             created_at=db_project.created_at or datetime.now(timezone.utc),
             updated_at=db_project.updated_at or db_project.created_at or datetime.now(timezone.utc),
-            completion_percentage=completion_percentage,
+            completion_percentage=round(completion_percentage, 0),  # Round to whole number (no decimals)
             total_tasks=total_tasks,
             completed_tasks=completed_tasks,
             failed_tasks=failed_tasks,
@@ -1134,6 +1210,11 @@ class Subscription:
                 yield metrics
             except Exception as e:
                 logger.error(f"Error in system_metrics_stream: {e}", exc_info=True)
+                # Rollback any pending transaction to prevent PendingRollbackError
+                try:
+                    await db.rollback()
+                except Exception as rollback_error:
+                    logger.warning(f"Error rolling back transaction in system_metrics_stream: {rollback_error}")
                 # Yield default metrics on error
                 yield SystemMetrics(
                     timestamp=datetime.now(timezone.utc),

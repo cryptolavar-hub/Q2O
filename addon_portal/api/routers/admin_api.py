@@ -70,6 +70,12 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     active_devices = sum(1 for d in all_devices if not d.is_revoked)
     revoked_devices = sum(1 for d in all_devices if d.is_revoked)
     
+    # Count projects (authorized projects = projects with activation_code_id set)
+    result = await db.execute(select(LLMProjectConfig))
+    all_projects = result.scalars().all()
+    total_projects = len(all_projects)
+    active_projects = sum(1 for p in all_projects if p.activation_code_id is not None)
+    
     # Count tenants (eagerly load subscriptions to avoid lazy loading issues)
     result = await db.execute(
         select(Tenant).options(selectinload(Tenant.subscriptions).selectinload(Subscription.plan))
@@ -105,6 +111,11 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     devices_last_week = sum(1 for d in all_devices if two_weeks_ago <= utc_to_server_tz(d.created_at) < week_ago)
     devices_trend = ((devices_this_week - devices_last_week) / devices_last_week * 100) if devices_last_week > 0 else (100 if devices_this_week > 0 else 0)
     
+    # Projects activated this week vs last week (projects with activation_code_id set)
+    projects_this_week = sum(1 for p in all_projects if p.activation_code_id and p.started_at and utc_to_server_tz(p.started_at) >= week_ago)
+    projects_last_week = sum(1 for p in all_projects if p.activation_code_id and p.started_at and two_weeks_ago <= utc_to_server_tz(p.started_at) < week_ago)
+    projects_trend = ((projects_this_week - projects_last_week) / projects_last_week * 100) if projects_last_week > 0 else (100 if projects_this_week > 0 else 0)
+    
     # Tenants created this week vs last week
     tenants_this_week = sum(1 for t in all_tenants if utc_to_server_tz(t.created_at) >= week_ago)
     tenants_last_week = sum(1 for t in all_tenants if two_weeks_ago <= utc_to_server_tz(t.created_at) < week_ago)
@@ -125,6 +136,8 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
         "totalDevices": total_devices,
         "activeDevices": active_devices,
         "revokedDevices": revoked_devices,
+        "totalProjects": total_projects,
+        "activeProjects": active_projects,
         "totalTenants": total_tenants,
         "activeTenants": active_tenants,
         "successRate": round(success_rate, 1),
@@ -136,6 +149,10 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
             "devices": {
                 "value": round(abs(devices_trend), 1),
                 "direction": "up" if devices_trend >= 0 else "down"
+            },
+            "projects": {
+                "value": round(abs(projects_trend), 1),
+                "direction": "up" if projects_trend >= 0 else "down"
             },
             "tenants": {
                 "value": round(abs(tenants_trend), 1),
@@ -765,9 +782,16 @@ async def delete_tenant_endpoint(tenant_slug: str, db: AsyncSession = Depends(ge
 
     This action cannot be undone.
     """
+    from ..core.exceptions import InvalidOperationError, TenantNotFoundError
 
     LOGGER.info("delete_tenant_request", extra={"slug": tenant_slug})
-    await delete_tenant(db, tenant_slug)
+    try:
+        await delete_tenant(db, tenant_slug)
+    except TenantNotFoundError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error.message) from error
+    except InvalidOperationError as error:
+        LOGGER.error("delete_tenant_endpoint_failed", extra={"slug": tenant_slug, "error": str(error)})
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error.message) from error
 
 
 # ============================================================================
@@ -1075,5 +1099,166 @@ async def revoke_device(device_id: int, db: AsyncSession = Depends(get_db)):
         "success": True,
         "message": "Device revoked successfully"
     }
+
+
+@router.delete("/devices/{device_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_device_permanent(device_id: int, db: AsyncSession = Depends(get_db)):
+    """Permanently delete a device."""
+    
+    from sqlalchemy import delete as sql_delete
+    
+    result = await db.execute(select(Device).where(Device.id == device_id))
+    device = result.scalar_one_or_none()
+    
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    
+    await db.execute(sql_delete(Device).where(Device.id == device_id))
+    await db.commit()
+    
+    LOGGER.info("device_deleted", extra={"deviceId": device_id})
+
+
+# ============================================================================
+# PROJECT ENDPOINTS (Admin)
+# ============================================================================
+
+@router.get("/projects/activated")
+async def get_activated_projects(
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    tenant_slug: Optional[str] = Query(None),
+):
+    """Get all projects that have been activated with activation codes."""
+    
+    from sqlalchemy.orm import joinedload
+    
+    # Base query: projects with activation_code_id set
+    base_stmt = select(LLMProjectConfig).where(LLMProjectConfig.activation_code_id.isnot(None))
+    
+    # Filter by tenant if provided
+    if tenant_slug:
+        base_stmt = base_stmt.join(Tenant).where(Tenant.slug == tenant_slug)
+    else:
+        # Still need to join Tenant for the relationship
+        base_stmt = base_stmt.join(Tenant)
+    
+    # Search filter
+    if search:
+        search_pattern = f"%{search}%"
+        base_stmt = base_stmt.where(
+            (LLMProjectConfig.client_name.ilike(search_pattern)) |
+            (LLMProjectConfig.project_id.ilike(search_pattern)) |
+            (LLMProjectConfig.description.ilike(search_pattern))
+        )
+    
+    # Get total count (before pagination and joinedload)
+    # Create a count query that matches the filters
+    count_base = select(LLMProjectConfig.id).where(LLMProjectConfig.activation_code_id.isnot(None))
+    
+    if tenant_slug:
+        count_base = count_base.join(Tenant).where(Tenant.slug == tenant_slug)
+    
+    if search:
+        search_pattern = f"%{search}%"
+        count_base = count_base.where(
+            (LLMProjectConfig.client_name.ilike(search_pattern)) |
+            (LLMProjectConfig.project_id.ilike(search_pattern)) |
+            (LLMProjectConfig.description.ilike(search_pattern))
+        )
+    
+    count_stmt = select(func.count()).select_from(count_base.subquery())
+    total_result = await db.execute(count_stmt)
+    total = total_result.scalar() or 0
+    
+    # Add joinedload for tenant relationship
+    base_stmt = base_stmt.options(joinedload(LLMProjectConfig.tenant))
+    
+    # Apply pagination
+    offset = (page - 1) * page_size
+    base_stmt = base_stmt.order_by(LLMProjectConfig.started_at.desc().nulls_last(), LLMProjectConfig.created_at.desc())
+    base_stmt = base_stmt.offset(offset).limit(page_size)
+    
+    result = await db.execute(base_stmt)
+    projects = result.scalars().unique().all()
+    
+    # Get activation codes for these projects
+    activation_code_ids = [p.activation_code_id for p in projects if p.activation_code_id]
+    codes_result = await db.execute(
+        select(ActivationCode).where(ActivationCode.id.in_(activation_code_ids))
+    )
+    codes = {code.id: code for code in codes_result.scalars().all()}
+    
+    # Format response
+    projects_data = []
+    for project in projects:
+        code = codes.get(project.activation_code_id) if project.activation_code_id else None
+        tenant = project.tenant
+        
+        projects_data.append({
+            "projectId": project.project_id,
+            "clientName": project.client_name,
+            "tenantName": tenant.name if tenant else "Unknown",
+            "tenantSlug": tenant.slug if tenant else "",
+            "activationCodeId": project.activation_code_id,
+            "activationCode": code.code_plain if code else "Unknown",
+            "activatedAt": code.used_at.isoformat() if code and code.used_at else project.started_at.isoformat() if project.started_at else "",
+            "executionStatus": project.execution_status or "pending",
+            "description": project.description,
+        })
+    
+    return {
+        "projects": projects_data,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.post("/projects/{project_id}/revoke-activation", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_project_activation(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoke activation code assignment from a project."""
+    
+    result = await db.execute(
+        select(LLMProjectConfig).where(LLMProjectConfig.project_id == project_id)
+    )
+    project = result.scalar_one_or_none()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if not project.activation_code_id:
+        raise HTTPException(status_code=400, detail="Project does not have an activation code assigned")
+    
+    # Remove activation code assignment
+    project.activation_code_id = None
+    await db.commit()
+    
+    LOGGER.info("project_activation_revoked", extra={"projectId": project_id})
+
+
+@router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete a project (admin only)."""
+    
+    from ..services.llm_config_service import delete_project
+    
+    LOGGER.info("delete_project_request", extra={"projectId": project_id})
+    try:
+        await delete_project(db, project_id, tenant_id=None)  # Admin can delete any project
+    except Exception as e:
+        LOGGER.error("delete_project_error", extra={"error": str(e), "projectId": project_id})
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found or could not be deleted",
+        )
 
 
