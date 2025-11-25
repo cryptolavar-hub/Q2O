@@ -12,12 +12,28 @@ from pathlib import Path
 
 # Database imports
 try:
+    import sys
+    from pathlib import Path
+    
+    # Add addon_portal to path if not already there (for subprocess context)
+    project_root = Path(__file__).resolve().parents[1]
+    addon_portal_path = project_root / "addon_portal"
+    if str(addon_portal_path) not in sys.path:
+        sys.path.insert(0, str(addon_portal_path))
+    
+    # Try importing from addon_portal.api first (when running from subprocess)
+    try:
+        from addon_portal.api.core.db import get_db
+        from addon_portal.api.models.research import ResearchResult, ResearchAnalytics
+    except ImportError:
+        # Fallback: try api.core.db (when addon_portal is in path)
+        from api.core.db import get_db
+        from api.models.research import ResearchResult, ResearchAnalytics
+    
     from sqlalchemy.orm import Session
-    from addon_portal.api.core.db import get_db
-    from addon_portal.api.models.research import ResearchResult, ResearchAnalytics
     DB_AVAILABLE = True
-except ImportError:
-    logging.warning("Database not available for research storage, using file system")
+except ImportError as e:
+    logging.warning(f"Database not available for research storage, using file system: {e}")
     DB_AVAILABLE = False
 
 

@@ -1,0 +1,117 @@
+{
+  "query": "* Environment variable blueprint",
+  "timestamp": "2025-11-24T21:50:15.445561",
+  "depth": "quick",
+  "search_results": [],
+  "key_findings": [
+    "**Configuration-Code Separation is Paramount:** Environment variables are the primary mechanism for separating configuration from application code, adhering to the 12-Factor App methodology. This enhances portability and deployability.",
+    "**Never Commit Secrets to Version Control:** Hardcoding sensitive information (API keys, database credentials) directly into code or configuration files that are committed to Git is a critical security vulnerability. Utilize dedicated secret management solutions.",
+    "**Leverage Cloud-Native Secret Management:** For cloud deployments, always use services like AWS Secrets Manager, Azure Key Vault, or Google Secret Manager. These provide secure storage, access control, rotation, and auditing capabilities.",
+    "**Scope Environment Variables Appropriately:** Define variables at the narrowest possible scope (e.g., per service, per container, per environment) to minimize exposure and facilitate granular access control.",
+    "**Validate Environment Variables at Startup:** Implement checks in your application to ensure all required environment variables are present and correctly formatted during application startup. Fail fast if critical configuration is missing.",
+    "**Prioritize Least Privilege Access:** Grant only the necessary permissions to applications and users to access specific environment variables or secrets. Use IAM roles/policies in cloud environments.",
+    "**Standardize Naming Conventions:** Adopt a consistent naming convention (e.g., `APP_SERVICE_DB_HOST`, `API_KEY`) for environment variables across your projects to improve readability and maintainability.",
+    "**Use .env Files for Local Development Only:** For local development, `.env` files (managed by tools like `python-dotenv` or `direnv`) are convenient but must be explicitly excluded from version control (`.gitignore`)."
+  ],
+  "documentation_urls": [
+    "https://12factor.net/config",
+    "https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html",
+    "https://learn.microsoft.com/en-us/azure/key-vault/general/overview",
+    "https://cloud.google.com/secret-manager/docs/overview",
+    "https://docs.docker.com/compose/environment-variables/",
+    "https://kubernetes.io/docs/concepts/configuration/secret/",
+    "https://pypi.org/project/python-dotenv/"
+  ],
+  "code_examples": [
+    {
+      "language": "python",
+      "description": "Reading a single environment variable in Python",
+      "code": "import os\n\n# Access an environment variable\ndb_host = os.getenv('DATABASE_HOST')\n\nif db_host is None:\n    print(\"Error: DATABASE_HOST environment variable not set.\")\n    # In a real application, you might raise an exception or exit\nelse:\n    print(f\"Database Host: {db_host}\")\n\n# Provide a default value if not set\nport = os.getenv('APP_PORT', '8080')\nprint(f\"Application Port: {port}\")"
+    },
+    {
+      "language": "python",
+      "description": "Using python-dotenv for local development with a .env file",
+      "code": "# .env file content (DO NOT COMMIT THIS!)\n# DATABASE_HOST=localhost\n# API_KEY=your_dev_api_key_123\n\n# Python code\nimport os\nfrom dotenv import load_dotenv\n\n# Load environment variables from .env file (if it exists)\nload_dotenv()\n\ndb_host = os.getenv('DATABASE_HOST')\napi_key = os.getenv('API_KEY')\n\nprint(f\"DB Host (from .env or system): {db_host}\")\nprint(f\"API Key (from .env or system): {api_key}\")\n\n# Note: System environment variables take precedence over .env file variables."
+    },
+    {
+      "language": "yaml",
+      "description": "Docker Compose example using environment variables",
+      "code": "version: '3.8'\nservices:\n  web:\n    image: my-app:latest\n    ports:\n      - \"80:8000\"\n    environment:\n      - DATABASE_HOST=${DB_HOST}\n      - API_KEY=${MY_API_KEY}\n    # Alternatively, use an env_file for non-sensitive variables\n    # env_file:\n    #   - .env\n  db:\n    image: postgres:13\n    environment:\n      - POSTGRES_DB=${POSTGRES_DB}\n      - POSTGRES_USER=${POSTGRES_USER}\n      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}\n    volumes:\n      - db_data:/var/lib/postgresql/data\n\nvolumes:\n  db_data:"
+    },
+    {
+      "language": "yaml",
+      "description": "Kubernetes Deployment using Secrets as environment variables",
+      "code": "apiVersion: v1\nkind: Secret\nmetadata:\n  name: my-app-secrets\ntype: Opaque\nstringData:\n  api-key: \"super-secret-api-key\"\n  db-password: \"db-pass-123\"\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app-deployment\nspec:\n  selector:\n    matchLabels:\n      app: my-app\n  template:\n    metadata:\n      labels:\n        app: my-app\n    spec:\n      containers:\n      - name: my-app-container\n        image: my-app:latest\n        env:\n        - name: API_KEY\n          valueFrom:\n            secretKeyRef:\n              name: my-app-secrets\n              key: api-key\n        - name: DATABASE_PASSWORD\n          valueFrom:\n            secretKeyRef:\n              name: my-app-secrets\n              key: db-password\n        # For non-sensitive config maps\n        # envFrom:\n        #   - configMapRef:\n        #       name: my-app-config"
+    }
+  ],
+  "best_practices": [
+    "**Adhere to 12-Factor App Config:** Strictly separate configuration from code. All configuration that varies between deploys (dev, staging, prod) should be externalized.",
+    "**Use Dedicated Secret Management:** For sensitive data, always use cloud-native secret managers (AWS Secrets Manager, Azure Key Vault, GCP Secret Manager) or equivalent solutions (HashiCorp Vault) rather than plain environment variables directly.",
+    "**Encrypt Secrets at Rest and In Transit:** Ensure that secrets are encrypted when stored and when transmitted between services.",
+    "**Implement Least Privilege Access:** Configure IAM roles, service accounts, or policies to grant applications and users only the minimum necessary permissions to access specific environment variables or secrets.",
+    "**Automate Secret Rotation:** Configure secret managers to automatically rotate sensitive credentials (e.g., database passwords, API keys) on a regular schedule to minimize the impact of a compromise.",
+    "**Validate Configuration at Startup:** Include logic in your application to check for the presence and validity of all required environment variables upon startup. Fail early if critical configuration is missing or malformed.",
+    "**Standardize Naming Conventions:** Use clear, consistent, and descriptive naming for environment variables (e.g., `SERVICE_COMPONENT_SETTING`). Avoid generic names.",
+    "**Avoid Multi-line or Structured Data in Env Vars:** Environment variables are best for simple key-value pairs. For complex, structured configuration (e.g., JSON objects, YAML), use configuration files loaded from a secure source or a dedicated configuration service.",
+    "**Local Development with .env (and .gitignore):** Use `.env` files with tools like `python-dotenv` for local development, but ensure these files are added to `.gitignore` to prevent accidental commits.",
+    "**Audit Secret Access:** Enable logging and auditing for your secret management service to track who accessed which secrets, when, and from where."
+  ],
+  "confidence_score": 60,
+  "sources_consulted": [
+    "llm_research",
+    "llm_research"
+  ],
+  "common_pitfalls": [
+    "**Committing Secrets to Version Control:** The most common and dangerous pitfall. Leads to immediate compromise if the repository is public or later breached.",
+    "**Hardcoding Configuration:** Embedding API keys, database connection strings, or other environment-specific values directly in source code.",
+    "**Lack of Validation:** Deploying applications that assume environment variables will always be present and correct, leading to runtime errors or unexpected behavior in production.",
+    "**Over-scoping Environment Variables:** Setting global environment variables when they are only needed by a specific service or container, increasing the attack surface.",
+    "**Using Plain Environment Variables for Secrets in Production:** While convenient, plain environment variables are not designed for secure secret management (no rotation, auditing, encryption at rest by default).",
+    "**Exposing Secrets in Logs or Error Messages:** Accidentally logging sensitive environment variable values, especially during debugging or error handling.",
+    "**Inconsistent Naming:** Using different naming conventions across projects or services, leading to confusion and maintenance overhead.",
+    "**Not Rotating Secrets:** Failing to regularly change sensitive credentials, increasing the window of opportunity for an attacker if a secret is compromised."
+  ],
+  "implementation_patterns": [
+    "**12-Factor App Configuration:** The foundational pattern where all configuration is stored in environment variables, strictly separated from the codebase.",
+    "**Cloud-Native Secret Management Integration:** Applications retrieve secrets dynamically from services like AWS Secrets Manager, Azure Key Vault, or GCP Secret Manager at startup or on demand. This often involves using SDKs or helper libraries.",
+    "**Container Orchestration Secrets:** Utilizing built-in secret management features of container platforms (e.g., Kubernetes Secrets, Docker Swarm Secrets) to inject sensitive data as environment variables or mounted files into containers.",
+    "**Configuration as Code (IaC):** Using Infrastructure as Code tools (Terraform, CloudFormation, ARM Templates) to define and manage the injection of environment variables into compute resources (VMs, containers, serverless functions).",
+    "**Dotenv Pattern (Local Development):** Using `.env` files with libraries like `python-dotenv` to simulate production environment variables during local development, ensuring these files are `.gitignored`.",
+    "**Centralized Configuration Service:** For complex microservice architectures, a dedicated configuration service (e.g., Spring Cloud Config, Consul) can manage and serve configuration, potentially including environment variables, to multiple applications."
+  ],
+  "integration_requirements": {
+    "authentication": "Cloud IAM Roles/Policies (e.g., AWS IAM roles for EC2/Lambda, Azure Managed Identities, GCP Service Accounts) for accessing secret management services. API keys/tokens for specific secret management service APIs (less common for cloud-native apps). Kubernetes Service Accounts for accessing Kubernetes Secrets.",
+    "apis_required": [
+      "AWS Secrets Manager API",
+      "Azure Key Vault REST API",
+      "Google Cloud Secret Manager API",
+      "Kubernetes API (for Secrets and ConfigMaps)",
+      "Docker Engine API (for container environment variables)"
+    ],
+    "data_formats": [
+      "Key-value pairs (for direct environment variables)",
+      "JSON (often used by secret managers to store complex secrets)",
+      "YAML (for Kubernetes manifests, Docker Compose files)"
+    ]
+  },
+  "performance_considerations": [
+    "**Startup Latency:** Fetching secrets from a remote secret manager introduces a slight overhead during application startup. This is generally negligible but can be a factor for extremely latency-sensitive cold starts (e.g., serverless functions).",
+    "**Caching:** For frequently accessed secrets or configurations, consider implementing a secure, short-lived caching mechanism to reduce repeated calls to the secret manager. Ensure proper invalidation strategies.",
+    "**Network Latency:** Accessing remote secret managers involves network calls. Ensure your application and secret manager are in the same region/network for optimal performance.",
+    "**API Rate Limits:** Be aware of API rate limits imposed by secret management services. Design your application to handle these gracefully (e.g., with retries and backoff) or cache secrets appropriately."
+  ],
+  "security_considerations": [
+    "**Confidentiality:** Ensure sensitive data is encrypted at rest (in secret manager) and in transit (TLS/SSL for API calls).",
+    "**Integrity:** Protect against unauthorized modification of environment variables or secrets. Use digital signatures or checksums if applicable.",
+    "**Availability:** Design for high availability of secret management services. Applications should be able to gracefully handle temporary unavailability (e.g., with retries, fallback to cached values).",
+    "**Least Privilege Access:** Implement granular access controls (IAM roles, policies) to ensure only authorized applications and services can retrieve specific secrets.",
+    "**Secret Rotation:** Automate the regular rotation of all sensitive credentials to minimize the impact of a compromised secret.",
+    "**Auditing and Logging:** Enable comprehensive logging for all secret access and modification events. Integrate these logs with your security information and event management (SIEM) system.",
+    "**Injection Prevention:** Sanitize and validate any user-supplied input that might be used to construct or modify environment variables to prevent injection attacks.",
+    "**Runtime Exposure:** Be mindful of how environment variables are exposed at runtime. Avoid exposing them in process lists (`ps -ef`), error messages, or application logs.",
+    "**Supply Chain Security:** Ensure that any third-party libraries or tools used to manage environment variables or secrets are trustworthy and free from vulnerabilities."
+  ],
+  "llm_provider": "gemini",
+  "llm_model": "gemini-2.5-flash",
+  "cached": false
+}

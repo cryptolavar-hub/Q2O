@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+<<<<<<< Updated upstream
 from datetime import datetime, timedelta
+=======
+import os
+from datetime import datetime, timedelta, timezone
+>>>>>>> Stashed changes
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -160,8 +165,51 @@ async def get_llm_stats() -> dict:
     cost_stats = llm_service.get_usage_stats()
     template_stats = template_engine.get_learning_stats()
 
+<<<<<<< Updated upstream
     monthly_budget = llm_service.cost_monitor.monthly_budget
     monthly_spent = llm_service.cost_monitor.monthly_spent
+=======
+    # Provider breakdown (from in-memory stats, as database doesn't track provider)
+    provider_breakdown = in_memory_stats.get('by_provider', {})
+    # If no in-memory data, create empty breakdown with actual model names
+    if not provider_breakdown:
+        # Get actual configured model names from LLM service
+        if LLM_AVAILABLE:
+            try:
+                llm_service = get_llm_service()
+                gemini_model = llm_service.gemini_model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+                openai_model = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+                anthropic_model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+            except:
+                gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+                openai_model = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+                anthropic_model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+        else:
+            gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            openai_model = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+            anthropic_model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+        
+        provider_breakdown = {
+            'gemini': {'calls': 0, 'total_cost': 0.0, 'avg_cost': 0.0, 'model': gemini_model},
+            'openai': {'calls': 0, 'total_cost': 0.0, 'avg_cost': 0.0, 'model': openai_model},
+            'anthropic': {'calls': 0, 'total_cost': 0.0, 'avg_cost': 0.0, 'model': anthropic_model},
+        }
+    else:
+        # Ensure model names are included in breakdown
+        for provider_key in ['gemini', 'openai', 'anthropic']:
+            if provider_key in provider_breakdown and 'model' not in provider_breakdown[provider_key]:
+                # Get model from LLM service or env
+                if provider_key == 'gemini' and LLM_AVAILABLE:
+                    try:
+                        llm_service = get_llm_service()
+                        provider_breakdown[provider_key]['model'] = llm_service.gemini_model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+                    except:
+                        provider_breakdown[provider_key]['model'] = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+                elif provider_key == 'openai':
+                    provider_breakdown[provider_key]['model'] = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+                elif provider_key == 'anthropic':
+                    provider_breakdown[provider_key]['model'] = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+>>>>>>> Stashed changes
 
     alerts = []
     if monthly_spent >= monthly_budget:

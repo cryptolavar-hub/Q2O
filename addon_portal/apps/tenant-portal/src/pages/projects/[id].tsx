@@ -262,6 +262,7 @@ export default function ProjectDetailPage() {
               <>
                 {/* Project Header */}
                 <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+<<<<<<< Updated upstream
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
@@ -332,14 +333,110 @@ export default function ProjectDetailPage() {
                       <button
                         onClick={() => setShowDeleteConfirm(true)}
                         className="px-6 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition-colors"
+=======
+                  {/* Title and Status Badge */}
+                  <div className="mb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
+                      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{project.name}</h1>
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold capitalize self-start sm:self-center ${getExecutionStatusColor(
+                          project.execution_status
+                        )}`}
+>>>>>>> Stashed changes
                       >
-                        Delete
-                      </button>
+                        {project.execution_status || project.status}
+                      </span>
                     </div>
                   </div>
 
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {!project.activation_code_id && (
+                      <button
+                        onClick={() => setShowActivationCodeModal(true)}
+                        className="px-4 sm:px-6 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 transition-colors text-sm sm:text-base"
+                      >
+                        Assign Activation Code
+                      </button>
+                    )}
+                    {/* Download button (only for completed projects) */}
+                    {project.execution_status === 'completed' && (
+                      <button
+                        onClick={handleDownloadProject}
+                        disabled={isDownloading}
+                        className={`px-4 sm:px-6 py-2 font-semibold rounded-lg transition-colors text-sm sm:text-base ${
+                          !isDownloading
+                            ? 'bg-blue-500 text-white hover:bg-blue-600'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        {isDownloading ? 'Downloading...' : '⬇ DOWNLOAD'}
+                      </button>
+                    )}
+                    {/* Restart button (only for failed projects) */}
+                    {project.execution_status === 'failed' && (() => {
+                      const { canRestart, reason } = canRestartProject();
+                      return (
+                        <button
+                          onClick={handleRestartProject}
+                          disabled={!canRestart || isRestarting}
+                          title={reason}
+                          className={`px-4 sm:px-6 py-2 font-semibold rounded-lg transition-colors text-sm sm:text-base ${
+                            canRestart && !isRestarting
+                              ? 'bg-orange-500 text-white hover:bg-orange-600'
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                        >
+                          {isRestarting ? 'Restarting...' : '🔄 RESTART'}
+                        </button>
+                      );
+                    })()}
+                    {/* Run button (for pending/new projects, not completed) */}
+                    {project.execution_status !== 'failed' && 
+                     project.execution_status !== 'running' && 
+                     project.execution_status !== 'completed' && (() => {
+                      const { canRun, reason } = canRunProject();
+                      return (
+                        <button
+                          onClick={handleRunProject}
+                          disabled={!canRun || isRunning}
+                          title={reason}
+                          className={`px-4 sm:px-6 py-2 font-semibold rounded-lg transition-colors text-sm sm:text-base ${
+                            canRun && !isRunning
+                              ? 'bg-green-500 text-white hover:bg-green-600'
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                        >
+                          {isRunning ? 'Running...' : '▶ RUN PROJECT'}
+                        </button>
+                      );
+                    })()}
+                    {/* Edit button (hidden for completed projects) */}
+                    {project.execution_status !== 'completed' && (
+                      <Link
+                        href={`/projects/edit/${project.id}`}
+                        className="px-4 sm:px-6 py-2 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 transition-colors text-sm sm:text-base"
+                      >
+                        Edit
+                      </Link>
+                    )}
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="px-4 sm:px-6 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition-colors text-sm sm:text-base"
+                    >
+                      Delete
+                    </button>
+                  </div>
+
+                  {/* Client Name */}
+                  {project.client_name && (
+                    <div className="mb-4">
+                      <p className="text-gray-600 text-base sm:text-lg">Client: {project.client_name}</p>
+                    </div>
+                  )}
+
                   {/* Project Metadata */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 text-sm text-gray-600">
                     <div>
                       <span className="font-semibold">Created:</span>{' '}
                       {new Date(project.created_at).toLocaleString()}

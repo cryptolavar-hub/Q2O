@@ -287,34 +287,47 @@ async def get_project_tasks(
 async def calculate_project_progress(
     db: AsyncSession,
     project_id: str,
+    execution_started_at: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """
     Calculate real project progress based on completed tasks.
     
+    CRITICAL FIX: Filters tasks by execution_started_at to only count tasks from current run.
+    This prevents showing stale data from previous runs when a project is restarted.
+    
     Args:
         db: Database session
         project_id: Project ID
+        execution_started_at: Optional datetime - only count tasks created after this time
     
     Returns:
         Dictionary with:
-        - total_tasks: Total number of tasks
-        - completed_tasks: Number of completed tasks
-        - failed_tasks: Number of failed tasks
+        - total_tasks: Total number of tasks (from current run only)
+        - completed_tasks: Number of completed tasks (from current run only)
+        - failed_tasks: Number of failed tasks (from current run only)
         - in_progress_tasks: Number of tasks in progress (started/running)
         - pending_tasks: Number of pending tasks
         - completion_percentage: Real completion percentage (0.0 to 100.0)
     """
     from sqlalchemy import case
     
-    result = await db.execute(
-        select(
-            func.count(AgentTask.id).label('total'),
-            func.sum(case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
-            func.sum(case((AgentTask.status == 'failed', 1), else_=0)).label('failed'),
-            func.sum(case((AgentTask.status.in_(['started', 'running']), 1), else_=0)).label('in_progress'),
-            func.sum(case((AgentTask.status == 'pending', 1), else_=0)).label('pending'),
-        ).where(AgentTask.project_id == project_id)
-    )
+    # Build query with optional filter for execution_started_at
+    query = select(
+        func.count(AgentTask.id).label('total'),
+        func.sum(case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
+        func.sum(case((AgentTask.status == 'failed', 1), else_=0)).label('failed'),
+        func.sum(case((AgentTask.status.in_(['started', 'running']), 1), else_=0)).label('in_progress'),
+        func.sum(case((AgentTask.status == 'pending', 1), else_=0)).label('pending'),
+    ).where(AgentTask.project_id == project_id)
+    
+    # CRITICAL FIX: Only count tasks from current run (created after execution_started_at)
+    if execution_started_at:
+        # Ensure timezone-aware datetime
+        if execution_started_at.tzinfo is None:
+            execution_started_at = execution_started_at.replace(tzinfo=timezone.utc)
+        query = query.where(AgentTask.created_at >= execution_started_at)
+    
+    result = await db.execute(query)
     
     stats = result.first()
     

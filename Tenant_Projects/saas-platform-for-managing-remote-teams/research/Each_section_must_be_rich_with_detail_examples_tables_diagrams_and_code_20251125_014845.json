@@ -1,0 +1,18 @@
+{
+  "query": "Each section must be rich with detail, examples, tables, diagrams, and code.",
+  "timestamp": "2025-11-25T01:48:45.074623",
+  "depth": "adaptive",
+  "search_results": [],
+  "key_findings": [
+    "Once you provide the topic, I will generate the comprehensive research in the specified JSON format, adhering to all your requirements, including:"
+  ],
+  "documentation_urls": [],
+  "code_examples": [],
+  "best_practices": [],
+  "confidence_score": 5,
+  "sources_consulted": [
+    "llm_research_text",
+    "llm_research"
+  ],
+  "cached": false
+}

@@ -37,7 +37,12 @@ def _get_db_session():
         if str(addon_portal_path) not in sys.path:
             sys.path.insert(0, str(addon_portal_path))
         
-        from api.core.db import AsyncSessionLocal
+        # Try importing from addon_portal.api.core.db first (when running from subprocess)
+        try:
+            from addon_portal.api.core.db import AsyncSessionLocal
+        except ImportError:
+            # Fallback: try api.core.db (when addon_portal is in path)
+            from api.core.db import AsyncSessionLocal
         
         # Create a new session each time (don't reuse global singleton)
         # This ensures we have a fresh session for each operation
@@ -278,41 +283,47 @@ async def update_task_llm_usage_in_db(
 
 
 def run_async(coro):
-    """Run async function synchronously (for use in sync agent code).
+    """Run async function synchronously with proper event loop handling.
     
-    Creates a new event loop and database session factory to avoid
-    event loop binding issues with database connection pools.
+    Handles both cases:
+    1. When called from sync code (no event loop) - creates new loop
+    2. When called from async code (existing loop) - uses thread-safe approach
+    
+    This ensures database connection pools are bound to the correct event loop
+    and prevents "bound to different event loop" errors.
     """
     import platform
     import selectors
+    import concurrent.futures
+    import threading
     
     # Try to use existing event loop first
     try:
         loop = asyncio.get_running_loop()
-        # If we have a running loop, we can't use run_until_complete
-        # Instead, schedule the coroutine and wait for it
-        import concurrent.futures
-        import threading
-        
+        # If we have a running loop, use thread-safe approach
+        # This prevents "bound to different event loop" errors
         future = concurrent.futures.Future()
         
-        def run_in_loop():
+        def run_in_thread():
+            """Run coroutine in thread with proper event loop handling."""
             try:
-                result = asyncio.run_coroutine_threadsafe(coro, loop).result()
+                # Use run_coroutine_threadsafe to schedule coroutine in existing loop
+                result = asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=30)
                 future.set_result(result)
             except Exception as e:
                 future.set_exception(e)
         
-        thread = threading.Thread(target=run_in_loop)
+        thread = threading.Thread(target=run_in_thread, daemon=True)
         thread.start()
-        thread.join(timeout=30)  # 30 second timeout
+        thread.join(timeout=35)  # Slightly longer than coro timeout
         
         if thread.is_alive():
-            raise TimeoutError("Task tracking operation timed out")
+            raise TimeoutError("Task tracking operation timed out after 35 seconds")
         
         return future.result()
+        
     except RuntimeError:
-        # No running loop, create a new one
+        # No running loop - create a new one
         # Windows compatibility: Use SelectorEventLoop for psycopg async
         if platform.system() == "Windows":
             loop = asyncio.SelectorEventLoop(selectors.SelectSelector())
@@ -322,14 +333,20 @@ def run_async(coro):
         asyncio.set_event_loop(loop)
         
         try:
-            # Create a new database session factory for this event loop
-            # This ensures the connection pool is bound to the correct loop
-            global _task_tracking_session_factory
-            if '_task_tracking_session_factory' in globals():
-                # Reset the session factory to create new connections for this loop
-                _task_tracking_session_factory = None
+            # IMPORTANT: Create new database session factory for this loop
+            # This ensures connection pool is bound to the correct loop
+            global _task_tracking_engine, _task_tracking_session_factory
+            
+            # Reset session factory to create new connections for this loop
+            # This prevents "bound to different event loop" errors
+            _task_tracking_session_factory = None
             
             return loop.run_until_complete(coro)
         finally:
             loop.close()
+            # Clean up event loop reference to prevent issues
+            try:
+                asyncio.set_event_loop(None)
+            except Exception:
+                pass
 

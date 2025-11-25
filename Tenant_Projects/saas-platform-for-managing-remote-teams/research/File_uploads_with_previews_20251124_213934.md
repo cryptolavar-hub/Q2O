@@ -1,0 +1,40 @@
+# Research Report: * File uploads with previews.
+**Date**: 2025-11-24T21:39:34.835349
+**Task**: task_0127_researcher - Research: File Upload Best Practices
+**Depth**: deep
+**Confidence Score**: 45/100
+**Cached**: No
+
+---
+
+## Summary
+
+### Key Findings
+
+- "https://developer.mozilla.org/en-US/docs/Web/API/FileReader",
+- "https://developer.mozilla.org/en-US/docs/Web/API/FormData",
+- "https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API",
+- "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file",
+- "https://docs.aws.amazon.com/AmazonS3/latest/userguide/PresignedUrlUploadObject.html",
+- "https://cloud.google.com/storage/docs/access-control/signed-urls",
+- "https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blob-sas-create-javascript"
+- "description": "Client-side file input, preview generation, and upload using fetch API.",
+- "code": "<!-- HTML for file input and preview area -->\n<input type=\"file\" id=\"fileInput\" accept=\"image/*\" multiple>\n<div id=\"previewArea\"></div>\n<button id=\"uploadButton\">Upload Files</button>\n\n<script>\n  const fileInput = document.getElementById('fileInput');\n  const previewArea = document.getElementById('previewArea');\n  const uploadButton = document.getElementById('uploadButton');\n  let selectedFiles = [];\n\n  fileInput.addEventListener('change', (event) => {\n    previewArea.innerHTML = ''; // Clear previous previews\n    selectedFiles = Array.from(event.target.files);\n\n    selectedFiles.forEach(file => {\n      if (file.type.startsWith('image/')) {\n        const reader = new FileReader();\n        reader.onload = (e) => {\n          const imgContainer = document.createElement('div');\n          imgContainer.className = 'preview-item';\n          const img = document.createElement('img');\n          img.src = e.target.result;\n          img.alt = file.name;\n          img.style.maxWidth = '150px';\n          img.style.maxHeight = '150px';\n          img.style.margin = '10px';\n          imgContainer.appendChild(img);\n          const fileNameSpan = document.createElement('span');\n          fileNameSpan.textContent = file.name;\n          imgContainer.appendChild(fileNameSpan);\n          previewArea.appendChild(imgContainer);\n        };\n        reader.readAsDataURL(file);\n      } else {\n        const fileInfo = document.createElement('p');\n        fileInfo.textContent = `File: ${file.name} (${file.type})`;\n        previewArea.appendChild(fileInfo);\n      }\n    });\n  });\n\n  uploadButton.addEventListener('click', async () => {\n    if (selectedFiles.length === 0) {\n      alert('Please select files to upload.');\n      return;\n    }\n\n    const formData = new FormData();\n    selectedFiles.forEach(file => {\n      formData.append('files', file); // 'files' is the field name on the server\n    });\n\n    try {\n      const response = await fetch('/upload', {\n        method: 'POST',\n        body: formData\n      });\n\n      if (response.ok) {\n        const result = await response.json();\n        alert('Upload successful! ' + JSON.stringify(result));\n        fileInput.value = ''; // Clear input\n        previewArea.innerHTML = ''; // Clear previews\n        selectedFiles = [];\n      } else {\n        const error = await response.json();\n        alert('Upload failed: ' + error.message);\n      }\n    } catch (error) {\n      console.error('Network error:', error);\n      alert('An error occurred during upload.');\n    }\n  });\n</script>"
+- "description": "Backend (Flask) example for handling multipart file uploads.",
+
+### Official Documentation
+
+- https://developer.mozilla.org/en-US/docs/Web/API/FormData",
+- https://docs.aws.amazon.com/AmazonS3/latest/userguide/PresignedUrlUploadObject.html",
+- https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API",
+- https://developer.mozilla.org/en-US/docs/Web/API/FileReader",
+- https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file",
+- https://cloud.google.com/storage/docs/access-control/signed-urls",
+- https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blob-sas-create-javascript"
+
+### Search Results
+
+---
+
+*Research conducted by ResearcherAgent (researcher_main)*
+*Sources consulted: llm_research_text, llm_research*

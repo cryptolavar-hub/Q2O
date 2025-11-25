@@ -1,0 +1,99 @@
+{
+  "query": "* Email notifications.",
+  "timestamp": "2025-11-24T21:41:46.523608",
+  "depth": "quick",
+  "search_results": [],
+  "key_findings": [
+    "Leverage dedicated Email Service Providers (ESPs) like SendGrid, AWS SES, or Mailgun for high deliverability, scalability, and compliance, rather than building custom SMTP solutions.",
+    "Implement an event-driven architecture where changes in sports data (e.g., game start, score update, final result) trigger notification events, which are then processed for email dispatch.",
+    "Prioritize user subscription management and preference centers to allow users to opt-in/out of specific notification types (e.g., specific teams, game events), enhancing engagement and reducing spam complaints.",
+    "Utilize email templating engines (either provided by the ESP or custom) to ensure consistent branding, dynamic content personalization, and efficient updates to email layouts.",
+    "Implement robust error handling, retry mechanisms, and bounce/complaint processing to maintain a good sender reputation and ensure reliable delivery.",
+    "Securely manage API keys and credentials for both Email APIs and Sports Data APIs, using environment variables or dedicated secret management services.",
+    "Design for asynchronous email sending to avoid blocking application processes and to handle high volumes efficiently, typically by using message queues.",
+    "Comply with anti-spam regulations (e.g., CAN-SPAM, GDPR) by including clear unsubscribe links, physical addresses, and respecting user preferences."
+  ],
+  "documentation_urls": [
+    "https://docs.sendgrid.com/api-reference/",
+    "https://docs.aws.amazon.com/ses/latest/dg/Welcome.html",
+    "https://documentation.mailgun.com/en/latest/api_reference.html",
+    "https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ses.html"
+  ],
+  "code_examples": [
+    {
+      "language": "python",
+      "description": "Sending an email using SendGrid API",
+      "code": "import os\nfrom sendgrid import SendGridAPIClient\nfrom sendgrid.helpers.mail import Mail\n\ndef send_sendgrid_email(recipient_email, subject, html_content):\n    try:\n        message = Mail(\n            from_email='noreply@yourdomain.com',\n            to_emails=recipient_email,\n            subject=subject,\n            html_content=html_content\n        )\n        sendgrid_client = SendGridAPIClient(os.environ.get('SENDGRID_API_KEY'))\n        response = sendgrid_client.send(message)\n        print(f\"SendGrid Email sent to {recipient_email}. Status Code: {response.status_code}\")\n        return True\n    except Exception as e:\n        print(f\"Error sending SendGrid email: {e}\")\n        return False\n\n# Example Usage:\n# if __name__ == '__main__':\n#     # Ensure SENDGRID_API_KEY is set in your environment variables\n#     # os.environ['SENDGRID_API_KEY'] = 'YOUR_SENDGRID_API_KEY'\n#     send_sendgrid_email(\n#         'test@example.com',\n#         'Your Team Scored!',\n#         '<h1>Goal Alert!</h1><p>Your favorite team just scored! Keep watching!</p>'\n#     )"
+    },
+    {
+      "language": "python",
+      "description": "Sending an email using AWS SES (Boto3)",
+      "code": "import boto3\nimport os\n\ndef send_ses_email(recipient_email, subject, html_content):\n    try:\n        ses_client = boto3.client(\n            'ses',\n            region_name=os.environ.get('AWS_REGION', 'us-east-1'),\n            aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),\n            aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY')\n        )\n        response = ses_client.send_email(\n            Source='noreply@yourdomain.com',\n            Destination={'ToAddresses': [recipient_email]},\n            Message={\n                'Subject': {'Data': subject},\n                'Body': {'Html': {'Data': html_content}}\n            }\n        )\n        print(f\"AWS SES Email sent to {recipient_email}. Message ID: {response['MessageId']}\")\n        return True\n    except Exception as e:\n        print(f\"Error sending AWS SES email: {e}\")\n        return False\n\n# Example Usage:\n# if __name__ == '__main__':\n#     # Ensure AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY are set\n#     # os.environ['AWS_REGION'] = 'us-east-1'\n#     # os.environ['AWS_ACCESS_KEY_ID'] = 'YOUR_AWS_ACCESS_KEY_ID'\n#     # os.environ['AWS_SECRET_ACCESS_KEY'] = 'YOUR_AWS_SECRET_ACCESS_KEY'\n#     send_ses_email(\n#         'test@example.com',\n#         'Game Update: Full Time!',\n#         '<h1>Match Result!</h1><p>The game has ended. Check the final score!</p>'\n#     )"
+    }
+  ],
+  "best_practices": [
+    "**Domain Verification:** Verify your sending domain with the ESP (e.g., via DNS records like SPF, DKIM, DMARC) to improve deliverability and sender reputation.",
+    "**Transactional vs. Marketing:** Clearly distinguish between transactional emails (e.g., score alerts, password resets) and marketing emails (e.g., newsletters) as they have different sending priorities and compliance requirements.",
+    "**Personalization:** Dynamically insert relevant sports data (team names, scores, player stats) into email templates to make notifications highly relevant and engaging.",
+    "**A/B Testing:** Test different subject lines, content, and call-to-actions to optimize open rates and engagement.",
+    "**Rate Limiting:** Be aware of and respect the rate limits of both your chosen Email API and any Sports Data APIs to avoid service interruptions.",
+    "**Unsubscribe Mechanism:** Include a clear, one-click unsubscribe link in every non-transactional email to comply with regulations and maintain a good sender reputation.",
+    "**Error Handling & Retries:** Implement robust error handling for API calls, with exponential backoff for retries, especially for transient network issues.",
+    "**Monitoring & Analytics:** Utilize ESP dashboards to monitor email delivery rates, bounces, complaints, opens, and clicks to identify issues and improve performance.",
+    "**Content Optimization:** Design responsive email templates that render well across various email clients and devices (desktop, mobile)."
+  ],
+  "confidence_score": 60,
+  "sources_consulted": [
+    "llm_research",
+    "llm_research"
+  ],
+  "common_pitfalls": [
+    "**Ignoring Sender Reputation:** Not handling bounces, complaints, or spam reports can severely damage your sender reputation, leading to emails being blocked or sent to spam folders.",
+    "**Hardcoding API Keys:** Storing API keys directly in code or committing them to version control is a major security risk. Use environment variables or secret management services.",
+    "**Lack of Unsubscribe:** Failing to provide an easy unsubscribe option is a legal violation in many regions and will lead to user frustration and spam reports.",
+    "**Sending Too Many Emails:** Over-notifying users can lead to fatigue, unsubscribes, or marking emails as spam. Implement frequency caps and smart notification logic.",
+    "**Poorly Formatted Emails:** Emails that don't render correctly on different devices or email clients provide a bad user experience. Test thoroughly.",
+    "**Blocking Main Thread:** Sending emails synchronously can block your application's main thread, leading to performance bottlenecks and poor user experience. Always send asynchronously.",
+    "**Not Validating Recipient Emails:** Sending to invalid email addresses increases bounce rates and can negatively impact sender reputation. Implement basic email validation.",
+    "**Ignoring Time Zones:** Sending time-sensitive sports updates without considering the user's local time zone can lead to irrelevant or untimely notifications."
+  ],
+  "implementation_patterns": [
+    "**Event-Driven Architecture with Webhooks:** The Sports Data Source (if supported) sends webhooks to your application upon relevant events (e.g., score change). Your application processes the webhook, determines recipients, and queues emails.",
+    "**Polling with Change Detection:** Periodically poll the Sports Data API for updates. Store the last known state and compare with new data. If changes meet notification criteria, trigger email sending.",
+    "**Message Queue for Asynchronous Sending:** Decouple the email generation/triggering logic from the actual sending. When an event occurs, push a message (containing recipient, template ID, data) to a queue (e.g., AWS SQS, RabbitMQ, Kafka). A separate worker consumes messages and sends emails.",
+    "**Batch Processing for Summaries:** For less time-sensitive notifications (e.g., daily game summaries, weekly team news), collect events over a period and send a single, consolidated email to users.",
+    "**Templating Engine Integration:** Use the ESP's built-in templating features (e.g., SendGrid Dynamic Templates, AWS SES Templates) or integrate a server-side templating engine (e.g., Jinja2 in Python) to generate dynamic email content."
+  ],
+  "integration_requirements": {
+    "authentication": "API Keys (e.g., SendGrid, Mailgun), AWS IAM Roles/Access Keys (for AWS SES), OAuth 2.0 (less common for direct email sending APIs, but possible for user authorization).",
+    "apis_required": [
+      "Email Service Provider API (e.g., SendGrid API, AWS SES API, Mailgun API)",
+      "Sports Data API (e.g., Sportradar, TheSportsDB, ESPN API, custom data feeds)"
+    ],
+    "data_formats": [
+      "JSON (predominant for modern RESTful APIs for both email and sports data)",
+      "XML (less common for newer APIs, but some legacy sports data sources might use it)"
+    ]
+  },
+  "performance_considerations": [
+    "**Asynchronous Sending:** Use message queues or background tasks to send emails asynchronously, preventing the main application from blocking.",
+    "**Batching API Calls:** Where possible, batch multiple email requests into a single API call to the ESP (if the API supports it) to reduce overhead.",
+    "**Efficient Data Retrieval:** Optimize queries to Sports Data APIs. Cache frequently accessed data to reduce API calls and processing time.",
+    "**Scalable Infrastructure:** Ensure your notification processing service can scale horizontally to handle peak loads, especially during major sporting events.",
+    "**Rate Limiting:** Implement client-side rate limiting for both Email APIs and Sports Data APIs to avoid hitting service limits and getting throttled.",
+    "**Template Pre-compilation:** Pre-compile email templates if using a server-side templating engine to reduce rendering time per email."
+  ],
+  "security_considerations": [
+    "**API Key Management:** Store API keys securely using environment variables, cloud secret management services (e.g., AWS Secrets Manager, Azure Key Vault), or a dedicated secrets vault. Never hardcode them.",
+    "**Input Validation & Sanitization:** Validate and sanitize all user-provided data (e.g., recipient email addresses, custom preferences) to prevent injection attacks or malformed requests.",
+    "**TLS/SSL for All Communications:** Ensure all API calls to Email APIs and Sports Data APIs are made over HTTPS/TLS to encrypt data in transit.",
+    "**Access Control:** Implement strict IAM policies or role-based access control (RBAC) to limit who can trigger email sending or access sensitive configuration.",
+    "**DMARC, SPF, DKIM:** Configure these DNS records for your sending domain to prevent email spoofing and phishing attempts, and to improve deliverability.",
+    "**Bounce & Complaint Monitoring:** Regularly monitor bounce and complaint rates. High rates can indicate malicious activity or a compromised account.",
+    "**Data Privacy (GDPR, CCPA):** Ensure compliance with relevant data privacy regulations regarding the collection, storage, and use of user email addresses and preferences.",
+    "**Audit Logging:** Log all email sending events, including recipient, subject, and status, for auditing and troubleshooting purposes, but avoid logging sensitive content."
+  ],
+  "llm_provider": "gemini",
+  "llm_model": "gemini-2.5-flash",
+  "cached": false
+}

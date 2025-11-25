@@ -983,22 +983,65 @@ Generate complete, production-ready implementation."""
         cache_stats = self.cache.get_stats() if self.cache else {}
         budget_status = self.cost_monitor.get_budget_status()
         
-        # Group by provider
+        # Group by provider and track actual model names
         by_provider = {}
         for usage in self.usage_log:
             if usage.provider not in by_provider:
                 by_provider[usage.provider] = {
                     "calls": 0,
                     "total_cost": 0.0,
-                    "total_tokens": 0
+                    "total_tokens": 0,
+                    "models": set()  # Track unique models used
                 }
             by_provider[usage.provider]["calls"] += 1
             by_provider[usage.provider]["total_cost"] += usage.total_cost
             by_provider[usage.provider]["total_tokens"] += usage.total_tokens
+            if usage.model:
+                by_provider[usage.provider]["models"].add(usage.model)
         
-        # Round costs
+        # Round costs and format model names
         for provider in by_provider:
             by_provider[provider]["total_cost"] = round(by_provider[provider]["total_cost"], 2)
+            # Convert set to list and get primary model (most recent or first)
+            models_list = list(by_provider[provider]["models"])
+            by_provider[provider]["model"] = models_list[0] if models_list else None
+            by_provider[provider]["models"] = models_list  # Keep list for reference
+            # Calculate avg cost
+            calls = by_provider[provider]["calls"]
+            by_provider[provider]["avg_cost"] = round(by_provider[provider]["total_cost"] / calls, 4) if calls > 0 else 0.0
+        
+        # Get actual configured model names (for providers with no usage yet)
+        if "gemini" not in by_provider and self.gemini_model_name:
+            by_provider["gemini"] = {
+                "calls": 0,
+                "total_cost": 0.0,
+                "total_tokens": 0,
+                "model": self.gemini_model_name,
+                "models": [self.gemini_model_name],
+                "avg_cost": 0.0
+            }
+        
+        if "openai" not in by_provider:
+            openai_model = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+            by_provider["openai"] = {
+                "calls": 0,
+                "total_cost": 0.0,
+                "total_tokens": 0,
+                "model": openai_model,
+                "models": [openai_model],
+                "avg_cost": 0.0
+            }
+        
+        if "anthropic" not in by_provider:
+            anthropic_model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+            by_provider["anthropic"] = {
+                "calls": 0,
+                "total_cost": 0.0,
+                "total_tokens": 0,
+                "model": anthropic_model,
+                "models": [anthropic_model],
+                "avg_cost": 0.0
+            }
         
         return {
             "total_calls": self.total_calls,

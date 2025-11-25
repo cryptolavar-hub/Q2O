@@ -1,0 +1,36 @@
+{
+  "query": "Project & Task Management: Projects, milestones, folders. Tasks: assignments, mentions, comments. Subtasks, checklists, priorities, deadlines. Calendar view, Kanban view, Timeline view. Gantt charts and workload overview.",
+  "timestamp": "2025-11-25T01:43:08.050747",
+  "depth": "adaptive",
+  "search_results": [],
+  "key_findings": [
+    "\"**Hierarchical Data Modeling is Crucial:** The core of a robust project and task management system lies in a well-designed data model that supports projects, milestones, folders, tasks, and subtasks with clear parent-child relationships and flexible nesting.\",",
+    "\"**API-First Approach for Flexibility:** Design your backend as a comprehensive API (e.g., using Django REST Framework) to support various frontend clients (web, mobile) and enable future integrations with other tools. This decouples frontend presentation from backend logic.\",",
+    "\"**Real-time Capabilities are Essential for Collaboration:** Features like task assignments, mentions, and comments demand real-time or near real-time updates. Implement websockets (e.g., Django Channels) for instant notifications and collaborative editing experiences.\",",
+    "\"**Diverse Views Require Flexible Data Structures:** Supporting Calendar, Kanban, Timeline, and Gantt views necessitates that your data model and API endpoints can efficiently query and return data structured appropriately for each visualization type (e.g., date ranges for Calendar, status for Kanban, dependencies for Gantt).\",",
+    "\"**Performance Optimization for Large Datasets:** As projects and tasks scale, database indexing, efficient querying, caching, and asynchronous processing (e.g., for notifications, report generation) become critical to maintain responsiveness.\",",
+    "\"**Robust Authentication and Authorization (RBAC):** Implement a granular Role-Based Access Control (RBAC) system to manage who can view, create, edit, or delete projects, tasks, and comments, considering roles like 'Admin', 'Project Manager', 'Team Member', 'Guest'.\",",
+    "\"**User Experience Drives Adoption:** While backend-focused, remember that the data structures and API design directly impact the frontend's ability to deliver an intuitive and efficient user experience for managing complex workflows.\",",
+    "\"**Extensibility for Future Features:** Design with extensibility in mind. Consider a plugin architecture or a modular design that allows for easy addition of new features like custom fields, integrations, or reporting modules without major refactoring.\"",
+    "\"https://docs.djangoproject.com/en/stable/\",",
+    "\"https://www.django-rest-framework.org/\","
+  ],
+  "documentation_urls": [
+    "https://www.django-rest-framework.org/\",",
+    "https://channels.readthedocs.io/en/stable/\",",
+    "https://docs.djangoproject.com/en/stable/\",",
+    "https://docs.celeryq.dev/en/stable/\",",
+    "https://redis.io/docs/\",",
+    "https://www.postgresql.org/docs/\",",
+    "https://docs.python.org/3/library/datetime.html\",",
+    "https://dateutil.readthedocs.io/en/stable/\""
+  ],
+  "code_examples": [],
+  "best_practices": [],
+  "confidence_score": 45,
+  "sources_consulted": [
+    "llm_research_text",
+    "llm_research"
+  ],
+  "cached": false
+}

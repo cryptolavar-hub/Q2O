@@ -99,7 +99,7 @@ def verify_environment():
     # Check if .env file exists
     env_path = Path(".env")
     if not env_path.exists():
-        logger.warning("⚠️  .env file not found! Create it from env.example")
+        logger.warning("[WARNING] .env file not found! Create it from env.example")
         logger.info("Run: cp env.example .env")
         return False
     
@@ -109,15 +109,15 @@ def verify_environment():
     
     if google_key and google_cx:
         masked_key = google_key[:10] + "..." if len(google_key) > 10 else "***"
-        logger.info(f"✓ Google Search API configured: {masked_key}")
+        logger.info(f"[OK] Google Search API configured: {masked_key}")
     else:
-        logger.warning("⚠️  Google Search API not configured - will use DuckDuckGo (may have rate limits)")
+        logger.warning("[WARNING] Google Search API not configured - will use DuckDuckGo (may have rate limits)")
         logger.info("To configure: Add GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_CX to .env")
     
     # Check Bing API
     bing_key = os.getenv("BING_SEARCH_API_KEY")
     if bing_key:
-        logger.info(f"✓ Bing Search API configured")
+        logger.info(f"[OK] Bing Search API configured")
     
     return True
 
@@ -141,8 +141,20 @@ class AgentSystem:
             project_id: Project ID for task tracking (from tenant portal)
             tenant_id: Tenant ID for task tracking (from tenant portal)
         """
-        self.workspace_path = Path(workspace_path)
-        self.workspace_path.mkdir(parents=True, exist_ok=True)
+        # CRITICAL: Validate workspace_path with hard security guarantees
+        from utils.safe_file_writer import validate_workspace_path, WorkspaceSecurityError
+        
+        try:
+            validated_workspace = validate_workspace_path(workspace_path, project_id)
+            self.workspace_path = validated_workspace
+            self.workspace_path.mkdir(parents=True, exist_ok=True)
+        except WorkspaceSecurityError as e:
+            logger.error(f"CRITICAL SECURITY ERROR: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to validate workspace_path '{workspace_path}': {e}")
+            raise
+        
         self.project_id = project_id
         self.tenant_id = tenant_id
         
@@ -169,49 +181,50 @@ class AgentSystem:
         
         # Initialize specialized agents with project layout and load balancer
         # Multiple instances per type for redundancy and uptime
-        # Pass project_id and tenant_id to agents for task tracking
+        # Pass project_id, tenant_id, and orchestrator to agents for task tracking and dependency access
         agent_kwargs = {
             "workspace_path": str(self.workspace_path),
             "project_layout": self.project_layout,
             "project_id": self.project_id,
-            "tenant_id": self.tenant_id
+            "tenant_id": self.tenant_id,
+            "orchestrator": self.orchestrator  # Pass orchestrator reference for dependency access
         }
         
         self.coder_agents = [
             CoderAgent(**agent_kwargs),
-            CoderAgent(agent_id="coder_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
+            CoderAgent(agent_id="coder_backup", **agent_kwargs)  # CRITICAL: Include workspace_path for backup agents
         ]
         self.testing_agents = [
             TestingAgent(**agent_kwargs),
-            TestingAgent(agent_id="testing_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
+            TestingAgent(agent_id="testing_backup", **agent_kwargs)  # CRITICAL: Include workspace_path for backup agents
         ]
         self.qa_agents = [
             QAAgent(**{k: v for k, v in agent_kwargs.items() if k != "project_layout"}),
-            QAAgent(agent_id="qa_backup", **{k: v for k, v in agent_kwargs.items() if k not in ["workspace_path", "project_layout"]})
+            QAAgent(agent_id="qa_backup", **{k: v for k, v in agent_kwargs.items() if k != "project_layout"})  # CRITICAL: Include workspace_path
         ]
         self.infrastructure_agents = [
             InfrastructureAgent(**agent_kwargs),
-            InfrastructureAgent(agent_id="infrastructure_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
+            InfrastructureAgent(agent_id="infrastructure_backup", **agent_kwargs)  # CRITICAL: Include workspace_path for backup agents
         ]
         self.integration_agents = [
             IntegrationAgent(**agent_kwargs),
-            IntegrationAgent(agent_id="integration_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
+            IntegrationAgent(agent_id="integration_backup", **agent_kwargs)  # CRITICAL: Include workspace_path for backup agents
         ]
         self.frontend_agents = [
             FrontendAgent(**agent_kwargs),
-            FrontendAgent(agent_id="frontend_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
+            FrontendAgent(agent_id="frontend_backup", **agent_kwargs)  # CRITICAL: Include workspace_path for backup agents
         ]
         self.workflow_agents = [
             WorkflowAgent(**agent_kwargs),
-            WorkflowAgent(agent_id="workflow_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
+            WorkflowAgent(agent_id="workflow_backup", **agent_kwargs)  # CRITICAL: Include workspace_path for backup agents
         ]
         self.security_agents = [
             SecurityAgent(**{k: v for k, v in agent_kwargs.items() if k != "project_layout"}),
-            SecurityAgent(agent_id="security_backup", **{k: v for k, v in agent_kwargs.items() if k not in ["workspace_path", "project_layout"]})
+            SecurityAgent(agent_id="security_backup", **{k: v for k, v in agent_kwargs.items() if k != "project_layout"})  # CRITICAL: Include workspace_path
         ]
         self.researcher_agents = [
             ResearcherAgent(**agent_kwargs),
-            ResearcherAgent(agent_id="researcher_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
+            ResearcherAgent(agent_id="researcher_backup", **agent_kwargs)  # CRITICAL: Include workspace_path for backup agents
         ]
         
         # Node.js agent (if available)
@@ -219,7 +232,7 @@ class AgentSystem:
         if HAS_NODE_AGENT:
             self.node_agents = [
                 NodeAgent(**agent_kwargs),
-                NodeAgent(agent_id="node_backup", **{k: v for k, v in agent_kwargs.items() if k != "workspace_path"})
+                NodeAgent(agent_id="node_backup", **agent_kwargs)  # CRITICAL: Include workspace_path for backup agents
             ]
         
         # Register all agents with load balancer

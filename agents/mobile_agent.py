@@ -44,8 +44,10 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
 
     def __init__(self, agent_id: str = "mobile_main", workspace_path: str = ".",
                  project_layout: Optional[ProjectLayout] = None,
-                 project_id: Optional[str] = None):
-        super().__init__(agent_id, AgentType.MOBILE, project_layout)
+                 project_id: Optional[str] = None,
+                 tenant_id: Optional[int] = None,
+                 orchestrator: Optional[Any] = None):
+        super().__init__(agent_id, AgentType.MOBILE, project_layout, project_id=project_id, tenant_id=tenant_id, orchestrator=orchestrator)
         self.workspace_path = workspace_path
         self.project_id = project_id
         self.generated_files: List[str] = []
@@ -613,17 +615,13 @@ const styles = StyleSheet.create({{
         return files
     
     def _write_file(self, relative_path: str, content: str) -> str:
-        """Write a file and return its path."""
-        full_path = os.path.join(self.workspace_path, relative_path)
-        
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        
-        # Write file
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        
-        self.logger.info(f"Created file: {relative_path}")
-        self.generated_files.append(relative_path)
-        
-        return relative_path
+        """Write a file and return its path (uses safe file writer for HARD GUARANTEE)."""
+        try:
+            # Use safe file writer (HARD GUARANTEE - prevents corruption of platform code)
+            written_path = self.safe_write_file(relative_path, content)
+            self.logger.info(f"Created file: {relative_path}")
+            self.generated_files.append(relative_path)
+            return relative_path
+        except Exception as e:
+            self.logger.error(f"[ERROR] Failed to write file {relative_path}: {e}")
+            raise

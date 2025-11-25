@@ -1,0 +1,89 @@
+{
+  "query": "* UI components:",
+  "timestamp": "2025-11-24T21:45:13.002925",
+  "depth": "quick",
+  "search_results": [],
+  "key_findings": [
+    "UI components are self-contained, reusable building blocks that encapsulate structure (HTML), style (CSS), and behavior (JavaScript), promoting modularity and maintainability in user interfaces.",
+    "Adopting a component-based architecture significantly improves development speed, consistency across the application, and simplifies testing by breaking down complex UIs into manageable parts.",
+    "Encapsulation is crucial for UI components, preventing style conflicts and behavioral side effects. Technologies like Shadow DOM (Web Components) or CSS Modules/Styled Components (frameworks) facilitate this.",
+    "Accessibility (A11y) must be a core consideration from design to implementation, ensuring components are usable by everyone, including those with disabilities, through semantic HTML, ARIA attributes, and keyboard navigation.",
+    "A clear API (properties/props for input, events for output, slots/children for content distribution) is essential for component reusability and predictable integration within different contexts.",
+    "Performance optimization, such as lazy loading, efficient rendering, and minimizing re-renders, is vital for a smooth user experience, especially in complex applications with many components.",
+    "Security considerations, primarily preventing Cross-Site Scripting (XSS) when rendering dynamic or user-generated content, are paramount for any component that displays data.",
+    "Design systems leverage UI components to establish a single source of truth for design and development, ensuring brand consistency and accelerating product delivery."
+  ],
+  "documentation_urls": [
+    "https://developer.mozilla.org/en-US/docs/Web/Web_Components",
+    "https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_custom_elements",
+    "https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_shadow_DOM",
+    "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA",
+    "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/template"
+  ],
+  "code_examples": [
+    {
+      "language": "javascript",
+      "description": "Basic Web Component (Custom Element) with Shadow DOM and properties",
+      "code": "class MyButton extends HTMLElement {\n  static get observedAttributes() { return ['label', 'variant']; }\n\n  constructor() {\n    super();\n    this.attachShadow({ mode: 'open' }); // Encapsulate styles and DOM\n    this.render();\n  }\n\n  attributeChangedCallback(name, oldValue, newValue) {\n    if (oldValue !== newValue) {\n      this.render(); // Re-render when attributes change\n    }\n  }\n\n  render() {\n    const label = this.getAttribute('label') || 'Click Me';\n    const variant = this.getAttribute('variant') || 'primary';\n\n    this.shadowRoot.innerHTML = `\n      <style>\n        button {\n          padding: 10px 20px;\n          border: none;\n          border-radius: 4px;\n          cursor: pointer;\n          font-size: 16px;\n        }\n        .primary {\n          background-color: #007bff;\n          color: white;\n        }\n        .secondary {\n          background-color: #6c757d;\n          color: white;\n        }\n        button:hover {\n          opacity: 0.9;\n        }\n      </style>\n      <button class=\"${variant}\">${label}</button>\n    `;\n\n    this.shadowRoot.querySelector('button').onclick = () => {\n      this.dispatchEvent(new CustomEvent('buttonClick', {\n        detail: { label: label, variant: variant },\n        bubbles: true, // Allow event to bubble up the DOM tree\n        composed: true // Allow event to cross shadow DOM boundaries\n      }));\n    };\n  }\n}\n\ncustomElements.define('my-button', MyButton);\n\n// Usage in HTML:\n// <my-button label=\"Submit\" variant=\"primary\"></my-button>\n// <my-button label=\"Cancel\" variant=\"secondary\"></my-button>\n\n// Listening to events:\n// document.querySelector('my-button').addEventListener('buttonClick', (e) => {\n//   console.log('Button clicked:', e.detail);\n// });"
+    }
+  ],
+  "best_practices": [
+    "**Modularity and Reusability:** Design components to be small, focused, and independent, making them easy to reuse across different parts of an application or even in other projects.",
+    "**Clear API:** Define explicit properties (inputs), events (outputs), and slots/children (content projection) for each component to ensure predictable interaction and ease of use.",
+    "**Encapsulation:** Use Shadow DOM (Web Components), CSS Modules, or Styled Components to scope styles and prevent unintended side effects or conflicts with global styles.",
+    "**Accessibility First:** Build components with accessibility in mind from the start. Use semantic HTML, ARIA attributes, ensure keyboard navigability, and provide sufficient color contrast.",
+    "**Naming Conventions:** Adopt consistent and clear naming conventions for components, properties, events, and CSS classes to improve readability and maintainability.",
+    "**State Management:** Clearly define what state a component owns (internal) versus what it receives (props) or shares (global state management). Avoid unnecessary complexity in state.",
+    "**Testability:** Design components to be easily testable in isolation. Write unit, integration, and end-to-end tests to ensure reliability and prevent regressions.",
+    "**Documentation:** Provide clear documentation for each component, including its purpose, API, usage examples, and any specific accessibility considerations.",
+    "**Responsiveness:** Ensure components are responsive and adapt gracefully to different screen sizes and devices, often using flexible layouts (Flexbox, Grid) and media queries."
+  ],
+  "confidence_score": 60,
+  "sources_consulted": [
+    "llm_research",
+    "llm_research"
+  ],
+  "common_pitfalls": [
+    "**Lack of Accessibility:** Forgetting semantic HTML, ARIA roles, or keyboard navigation, leading to components unusable by a significant portion of users.",
+    "**Poor Encapsulation:** Allowing component styles or logic to leak into the global scope or be overly dependent on external styles, leading to conflicts and unpredictable behavior.",
+    "**Over-engineering/Under-engineering:** Creating components that are either too generic (requiring too many props/slots) or too specific (not reusable enough), striking the right balance is key.",
+    "**Prop Drilling:** Passing data through many layers of components that don't directly use it, making the component tree harder to understand and maintain. Consider context APIs or global state management.",
+    "**Inconsistent API:** Using different naming conventions or interaction patterns for similar functionalities across different components, increasing the learning curve for developers.",
+    "**Ignoring Performance:** Not considering the impact of frequent re-renders, large component bundles, or inefficient DOM manipulations, leading to slow UIs.",
+    "**Tight Coupling:** Components being overly dependent on specific parent components or global state, making them difficult to reuse or refactor independently.",
+    "**Lack of Documentation:** Without clear documentation, components become black boxes, hindering adoption and maintenance by other developers."
+  ],
+  "implementation_patterns": [
+    "**Atomic Design:** A methodology for creating design systems, breaking UI into Atoms (buttons, inputs), Molecules (search form), Organisms (header), Templates (page layout), and Pages (specific instances of templates).",
+    "**Component Composition:** Building complex components by combining simpler, smaller components. This promotes reusability and separation of concerns.",
+    "**Container/Presentational Components (Smart/Dumb Components):** Separating components into those responsible for data fetching and state management (containers/smart) and those purely for rendering UI based on props (presentational/dumb).",
+    "**Render Props/Slots/Children:** Patterns for injecting dynamic content or behavior into a component from its parent, offering greater flexibility without prop drilling.",
+    "**Higher-Order Components (HOCs) / Hooks (in React):** Patterns for reusing component logic across multiple components without duplicating code, often used for cross-cutting concerns like authentication or data fetching.",
+    "**State Management Patterns:** Local component state for simple interactions, shared parent state for related components, and global state management (e.g., Redux, Vuex, Context API) for application-wide data."
+  ],
+  "integration_requirements": {
+    "authentication": "UI components typically do not handle authentication directly but consume authentication status (e.g., `isLoggedIn` prop) or user data (e.g., `currentUser` object) passed down from higher-order components or global state. Components might trigger authentication flows via events.",
+    "apis_required": "Individual UI components generally do not directly call external APIs. Instead, data fetching is handled by container components, services, or global state management, which then pass the necessary data as props to presentational UI components. However, some complex components might encapsulate data fetching logic.",
+    "data_formats": "UI components primarily work with JavaScript objects and arrays. When data is received from APIs, it's typically in JSON format and then parsed into JavaScript objects before being passed to components as props. Components might also emit data in simple JavaScript types or objects via custom events."
+  },
+  "performance_considerations": [
+    "**Efficient Rendering:** Minimize unnecessary re-renders by using techniques like `shouldComponentUpdate` (React), `memo` (React), `PureComponent`, or `v-once` (Vue) to prevent components from updating if their props or state haven't changed.",
+    "**Lazy Loading Components:** Load components only when they are needed (e.g., when a route is accessed, or a modal is opened) using dynamic imports to reduce initial bundle size and improve load times.",
+    "**Virtualization/Windowing:** For long lists or tables, render only the visible items in the viewport, dynamically loading/unloading items as the user scrolls, significantly improving performance.",
+    "**CSS Optimization:** Use efficient CSS selectors, avoid complex nested selectors, and consider CSS-in-JS solutions or CSS Modules for tree-shaking and critical CSS loading.",
+    "**Image Optimization:** Use optimized image formats (WebP), responsive images (`srcset`), and lazy load images within components to reduce network requests and improve perceived performance.",
+    "**Debouncing/Throttling:** Apply debouncing or throttling to event handlers (e.g., input changes, scroll events) to limit the frequency of updates and expensive operations.",
+    "**Bundle Size Optimization:** Use tools for tree-shaking, minification, and code splitting to reduce the overall JavaScript bundle size, impacting download and parse times."
+  ],
+  "security_considerations": [
+    "**Input Sanitization and Escaping:** Always sanitize and escape any user-generated or dynamic content before rendering it within a component to prevent Cross-Site Scripting (XSS) attacks. Never use `innerHTML` directly with untrusted input.",
+    "**Content Security Policy (CSP):** Implement a robust CSP to mitigate XSS and other code injection attacks by restricting the sources from which content can be loaded (scripts, styles, images).",
+    "**Secure Data Handling:** If a component is responsible for fetching or submitting data, ensure that API calls use HTTPS, handle authentication tokens securely, and validate all input on the server-side.",
+    "**Avoid `eval()` and `new Function()`:** These functions can execute arbitrary code and should be avoided when dealing with dynamic or user-provided strings.",
+    "**Vulnerability Scanning:** Regularly scan your component libraries and dependencies for known vulnerabilities using tools like Snyk or npm audit.",
+    "**Least Privilege:** Components should only have access to the data and functionality they absolutely need to perform their task."
+  ],
+  "llm_provider": "gemini",
+  "llm_model": "gemini-2.5-flash",
+  "cached": false
+}

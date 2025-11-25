@@ -135,12 +135,22 @@ async def execute_project(
         stderr_file = open(stderr_log, 'a', encoding='utf-8')
         
         try:
+            # Ensure .env file is found - set working directory to project root
+            project_root = Path(__file__).resolve().parents[3]
+            env = os.environ.copy()
+            # Ensure PYTHONPATH includes project root for imports
+            pythonpath = env.get("PYTHONPATH", "")
+            if pythonpath:
+                env["PYTHONPATH"] = f"{project_root}{os.pathsep}{pythonpath}"
+            else:
+                env["PYTHONPATH"] = str(project_root)
+            
             process = subprocess.Popen(
                 cmd,
                 stdout=stdout_file,
                 stderr=stderr_file,
-                cwd=str(output_folder.parent),
-                env=os.environ.copy(),  # Pass environment variables (including DB connection)
+                cwd=str(project_root),  # Run from project root so .env is found
+                env=env,  # Pass environment variables (including DB connection)
             )
             
             # Don't close files - subprocess needs them open
@@ -243,17 +253,47 @@ async def _monitor_process_completion(
                             break
                     except ImportError:
                         # psutil not available, use alternative method
-                        # Check if process handle exists (Windows-specific)
-                        import ctypes
-                        kernel32 = ctypes.windll.kernel32
-                        handle = kernel32.OpenProcess(0x1000, False, process_id)  # PROCESS_QUERY_INFORMATION
-                        if handle:
-                            kernel32.CloseHandle(handle)
-                            await asyncio.sleep(check_interval)
-                            waited += check_interval
-                            continue
-                        else:
-                            # Process doesn't exist
+                        # On Windows, try to use subprocess.Popen.poll() approach
+                        # Since we don't have the process object, we'll use a simpler check
+                        try:
+                            # Try to open process handle to check if it exists
+                            import ctypes
+                            from ctypes import wintypes
+                            kernel32 = ctypes.windll.kernel32
+                            
+                            # Try to open process with PROCESS_QUERY_INFORMATION
+                            PROCESS_QUERY_INFORMATION = 0x0400
+                            handle = kernel32.OpenProcess(PROCESS_QUERY_INFORMATION, False, process_id)
+                            
+                            if handle:
+                                # Process exists - check if it's still running
+                                exit_code = wintypes.DWORD()
+                                if kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                                    if exit_code.value == 259:  # STILL_ACTIVE
+                                        # Process still running
+                                        kernel32.CloseHandle(handle)
+                                        await asyncio.sleep(check_interval)
+                                        waited += check_interval
+                                        continue
+                                    else:
+                                        # Process finished
+                                        return_code = exit_code.value
+                                        kernel32.CloseHandle(handle)
+                                        break
+                                else:
+                                    # Can't get exit code - assume still running
+                                    kernel32.CloseHandle(handle)
+                                    await asyncio.sleep(check_interval)
+                                    waited += check_interval
+                                    continue
+                            else:
+                                # Process doesn't exist (handle open failed)
+                                # This usually means process finished
+                                return_code = 0
+                                break
+                        except Exception as win_error:
+                            # Fallback: Assume process finished if we can't check
+                            LOGGER.warning(f"Could not check Windows process {process_id}: {win_error}")
                             return_code = 0
                             break
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
