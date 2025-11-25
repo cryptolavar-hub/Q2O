@@ -307,18 +307,6 @@ class BaseAgent(ABC):
             import threading
             
             event_manager = get_event_manager()
-<<<<<<< Updated upstream
-            asyncio.create_task(event_manager.emit_task_update(
-                task_id=task_id,
-                status="in_progress",
-                title=task.title,
-                agent_id=self.agent_id,
-                agent_type=self.agent_type.value,
-                started_at=task.started_at.isoformat() if task.started_at else None,
-                dependencies=task.dependencies,
-                progress=0
-            ))
-=======
             
             def emit_in_background():
                 """Emit events in background thread with its own event loop."""
@@ -353,8 +341,6 @@ class BaseAgent(ABC):
             # Daemon thread ensures it doesn't block process shutdown
             thread = threading.Thread(target=emit_in_background, daemon=True)
             thread.start()
-            
->>>>>>> Stashed changes
         except Exception:
             # Fail silently if dashboard not available
             pass
@@ -377,28 +363,6 @@ class BaseAgent(ABC):
             if task.started_at and task.completed_at:
                 duration = (task.completed_at - task.started_at).total_seconds()
             
-<<<<<<< Updated upstream
-            asyncio.create_task(event_manager.emit_task_update(
-                task_id=task_id,
-                status="completed",
-                title=task.title,
-                agent_id=self.agent_id,
-                agent_type=self.agent_type.value,
-                started_at=task.started_at.isoformat() if task.started_at else None,
-                completed_at=task.completed_at.isoformat() if task.completed_at else None,
-                duration=duration,
-                progress=100
-            ))
-            
-            # Emit agent activity
-            asyncio.create_task(event_manager.emit_agent_activity(
-                agent_id=self.agent_id,
-                agent_type=self.agent_type.value,
-                activity="task_completed",
-                task_id=task_id,
-                status="idle" if len(self.active_tasks) == 0 else "active"
-            ))
-=======
             def emit_in_background():
                 """Emit events in background thread with its own event loop."""
                 try:
@@ -443,8 +407,6 @@ class BaseAgent(ABC):
             # Daemon thread ensures it doesn't block process shutdown
             thread = threading.Thread(target=emit_in_background, daemon=True)
             thread.start()
-            
->>>>>>> Stashed changes
         except Exception:
             # Fail silently if dashboard not available
             pass
@@ -541,29 +503,6 @@ class BaseAgent(ABC):
             
             event_manager = get_event_manager()
 <<<<<<< Updated upstream
-            asyncio.create_task(event_manager.emit_task_update(
-                task_id=task_id,
-                status="failed",
-                title=task.title,
-                agent_id=self.agent_id,
-                agent_type=self.agent_type.value,
-                started_at=task.started_at.isoformat() if task.started_at else None,
-                completed_at=task.completed_at.isoformat() if task.completed_at else None,
-                error=error,
-                progress=0
-            ))
-            
-            # Emit agent activity
-            asyncio.create_task(event_manager.emit_agent_activity(
-                agent_id=self.agent_id,
-                agent_type=self.agent_type.value,
-                activity="task_failed",
-                task_id=task_id,
-                error=error,
-                status="idle" if len(self.active_tasks) == 0 else "active"
-            ))
-=======
-            
             def emit_in_background():
                 """Emit events in background thread with its own event loop."""
                 try:
@@ -609,8 +548,6 @@ class BaseAgent(ABC):
             # Daemon thread ensures it doesn't block process shutdown
             thread = threading.Thread(target=emit_in_background, daemon=True)
             thread.start()
-            
->>>>>>> Stashed changes
         except Exception:
             # Fail silently if dashboard not available
             pass

@@ -337,7 +337,7 @@ export default function LLMOverview() {
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Total Cost:</span>
-                <span className="text-sm font-semibold text-blue-600">${(stats.providerBreakdown?.gemini?.cost ?? 0).toFixed(2)}</span>
+                <span className="text-sm font-semibold text-blue-600">${(stats.providerBreakdown?.gemini?.cost ?? stats.providerBreakdown?.gemini?.total_cost ?? 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Avg Cost:</span>
@@ -361,7 +361,7 @@ export default function LLMOverview() {
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Total Cost:</span>
-                <span className="text-sm font-semibold text-green-600">${(stats.providerBreakdown?.openai?.cost ?? 0).toFixed(2)}</span>
+                <span className="text-sm font-semibold text-green-600">${(stats.providerBreakdown?.openai?.cost ?? stats.providerBreakdown?.openai?.total_cost ?? 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Avg Cost:</span>
@@ -385,7 +385,7 @@ export default function LLMOverview() {
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Total Cost:</span>
-                <span className="text-sm font-semibold text-orange-600">${(stats.providerBreakdown?.anthropic?.cost ?? 0).toFixed(2)}</span>
+                <span className="text-sm font-semibold text-orange-600">${(stats.providerBreakdown?.anthropic?.cost ?? stats.providerBreakdown?.anthropic?.total_cost ?? 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Avg Cost:</span>
@@ -434,10 +434,10 @@ export default function LLMOverview() {
                     {stats.providerBreakdown?.gemini?.calls ?? 0}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${(stats.providerBreakdown?.gemini?.cost ?? 0).toFixed(2)}
+                    ${(stats.providerBreakdown?.gemini?.cost ?? stats.providerBreakdown?.gemini?.total_cost ?? 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${((stats.providerBreakdown?.gemini?.cost ?? 0) / ((stats.providerBreakdown?.gemini?.calls ?? 0) || 1)).toFixed(4)}
+                    ${((stats.providerBreakdown?.gemini?.cost ?? stats.providerBreakdown?.gemini?.total_cost ?? 0) / ((stats.providerBreakdown?.gemini?.calls ?? 0) || 1)).toFixed(4)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
                     99.2%
@@ -453,10 +453,10 @@ export default function LLMOverview() {
                     {stats.providerBreakdown?.openai?.calls ?? 0}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${(stats.providerBreakdown?.openai?.cost ?? 0).toFixed(2)}
+                    ${(stats.providerBreakdown?.openai?.cost ?? stats.providerBreakdown?.openai?.total_cost ?? 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${((stats.providerBreakdown?.openai?.cost ?? 0) / ((stats.providerBreakdown?.openai?.calls ?? 0) || 1)).toFixed(4)}
+                    ${((stats.providerBreakdown?.openai?.cost ?? stats.providerBreakdown?.openai?.total_cost ?? 0) / ((stats.providerBreakdown?.openai?.calls ?? 0) || 1)).toFixed(4)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
                     98.8%
@@ -472,10 +472,10 @@ export default function LLMOverview() {
                     {stats.providerBreakdown?.anthropic?.calls ?? 0}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${(stats.providerBreakdown?.anthropic?.cost ?? 0).toFixed(2)}
+                    ${(stats.providerBreakdown?.anthropic?.cost ?? stats.providerBreakdown?.anthropic?.total_cost ?? 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${((stats.providerBreakdown?.anthropic?.cost ?? 0) / ((stats.providerBreakdown?.anthropic?.calls ?? 0) || 1)).toFixed(4)}
+                    ${((stats.providerBreakdown?.anthropic?.cost ?? stats.providerBreakdown?.anthropic?.total_cost ?? 0) / ((stats.providerBreakdown?.anthropic?.calls ?? 0) || 1)).toFixed(4)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
                     99.5%
