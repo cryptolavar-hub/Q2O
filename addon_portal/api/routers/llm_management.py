@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-<<<<<<< Updated upstream
-from datetime import datetime, timedelta
-=======
 import os
 from datetime import datetime, timedelta, timezone
->>>>>>> Stashed changes
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_, func
 
 from ..core.logging import get_logger
 from ..deps import get_db
@@ -164,52 +161,44 @@ async def get_llm_stats() -> dict:
 
     cost_stats = llm_service.get_usage_stats()
     template_stats = template_engine.get_learning_stats()
-
-<<<<<<< Updated upstream
+    
     monthly_budget = llm_service.cost_monitor.monthly_budget
     monthly_spent = llm_service.cost_monitor.monthly_spent
-=======
-    # Provider breakdown (from in-memory stats, as database doesn't track provider)
-    provider_breakdown = in_memory_stats.get('by_provider', {})
-    # If no in-memory data, create empty breakdown with actual model names
-    if not provider_breakdown:
-        # Get actual configured model names from LLM service
-        if LLM_AVAILABLE:
-            try:
-                llm_service = get_llm_service()
-                gemini_model = llm_service.gemini_model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-                openai_model = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
-                anthropic_model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
-            except:
-                gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-                openai_model = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
-                anthropic_model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+    
+    # Get provider breakdown with actual model names from usage stats
+    provider_breakdown = cost_stats.get('by_provider', {})
+    
+    # Ensure all providers have model names (even if no usage yet)
+    # Also normalize structure to match frontend expectations
+    for provider_key in ['gemini', 'openai', 'anthropic']:
+        if provider_key not in provider_breakdown:
+            if provider_key == 'gemini':
+                model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            elif provider_key == 'openai':
+                model_name = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+            else:  # anthropic
+                model_name = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+            
+            provider_breakdown[provider_key] = {
+                'calls': 0,
+                'total_cost': 0.0,
+                'cost': 0.0,  # Alias for frontend compatibility
+                'avg_cost': 0.0,
+                'model': model_name,
+                'models': {model_name: {'calls': 0, 'total_cost': 0.0}}
+            }
         else:
-            gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-            openai_model = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
-            anthropic_model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
-        
-        provider_breakdown = {
-            'gemini': {'calls': 0, 'total_cost': 0.0, 'avg_cost': 0.0, 'model': gemini_model},
-            'openai': {'calls': 0, 'total_cost': 0.0, 'avg_cost': 0.0, 'model': openai_model},
-            'anthropic': {'calls': 0, 'total_cost': 0.0, 'avg_cost': 0.0, 'model': anthropic_model},
-        }
-    else:
-        # Ensure model names are included in breakdown
-        for provider_key in ['gemini', 'openai', 'anthropic']:
-            if provider_key in provider_breakdown and 'model' not in provider_breakdown[provider_key]:
-                # Get model from LLM service or env
-                if provider_key == 'gemini' and LLM_AVAILABLE:
-                    try:
-                        llm_service = get_llm_service()
-                        provider_breakdown[provider_key]['model'] = llm_service.gemini_model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-                    except:
-                        provider_breakdown[provider_key]['model'] = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-                elif provider_key == 'openai':
-                    provider_breakdown[provider_key]['model'] = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
-                elif provider_key == 'anthropic':
-                    provider_breakdown[provider_key]['model'] = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
->>>>>>> Stashed changes
+            # Normalize structure - ensure 'cost' alias exists and 'model' is set
+            provider_data = provider_breakdown[provider_key]
+            if 'cost' not in provider_data:
+                provider_data['cost'] = provider_data.get('total_cost', 0.0)
+            if 'model' not in provider_data and provider_data.get('models'):
+                # Get first model from models dict
+                models_dict = provider_data['models']
+                if isinstance(models_dict, dict) and models_dict:
+                    provider_data['model'] = list(models_dict.keys())[0]
+                elif isinstance(models_dict, list) and models_dict:
+                    provider_data['model'] = models_dict[0] if isinstance(models_dict[0], str) else models_dict[0].get('model', 'unknown')
 
     alerts = []
     if monthly_spent >= monthly_budget:
@@ -257,5 +246,99 @@ async def get_llm_stats() -> dict:
             'saved': template_stats.get('cost_saved', 0.0),
         },
         'alerts': alerts,
+    }
+
+
+@router.get("/logs")
+async def get_llm_logs(
+    db: AsyncSession = Depends(get_db),
+    range: str = Query("7days", description="Time range: 1day, 7days, 30days, all"),
+    agent: Optional[str] = Query(None, description="Filter by agent type"),
+    provider: Optional[str] = Query(None, description="Filter by provider"),
+    status: Optional[str] = Query(None, description="Filter by status: success, error, cached"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+) -> dict:
+    """Return paginated LLM usage logs with filtering."""
+    
+    if not LLM_AVAILABLE:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM integration not available")
+    
+    from addon_portal.api.models.llm_usage import LLMUsageLog
+    
+    # Calculate date range
+    now = datetime.now(timezone.utc)
+    if range == "1day":
+        start_date = now - timedelta(days=1)
+    elif range == "7days":
+        start_date = now - timedelta(days=7)
+    elif range == "30days":
+        start_date = now - timedelta(days=30)
+    else:  # all
+        start_date = None
+    
+    # Build query
+    query = select(LLMUsageLog)
+    conditions = []
+    
+    if start_date:
+        conditions.append(LLMUsageLog.created_at >= start_date)
+    if agent:
+        conditions.append(LLMUsageLog.agent_type == agent)
+    if provider:
+        conditions.append(LLMUsageLog.provider == provider)
+    if status == "success":
+        conditions.append(LLMUsageLog.success == True)
+    elif status == "error":
+        conditions.append(LLMUsageLog.success == False)
+    elif status == "cached":
+        conditions.append(LLMUsageLog.cache_hit == True)
+    
+    if conditions:
+        query = query.where(and_(*conditions))
+    
+    # Order by most recent first
+    query = query.order_by(LLMUsageLog.created_at.desc())
+    
+    # Get total count
+    count_query = select(func.count()).select_from(LLMUsageLog)
+    if conditions:
+        count_query = count_query.where(and_(*conditions))
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+    
+    # Paginate
+    offset = (page - 1) * page_size
+    query = query.offset(offset).limit(page_size)
+    
+    # Execute query
+    result = await db.execute(query)
+    logs = result.scalars().all()
+    
+    # Format logs for response
+    logs_data = []
+    for log in logs:
+        logs_data.append({
+            "id": str(log.id),
+            "timestamp": log.created_at.isoformat() if log.created_at else None,
+            "agent_type": log.agent_type,
+            "provider": log.provider,
+            "model": log.model,
+            "input_tokens": log.input_tokens,
+            "output_tokens": log.output_tokens,
+            "cost": round(log.total_cost, 4),
+            "duration_seconds": round(log.duration_seconds, 2),
+            "success": log.success,
+            "error_message": log.error_message,
+            "task_description": log.log_metadata.get("task_description", "") if log.log_metadata else "",
+            "cached": log.cache_hit,
+        })
+    
+    return {
+        "logs": logs_data,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
     }
 

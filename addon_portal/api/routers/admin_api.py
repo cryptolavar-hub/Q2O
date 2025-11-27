@@ -70,6 +70,12 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     active_devices = sum(1 for d in all_devices if not d.is_revoked)
     revoked_devices = sum(1 for d in all_devices if d.is_revoked)
     
+    # Count projects
+    result = await db.execute(select(LLMProjectConfig))
+    all_projects = result.scalars().all()
+    total_projects = len(all_projects)
+    active_projects = sum(1 for p in all_projects if p.is_active == True)
+    
     # Count tenants (eagerly load subscriptions to avoid lazy loading issues)
     result = await db.execute(
         select(Tenant).options(selectinload(Tenant.subscriptions).selectinload(Subscription.plan))
@@ -105,6 +111,11 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     devices_last_week = sum(1 for d in all_devices if two_weeks_ago <= utc_to_server_tz(d.created_at) < week_ago)
     devices_trend = ((devices_this_week - devices_last_week) / devices_last_week * 100) if devices_last_week > 0 else (100 if devices_this_week > 0 else 0)
     
+    # Projects created this week vs last week
+    projects_this_week = sum(1 for p in all_projects if utc_to_server_tz(p.created_at) >= week_ago)
+    projects_last_week = sum(1 for p in all_projects if two_weeks_ago <= utc_to_server_tz(p.created_at) < week_ago)
+    projects_trend = ((projects_this_week - projects_last_week) / projects_last_week * 100) if projects_last_week > 0 else (100 if projects_this_week > 0 else 0)
+    
     # Tenants created this week vs last week
     tenants_this_week = sum(1 for t in all_tenants if utc_to_server_tz(t.created_at) >= week_ago)
     tenants_last_week = sum(1 for t in all_tenants if two_weeks_ago <= utc_to_server_tz(t.created_at) < week_ago)
@@ -125,6 +136,8 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
         "totalDevices": total_devices,
         "activeDevices": active_devices,
         "revokedDevices": revoked_devices,
+        "totalProjects": total_projects,
+        "activeProjects": active_projects,
         "totalTenants": total_tenants,
         "activeTenants": active_tenants,
         "successRate": round(success_rate, 1),
@@ -136,6 +149,10 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
             "devices": {
                 "value": round(abs(devices_trend), 1),
                 "direction": "up" if devices_trend >= 0 else "down"
+            },
+            "projects": {
+                "value": round(abs(projects_trend), 1),
+                "direction": "up" if projects_trend >= 0 else "down"
             },
             "tenants": {
                 "value": round(abs(tenants_trend), 1),
