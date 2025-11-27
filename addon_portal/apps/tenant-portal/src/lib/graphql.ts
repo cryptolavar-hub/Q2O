@@ -160,6 +160,14 @@ export const PROJECT_QUERY = `
         agentType
         durationSeconds
       }
+      completedTasksList: tasks(status: COMPLETED, limit: 50) {
+        id
+        title
+        status
+        agentType
+        completedAt
+        durationSeconds
+      }
     }
   }
 `;

@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, Integer
 
 from ..core.logging import get_logger
 from ..deps import get_db
@@ -150,34 +150,111 @@ async def delete_project_endpoint(
 
 
 @router.get("/stats")
-async def get_llm_stats() -> dict:
-    """Return usage statistics for the LLM stack."""
+async def get_llm_stats(db: AsyncSession = Depends(get_db)) -> dict:
+    """Return usage statistics for the LLM stack, pulling from database."""
 
     if not LLM_AVAILABLE:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM integration not available")
 
+    from addon_portal.api.models.llm_usage import LLMUsageLog
+    from sqlalchemy import func, and_
+    from datetime import datetime, timedelta, timezone
+    
     llm_service = get_llm_service()
     template_engine = get_template_learning_engine()
-
-    cost_stats = llm_service.get_usage_stats()
-    template_stats = template_engine.get_learning_stats()
     
     monthly_budget = llm_service.cost_monitor.monthly_budget
-    monthly_spent = llm_service.cost_monitor.monthly_spent
     
-    # Get provider breakdown with actual model names from usage stats
-    provider_breakdown = cost_stats.get('by_provider', {})
+    # Query database for actual usage stats
+    now = datetime.now(timezone.utc)
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Get total calls, costs, and success rate from database
+    total_query = select(
+        func.count(LLMUsageLog.id).label('total_calls'),
+        func.sum(LLMUsageLog.total_cost).label('total_cost'),
+        func.avg(LLMUsageLog.duration_seconds).label('avg_duration'),
+        func.sum(func.cast(LLMUsageLog.success, Integer)).label('successful_calls')
+    ).where(LLMUsageLog.created_at >= start_of_month)
+    
+    total_result = await db.execute(total_query)
+    total_row = total_result.first()
+    
+    total_calls = total_row.total_calls or 0
+    total_cost = float(total_row.total_cost or 0.0)
+    avg_duration = float(total_row.avg_duration or 0.0)
+    successful_calls = total_row.successful_calls or 0
+    success_rate = (successful_calls / total_calls * 100) if total_calls > 0 else 0.0
+    
+    # Get provider breakdown with actual model names from database
+    provider_query = select(
+        LLMUsageLog.provider,
+        LLMUsageLog.model,
+        func.count(LLMUsageLog.id).label('calls'),
+        func.sum(LLMUsageLog.total_cost).label('cost')
+    ).where(
+        LLMUsageLog.created_at >= start_of_month
+    ).group_by(LLMUsageLog.provider, LLMUsageLog.model)
+    
+    provider_result = await db.execute(provider_query)
+    provider_rows = provider_result.all()
+    
+    # Build provider breakdown
+    provider_breakdown = {}
+    for row in provider_rows:
+        provider_key = row.provider.lower()
+        model_name = row.model or 'unknown'
+        
+        if provider_key not in provider_breakdown:
+            provider_breakdown[provider_key] = {
+                'calls': 0,
+                'total_cost': 0.0,
+                'cost': 0.0,
+                'models': {}
+            }
+        
+        provider_breakdown[provider_key]['calls'] += row.calls or 0
+        provider_breakdown[provider_key]['total_cost'] += float(row.cost or 0.0)
+        provider_breakdown[provider_key]['cost'] += float(row.cost or 0.0)
+        
+        # Track by model
+        if model_name not in provider_breakdown[provider_key]['models']:
+            provider_breakdown[provider_key]['models'][model_name] = {
+                'calls': 0,
+                'total_cost': 0.0
+            }
+        provider_breakdown[provider_key]['models'][model_name]['calls'] += row.calls or 0
+        provider_breakdown[provider_key]['models'][model_name]['total_cost'] += float(row.cost or 0.0)
+    
+    # Set primary model for each provider (most used model)
+    for provider_key in provider_breakdown:
+        models_dict = provider_breakdown[provider_key]['models']
+        if models_dict:
+            # Get model with most calls
+            primary_model = max(models_dict.items(), key=lambda x: x[1]['calls'])[0]
+            provider_breakdown[provider_key]['model'] = primary_model
+        else:
+            # Fallback to env vars if no usage
+            if provider_key == 'gemini':
+                provider_breakdown[provider_key]['model'] = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            elif provider_key == 'openai':
+                provider_breakdown[provider_key]['model'] = os.getenv("OPENAI_MODEL", "gpt-4o")
+            elif provider_key == 'anthropic':
+                provider_breakdown[provider_key]['model'] = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20250219")
+    
+    template_stats = template_engine.get_learning_stats()
+    
+    monthly_spent = total_cost  # Use database total for monthly spent
     
     # Ensure all providers have model names (even if no usage yet)
-    # Also normalize structure to match frontend expectations
     for provider_key in ['gemini', 'openai', 'anthropic']:
         if provider_key not in provider_breakdown:
             if provider_key == 'gemini':
                 model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
             elif provider_key == 'openai':
-                model_name = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+                model_name = os.getenv("OPENAI_MODEL", "gpt-4o")
             else:  # anthropic
-                model_name = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+                model_name = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20250219")
             
             provider_breakdown[provider_key] = {
                 'calls': 0,
@@ -188,17 +265,15 @@ async def get_llm_stats() -> dict:
                 'models': {model_name: {'calls': 0, 'total_cost': 0.0}}
             }
         else:
-            # Normalize structure - ensure 'cost' alias exists and 'model' is set
+            # Normalize structure - ensure 'cost' alias exists
             provider_data = provider_breakdown[provider_key]
             if 'cost' not in provider_data:
                 provider_data['cost'] = provider_data.get('total_cost', 0.0)
-            if 'model' not in provider_data and provider_data.get('models'):
-                # Get first model from models dict
-                models_dict = provider_data['models']
-                if isinstance(models_dict, dict) and models_dict:
-                    provider_data['model'] = list(models_dict.keys())[0]
-                elif isinstance(models_dict, list) and models_dict:
-                    provider_data['model'] = models_dict[0] if isinstance(models_dict[0], str) else models_dict[0].get('model', 'unknown')
+            # Calculate avg_cost
+            if provider_data['calls'] > 0:
+                provider_data['avg_cost'] = provider_data['total_cost'] / provider_data['calls']
+            else:
+                provider_data['avg_cost'] = 0.0
 
     alerts = []
     if monthly_spent >= monthly_budget:
@@ -223,22 +298,35 @@ async def get_llm_stats() -> dict:
             'timestamp': datetime.utcnow().isoformat(),
         })
 
+    # Calculate daily costs from database
     daily_costs = []
     for offset in range(30):
-        day = datetime.utcnow() - timedelta(days=29 - offset)
-        cost_estimate = cost_stats.get('daily_costs', {}).get(day.strftime('%Y-%m-%d'))
-        if cost_estimate is None:
-            cost_estimate = cost_stats.get('total_cost', 0) / 30
-        daily_costs.append({'date': day.strftime('%Y-%m-%d'), 'cost': cost_estimate})
-
+        day = now - timedelta(days=29 - offset)
+        day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        daily_query = select(func.sum(LLMUsageLog.total_cost)).where(
+            and_(
+                LLMUsageLog.created_at >= day_start,
+                LLMUsageLog.created_at <= day_end
+            )
+        )
+        daily_result = await db.execute(daily_query)
+        daily_cost = float(daily_result.scalar() or 0.0)
+        
+        daily_costs.append({
+            'date': day.strftime('%Y-%m-%d'),
+            'cost': daily_cost
+        })
+    
     return {
-        'totalCalls': cost_stats.get('total_calls', 0),
-        'totalCost': cost_stats.get('total_cost', 0.0),
+        'totalCalls': total_calls,
+        'totalCost': total_cost,
         'monthlyBudget': monthly_budget,
         'budgetUsed': monthly_spent,
-        'avgResponseTime': cost_stats.get('avg_duration', 0.0),
-        'successRate': cost_stats.get('success_rate', 0.0) * 100,
-        'providerBreakdown': cost_stats.get('provider_breakdown', {}),
+        'avgResponseTime': avg_duration,
+        'successRate': success_rate,
+        'providerBreakdown': provider_breakdown,
         'dailyCosts': daily_costs,
         'templateStats': {
             'total': template_stats.get('total_templates', 0),

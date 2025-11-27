@@ -120,6 +120,8 @@ export default function TenantsPage() {
   const [slugError, setSlugError] = useState<string | null>(null);
   const [slugSuggestions, setSlugSuggestions] = useState<string[]>([]);
   const [isCheckingSlug, setIsCheckingSlug] = useState(false);
+  const [sortField, setSortField] = useState<'created_at' | 'name' | 'usage_current'>('created_at');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const loadTenants = useCallback(async (params: TenantQueryParams) => {
     setIsLoading(true);
@@ -174,10 +176,22 @@ export default function TenantsPage() {
       pageSize,
       search: searchTerm || undefined,
       status: selectedStatus || undefined,
-      sortField: 'created_at',
-      sortDirection: 'desc',
+      sortField,
+      sortDirection,
     });
-  }, [page, pageSize, searchTerm, selectedStatus, loadTenants]);
+  }, [page, pageSize, searchTerm, selectedStatus, sortField, sortDirection, loadTenants]);
+
+  const handleSort = (field: 'created_at' | 'name' | 'usage_current') => {
+    if (sortField === field) {
+      // Toggle direction if same field
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new field with default direction
+      setSortField(field);
+      setSortDirection('asc');
+    }
+    setPage(1); // Reset to first page when sorting changes
+  };
 
   const paginationTotalPages = useMemo(() => {
     if (!tenantPage) {
@@ -249,8 +263,8 @@ export default function TenantsPage() {
           pageSize,
           search: searchTerm || undefined,
           status: selectedStatus || undefined,
-          sortField: 'created_at',
-          sortDirection: 'desc',
+          sortField,
+          sortDirection,
         });
       } catch (error) {
         console.error('❌ Tenant creation error:', error);
@@ -312,8 +326,8 @@ export default function TenantsPage() {
           pageSize,
           search: searchTerm || undefined,
           status: selectedStatus || undefined,
-          sortField: 'created_at',
-          sortDirection: 'desc',
+          sortField,
+          sortDirection,
         });
       } catch (error) {
         console.error('Error updating tenant:', error);
@@ -367,8 +381,8 @@ export default function TenantsPage() {
           pageSize,
           search: searchTerm || undefined,
           status: selectedStatus || undefined,
-          sortField: 'created_at',
-          sortDirection: 'desc',
+          sortField,
+          sortDirection,
         });
       } catch (error) {
         console.error('Error deleting tenant:', error);
@@ -740,10 +754,34 @@ export default function TenantsPage() {
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Tenant</th>
+                  <th 
+                    className="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                    onClick={() => handleSort('name')}
+                  >
+                    <div className="flex items-center gap-2">
+                      Tenant
+                      {sortField === 'name' && (
+                        <span className="text-purple-600">
+                          {sortDirection === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Domain</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Plan</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Activation Codes</th>
+                  <th 
+                    className="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                    onClick={() => handleSort('usage_current')}
+                  >
+                    <div className="flex items-center gap-2">
+                      Activation Codes
+                      {sortField === 'usage_current' && (
+                        <span className="text-purple-600">
+                          {sortDirection === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Status</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">Actions</th>
                 </tr>

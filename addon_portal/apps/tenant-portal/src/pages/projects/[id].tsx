@@ -12,6 +12,7 @@ import { Navigation } from '../../components/Navigation';
 import { Breadcrumb } from '../../components/Breadcrumb';
 import { getProject, deleteProject, assignActivationCode, runProject, restartProject, type Project } from '../../lib/projects';
 import { useAuth } from '../../hooks/useAuth';
+import { getStoredSessionToken } from '../../lib/auth';
 
 export default function ProjectDetailPage() {
   const router = useRouter();
@@ -28,6 +29,7 @@ export default function ProjectDetailPage() {
   const [showActivationCodeModal, setShowActivationCodeModal] = useState(false);
   const [activationCodeInput, setActivationCodeInput] = useState('');
   const [isAssigningCode, setIsAssigningCode] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     if (id && typeof id === 'string') {
@@ -192,6 +194,74 @@ export default function ProjectDetailPage() {
     return { canRestart: true };
   };
 
+  const handleDownloadProject = async () => {
+    if (!project || !id || typeof id !== 'string') return;
+
+    setIsDownloading(true);
+    setError(null);
+    
+    try {
+      // Try to fetch project details to get output folder path
+      const projectData = await getProject(id);
+      
+      // For now, we'll create a download link to the API endpoint
+      // The backend should provide a download endpoint that zips the project output folder
+      const API_BASE = process.env.NEXT_PUBLIC_LIC_API || '';
+      const token = getStoredSessionToken();
+      
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
+      // Create download link
+      const downloadUrl = `${API_BASE}/api/tenant/projects/${id}/download`;
+      
+      // Create a temporary anchor element to trigger download
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `${project.name || project.id}-${new Date().toISOString().split('T')[0]}.zip`;
+      
+      // Add auth header via fetch first to check if endpoint exists
+      const response = await fetch(downloadUrl, {
+        method: 'GET',
+        headers: {
+          'X-Session-Token': token,
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Download endpoint not available. Project files may not be ready for download yet.');
+        }
+        if (response.status === 401) {
+          throw new Error('Session expired. Please login again.');
+        }
+        const error = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(error.detail || `Failed to download project: ${response.status}`);
+      }
+
+      // If response is OK, trigger download
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      link.href = blobUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to download project';
+      setError(errorMessage);
+      
+      // If session expired, logout
+      if (errorMessage.includes('Session expired')) {
+        await logout();
+      }
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const getStatusColor = (status: Project['status']) => {
     switch (status) {
       case 'active':
@@ -262,78 +332,6 @@ export default function ProjectDetailPage() {
               <>
                 {/* Project Header */}
                 <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
-<<<<<<< Updated upstream
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h1 className="text-3xl font-bold text-gray-900">{project.name}</h1>
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${getStatusColor(
-                            project.status
-                          )}`}
-                        >
-                          {project.status}
-                        </span>
-                      </div>
-                      {project.client_name && (
-                        <p className="text-gray-600 text-lg">Client: {project.client_name}</p>
-                      )}
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      {!project.activation_code_id && (
-                        <button
-                          onClick={() => setShowActivationCodeModal(true)}
-                          className="px-6 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 transition-colors"
-                        >
-                          Assign Activation Code
-                        </button>
-                      )}
-                      {/* Restart button (only for failed projects) */}
-                      {project.execution_status === 'failed' && (() => {
-                        const { canRestart, reason } = canRestartProject();
-                        return (
-                          <button
-                            onClick={handleRestartProject}
-                            disabled={!canRestart || isRestarting}
-                            title={reason}
-                            className={`px-6 py-2 font-semibold rounded-lg transition-colors ${
-                              canRestart && !isRestarting
-                                ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                            }`}
-                          >
-                            {isRestarting ? 'Restarting...' : '🔄 RESTART PROJECT'}
-                          </button>
-                        );
-                      })()}
-                      {/* Run button (for pending/new projects) */}
-                      {project.execution_status !== 'failed' && project.execution_status !== 'running' && (() => {
-                        const { canRun, reason } = canRunProject();
-                        return (
-                          <button
-                            onClick={handleRunProject}
-                            disabled={!canRun || isRunning}
-                            title={reason}
-                            className={`px-6 py-2 font-semibold rounded-lg transition-colors ${
-                              canRun && !isRunning
-                                ? 'bg-green-500 text-white hover:bg-green-600'
-                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                            }`}
-                          >
-                            {isRunning ? 'Running...' : '▶ RUN PROJECT'}
-                          </button>
-                        );
-                      })()}
-                      <Link
-                        href={`/projects/edit/${project.id}`}
-                        className="px-6 py-2 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 transition-colors"
-                      >
-                        Edit
-                      </Link>
-                      <button
-                        onClick={() => setShowDeleteConfirm(true)}
-                        className="px-6 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition-colors"
-=======
                   {/* Title and Status Badge */}
                   <div className="mb-4">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
@@ -342,7 +340,6 @@ export default function ProjectDetailPage() {
                         className={`px-3 py-1 rounded-full text-xs font-semibold capitalize self-start sm:self-center ${getExecutionStatusColor(
                           project.execution_status
                         )}`}
->>>>>>> Stashed changes
                       >
                         {project.execution_status || project.status}
                       </span>

@@ -3,8 +3,13 @@
 
 from pathlib import Path
 import re
+import sys
 
-ENV_PATH = Path(r'C:\Q2O_Combined\.env')
+# Add utils to path
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'utils'))
+from project_root import get_env_file_path
+
+ENV_PATH = get_env_file_path()
 # Updated password: Q2OPostgres2025( (no special character issues)
 # Using existing q2o database
 CORRECT_DSN = 'DB_DSN=postgresql+psycopg://q2o_user:Q2OPostgres2025(@localhost:5432/q2o'
@@ -12,14 +17,14 @@ CORRECT_DSN = 'DB_DSN=postgresql+psycopg://q2o_user:Q2OPostgres2025(@localhost:5
 def fix_db_dsn():
     """Fix the DB_DSN line in .env file."""
     if not ENV_PATH.exists():
-        print(f'✗ .env file not found at {ENV_PATH}')
+        print(f'[ERROR] .env file not found at {ENV_PATH}')
         return False
     
     # Read the file
     try:
         content = ENV_PATH.read_text(encoding='utf-8')
     except Exception as e:
-        print(f'✗ Failed to read .env file: {e}')
+        print(f'[ERROR] Failed to read .env file: {e}')
         return False
     
     # Check if DB_DSN exists and is incomplete
@@ -34,16 +39,16 @@ def fix_db_dsn():
             if '/quick2odoo' in line:
                 print(f'Found DB_DSN pointing to non-existent database: {line[:60]}...')
                 new_lines.append(CORRECT_DSN)
-                print('✓ Updated to use existing q2o database')
+                print('[OK] Updated to use existing q2o database')
             elif '/q2o' in line and '@localhost' in line:
                 # Already correct
                 new_lines.append(line)
-                print('✓ DB_DSN already points to q2o database')
+                print('[OK] DB_DSN already points to q2o database')
             elif '@localhost' not in line:
                 # Incomplete
                 print(f'Found incomplete DB_DSN: {line[:50]}...')
                 new_lines.append(CORRECT_DSN)
-                print('✓ Replaced with complete DB_DSN')
+                print('[OK] Replaced with complete DB_DSN')
             else:
                 new_lines.append(line)
         else:
@@ -53,15 +58,15 @@ def fix_db_dsn():
     if not db_dsn_found:
         print('DB_DSN not found, adding it...')
         new_lines.append(CORRECT_DSN)
-        print('✓ Added DB_DSN')
+        print('[OK] Added DB_DSN')
     
     # Write back
     try:
         ENV_PATH.write_text('\n'.join(new_lines), encoding='utf-8')
-        print(f'✓ .env file updated successfully')
+        print(f'[OK] .env file updated successfully')
         return True
     except Exception as e:
-        print(f'✗ Failed to write .env file: {e}')
+        print(f'[ERROR] Failed to write .env file: {e}')
         return False
 
 if __name__ == '__main__':
@@ -76,9 +81,9 @@ if __name__ == '__main__':
         from addon_portal.api.core.settings import settings
         dsn = settings.DB_DSN
         if '@localhost' in dsn and '/q2o' in dsn:
-            print(f'✓ DB_DSN is now correct: {dsn[:60]}...')
+            print(f'[OK] DB_DSN is now correct: {dsn[:60]}...')
         else:
-            print(f'⚠ DB_DSN may be incorrect: {dsn}')
+            print(f'[WARNING] DB_DSN may be incorrect: {dsn}')
     else:
-        print('✗ Fix failed')
+        print('[ERROR] Fix failed')
 

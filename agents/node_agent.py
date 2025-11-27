@@ -25,9 +25,16 @@ class NodeAgent(BaseAgent):
                  project_id: Optional[str] = None,
                  tenant_id: Optional[int] = None,
                  orchestrator: Optional[Any] = None):
-        super().__init__(agent_id, AgentType.NODEJS, project_layout,
-                        project_id=project_id, tenant_id=tenant_id, orchestrator=orchestrator)
-        self.workspace_path = workspace_path
+        # CRITICAL: Pass workspace_path to super() to ensure BaseAgent validates it
+        super().__init__(
+            agent_id, 
+            AgentType.NODEJS, 
+            project_layout,
+            workspace_path=workspace_path,
+            project_id=project_id, 
+            tenant_id=tenant_id, 
+            orchestrator=orchestrator
+        )
         self.node_files: List[str] = []
         self.template_renderer = get_renderer()
         self.language_detector = get_language_detector(workspace_path)

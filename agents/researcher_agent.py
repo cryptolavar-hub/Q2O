@@ -1,12 +1,24 @@
 """
-Researcher Agent - Conducts web research for project objectives and tasks.
-Searches, scrapes, and synthesizes information from the web to assist other agents.
+Researcher Agent - Conducts research for project objectives and tasks.
+Uses LLM FIRST, then web search as fallback.
 
-Enhanced with LLM synthesis (Phase 2 - November 2025):
-- Intelligently synthesizes research findings using LLM
-- Extracts actionable insights from web research
-- Identifies patterns, best practices, and recommendations
-- Falls back to basic synthesis if LLM unavailable
+Research Priority (November 2025):
+1. LLM Research (PRIMARY):
+   - Tries all 3 providers (Gemini, OpenAI, Anthropic)
+   - Multiple models per provider (e.g., gemini-3-pro -> gemini-2.5-pro -> gemini-2.5-flash)
+   - 3 retries per model (3 total attempts per model)
+   - Comprehensive research in a single call
+   - High confidence results (95% confidence score)
+   
+2. Web Search (FALLBACK - Last Resort):
+   - Only executed if ALL LLM attempts fail
+   - Multi-provider search (Google, Bing, DuckDuckGo)
+   - Recursive content scraping
+   - Documentation extraction
+   - Code example discovery
+
+The LLM service automatically handles provider/model fallback with retries,
+ensuring maximum success rate before falling back to search.
 """
 
 from typing import Dict, Any, List, Optional, Set
@@ -88,7 +100,7 @@ class ResearchCache:
             
             similar_research = db.find_similar_research(query, limit=1)
             if similar_research:
-                logging.info(f"✅ Found research in PostgreSQL for: {query}")
+                logging.info(f"[OK] Found research in PostgreSQL for: {query}")
                 return similar_research[0]
         except Exception as e:
             logging.debug(f"PostgreSQL check failed, trying file cache: {e}")
@@ -207,7 +219,7 @@ class WebSearcher:
                     results = self._search_google(query, num_results)
                     if results:
                         self._increment_count('google')
-                        self.logger.info(f"✓ Google returned {len(results)} results")
+                        self.logger.info(f"[OK] Google returned {len(results)} results")
                         return results
                     else:
                         self.logger.warning("Google returned 0 results")
@@ -226,7 +238,7 @@ class WebSearcher:
                     results = self._search_bing(query, num_results)
                     if results:
                         self._increment_count('bing')
-                        self.logger.info(f"✓ Bing returned {len(results)} results")
+                        self.logger.info(f"[OK] Bing returned {len(results)} results")
                         return results
                     else:
                         self.logger.warning("Bing returned 0 results")
@@ -244,7 +256,7 @@ class WebSearcher:
                 results = self._search_duckduckgo(query, num_results)
                 if results:
                     self._increment_count('duckduckgo')
-                    self.logger.info(f"✓ DuckDuckGo returned {len(results)} results")
+                    self.logger.info(f"[OK] DuckDuckGo returned {len(results)} results")
                     return results
                 else:
                     self.logger.warning("DuckDuckGo returned 0 results")
@@ -253,12 +265,16 @@ class WebSearcher:
         else:
             self.logger.warning("DuckDuckGo rate limit reached")
         
-        self.logger.error(f"❌ All search providers failed or rate limited for query: '{query}'")
+        self.logger.error(f"[ERROR] All search providers failed or rate limited for query: '{query}'")
         return []
     
-    def _search_google(self, query: str, num_results: int) -> List[Dict]:
-        """Search using Google Custom Search API."""
-        import requests
+    async def _search_google_async(self, query: str, num_results: int) -> List[Dict]:
+        """Search using Google Custom Search API (async)."""
+        try:
+            import httpx
+        except ImportError:
+            self.logger.warning("httpx not installed. Install with: pip install httpx")
+            return []
         
         url = "https://www.googleapis.com/customsearch/v1"
         params = {
@@ -268,9 +284,10 @@ class WebSearcher:
             'num': min(num_results, 10)  # Google max 10 per request
         }
         
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
         
         results = []
         for item in data.get('items', []):
@@ -283,9 +300,24 @@ class WebSearcher:
         
         return results
     
-    def _search_bing(self, query: str, num_results: int) -> List[Dict]:
-        """Search using Bing Search API."""
-        import requests
+    def _search_google(self, query: str, num_results: int) -> List[Dict]:
+        """Search using Google Custom Search API (sync wrapper)."""
+        try:
+            return asyncio.run(self._search_google_async(query, num_results))
+        except RuntimeError:
+            # If event loop is already running, create a new one in a thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self._search_google_async(query, num_results))
+                return future.result(timeout=15)
+    
+    async def _search_bing_async(self, query: str, num_results: int) -> List[Dict]:
+        """Search using Bing Search API (async)."""
+        try:
+            import httpx
+        except ImportError:
+            self.logger.warning("httpx not installed. Install with: pip install httpx")
+            return []
         
         url = "https://api.bing.microsoft.com/v7.0/search"
         headers = {
@@ -297,9 +329,10 @@ class WebSearcher:
             'responseFilter': 'Webpages'
         }
         
-        response = requests.get(url, headers=headers, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
         
         results = []
         for item in data.get('webPages', {}).get('value', []):
@@ -311,6 +344,17 @@ class WebSearcher:
             })
         
         return results
+    
+    def _search_bing(self, query: str, num_results: int) -> List[Dict]:
+        """Search using Bing Search API (sync wrapper)."""
+        try:
+            return asyncio.run(self._search_bing_async(query, num_results))
+        except RuntimeError:
+            # If event loop is already running, create a new one in a thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self._search_bing_async(query, num_results))
+                return future.result(timeout=15)
     
     def _search_duckduckgo(self, query: str, num_results: int) -> List[Dict]:
         """Search using DuckDuckGo (free, no API key)."""
@@ -330,6 +374,8 @@ class WebSearcher:
                 if attempt > 0:
                     delay = base_delay * (attempt + 1)  # Exponential backoff
                     self.logger.info(f"Retry attempt {attempt + 1}/{max_retries} after {delay}s delay...")
+                    # Note: DuckDuckGo search is sync, so we use time.sleep here
+                    # If this method becomes async, change to await asyncio.sleep(delay)
                     time.sleep(delay)
                 
                 # duckduckgo-search 4.x API with timeout and region
@@ -358,7 +404,7 @@ class WebSearcher:
                             break
                 
                 if results:
-                    self.logger.info(f"✓ DuckDuckGo returned {len(results)} results for: {query}")
+                    self.logger.info(f"[OK] DuckDuckGo returned {len(results)} results for: {query}")
                     return results
                 else:
                     self.logger.warning(f"DuckDuckGo returned 0 results on attempt {attempt + 1}")
@@ -373,7 +419,7 @@ class WebSearcher:
                         continue  # Retry
                     else:
                         self.logger.error("DuckDuckGo rate limit: All retries exhausted")
-                        self.logger.info("💡 Tip: Wait a few minutes or configure Google/Bing API keys for better reliability")
+                        self.logger.info("[TIP] Wait a few minutes or configure Google/Bing API keys for better reliability")
                 else:
                     self.logger.error(f"DuckDuckGo search error: {e}", exc_info=True)
                 
@@ -399,8 +445,16 @@ class ResearcherAgent(BaseAgent):
                  project_id: Optional[str] = None,
                  tenant_id: Optional[int] = None,
                  orchestrator: Optional[Any] = None):
-        super().__init__(agent_id, AgentType.RESEARCHER, project_layout, project_id=project_id, tenant_id=tenant_id, orchestrator=orchestrator)
-        self.workspace_path = workspace_path
+        # CRITICAL: Pass workspace_path to super() to ensure BaseAgent validates it
+        super().__init__(
+            agent_id, 
+            AgentType.RESEARCHER, 
+            project_layout, 
+            workspace_path=workspace_path,
+            project_id=project_id, 
+            tenant_id=tenant_id, 
+            orchestrator=orchestrator
+        )
         self.research_files: List[str] = []
         self.project_id = project_id
         
@@ -425,15 +479,15 @@ class ResearcherAgent(BaseAgent):
             self.llm_service = get_llm_service()
             self.config_manager = get_configuration_manager()
             self.llm_enabled = True
-            logging.info("✅ ResearcherAgent: LLM synthesis enabled")
+            logging.info("[OK] ResearcherAgent: LLM synthesis enabled")
         else:
             self.llm_service = None
             self.config_manager = None
             self.llm_enabled = False
             if self.use_llm:
-                logging.warning("⚠️  ResearcherAgent: LLM requested but not available, basic synthesis only")
+                logging.warning("[WARNING] ResearcherAgent: LLM requested but not available, basic synthesis only")
             else:
-                logging.info("ℹ️  ResearcherAgent: LLM disabled, basic synthesis only")
+                logging.info("[INFO] ResearcherAgent: LLM disabled, basic synthesis only")
         
         # Subscribe to research channel for agent requests
         if hasattr(self, 'message_broker') and self.message_broker:
@@ -604,7 +658,11 @@ class ResearcherAgent(BaseAgent):
     
     def _conduct_research(self, query: str, task: Task) -> Dict[str, Any]:
         """
-        Conduct comprehensive web research.
+        Conduct comprehensive research using LLM FIRST, then search as fallback.
+        
+        Priority:
+        1. LLM research (tries all 3 providers with multiple models, 3 retries per model)
+        2. Web search (only if ALL LLM attempts fail)
         
         Args:
             query: Research query
@@ -631,28 +689,51 @@ class ResearcherAgent(BaseAgent):
             'sources_consulted': []
         }
         
-        # Phase 1: Quick search (top results)
-        # More results for high-depth research
+        # PHASE 1: Try LLM FIRST with full fallback (3 providers, multiple models per provider, 3 retries per model)
+        self.logger.info(f"Phase 1: Attempting LLM research (will try all 3 providers with multiple models and retries)...")
+        llm_results = self._conduct_research_with_llm(query, task, depth)
+        
+        if llm_results:
+            # LLM research succeeded - use it as primary source
+            self.logger.info(f"[SUCCESS] LLM research completed successfully - using LLM results as primary source")
+            research_results.update(llm_results)
+            research_results['sources_consulted'].insert(0, 'llm_research_primary')  # Mark as primary source
+            
+            # Phase 2: Synthesize and validate LLM findings
+            key_findings = self._synthesize_findings(research_results, query, task)
+            research_results['key_findings'] = key_findings
+            
+            # Phase 3: Quality validation and confidence scoring
+            confidence = self._calculate_confidence_score(research_results)
+            research_results['confidence_score'] = confidence
+            
+            return research_results
+        
+        # PHASE 2: LLM failed - Fall back to web search as last resort
+        self.logger.warning(f"[FALLBACK] All LLM attempts failed - falling back to web search as last resort")
+        self.logger.info(f"Phase 2 (Fallback): Starting web search research...")
+        
+        # Quick search (top results)
         initial_results = 10 if depth == 'comprehensive' else 5
         quick_results = self.searcher.search(query, num_results=initial_results)
         research_results['search_results'].extend(quick_results)
-        research_results['sources_consulted'].append('quick_search')
-        self.logger.info(f"Phase 1: Retrieved {len(quick_results)} initial results")
+        research_results['sources_consulted'].append('web_search_fallback')
+        self.logger.info(f"Phase 2: Retrieved {len(quick_results)} initial search results")
         
-        # Phase 2: Deep search if needed
+        # Deep search if needed
         if depth in ['deep', 'adaptive', 'comprehensive']:
             # Search for specific aspects
             deep_queries = self._generate_deep_queries(query, task)
             deep_results_per_query = 5 if depth == 'comprehensive' else 3
             
-            self.logger.info(f"Phase 2: Conducting {len(deep_queries)} deep searches...")
+            self.logger.info(f"Phase 2b: Conducting {len(deep_queries)} deep searches...")
             for deep_query in deep_queries:
                 results = self.searcher.search(deep_query, num_results=deep_results_per_query)
                 research_results['search_results'].extend(results)
                 self.logger.debug(f"  Deep query '{deep_query[:50]}...' returned {len(results)} results")
             
-            research_results['sources_consulted'].append('deep_search')
-            self.logger.info(f"Phase 2: Retrieved {len(research_results['search_results']) - len(quick_results)} additional results from deep search")
+            research_results['sources_consulted'].append('deep_search_fallback')
+            self.logger.info(f"Phase 2b: Retrieved {len(research_results['search_results']) - len(quick_results)} additional results from deep search")
         
         # Phase 3: Extract documentation and code examples
         self.logger.info(f"Phase 3: Extracting official documentation...")
@@ -700,7 +781,7 @@ class ResearcherAgent(BaseAgent):
                 research_results['api_endpoints'] = recursive_data.get('api_endpoints', [])
                 research_results['github_repos'] = recursive_data.get('github_repos', [])
                 research_results['discovered_links'] = recursive_data.get('discovered_links', [])
-                research_results['sources_consulted'].append('recursive_research')
+                research_results['sources_consulted'].append('recursive_research_fallback')
                 
                 self.logger.info(f"Phase 4: Recursive research complete - "
                                f"{recursive_data.get('total_pages_scraped', 0)} pages scraped, "
@@ -718,11 +799,11 @@ class ResearcherAgent(BaseAgent):
                 # Extract code examples
                 code_examples = self._extract_code_examples(scraped_content)
                 research_results['code_examples'] = code_examples
-                research_results['sources_consulted'].append('content_scraping')
+                research_results['sources_consulted'].append('content_scraping_fallback')
                 self.logger.info(f"Phase 4 (fallback): Extracted {len(code_examples)} code examples from {len(scraped_content)} pages")
         
         # Phase 5: Synthesize findings
-        key_findings = self._synthesize_findings(research_results, query)
+        key_findings = self._synthesize_findings(research_results, query, task)
         research_results['key_findings'] = key_findings
         
         # Phase 6: Quality validation and confidence scoring
@@ -731,8 +812,6 @@ class ResearcherAgent(BaseAgent):
         
         return research_results
     
-<<<<<<< Updated upstream
-=======
     def _conduct_research_with_llm(self, query: str, task: Task, depth: str) -> Optional[Dict[str, Any]]:
         """
         Conduct research using LLM as PRIMARY method.
@@ -766,9 +845,23 @@ class ResearcherAgent(BaseAgent):
                     llm_results = loop.run_until_complete(
                         self._conduct_research_with_llm_async(query, task, depth)
                     )
+                    # CRITICAL: Wait for all pending tasks to complete before closing loop
+                    pending = asyncio.all_tasks(loop)
+                    if pending:
+                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                     return llm_results
                 finally:
-                    loop.close()
+                    # Only close loop after all tasks are complete
+                    try:
+                        pending = asyncio.all_tasks(loop)
+                        for task in pending:
+                            task.cancel()
+                        if pending:
+                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    except Exception:
+                        pass
+                    finally:
+                        loop.close()
         except Exception as e:
             self.logger.error(f"[LLM] Error in LLM research: {e}", exc_info=True)
             return None
@@ -1080,7 +1173,6 @@ Be specific, accurate, and actionable. Focus on what developers NEED to know."""
         
         return research_results
     
->>>>>>> Stashed changes
     def _detect_platform_from_query(self, query: str) -> Optional[str]:
         """
         Detect platform name from research query.
@@ -1245,39 +1337,58 @@ Be specific, accurate, and actionable. Focus on what developers NEED to know."""
         scraped = []
         
         try:
-            import requests
+            import httpx
             from bs4 import BeautifulSoup
         except ImportError:
-            self.logger.warning("beautifulsoup4 not installed. Skipping content scraping.")
+            self.logger.warning("httpx or beautifulsoup4 not installed. Skipping content scraping.")
             return []
         
-        for result in search_results[:5]:  # Top 5 only
+        # Use async HTTP for concurrent scraping
+        async def scrape_url(result: Dict) -> Optional[Dict]:
+            """Scrape a single URL asynchronously."""
             try:
-                url = result['url']
-                response = requests.get(url, timeout=10, headers={
-                    'User-Agent': 'QuickOdoo-ResearchAgent/1.0'
-                })
-                
-                if response.status_code == 200:
-                    soup = BeautifulSoup(response.content, 'html.parser')
-                    
-                    # Extract text content
-                    # Remove scripts and styles
-                    for script in soup(['script', 'style']):
-                        script.decompose()
-                    
-                    text = soup.get_text()
-                    lines = (line.strip() for line in text.splitlines())
-                    text = '\n'.join(line for line in lines if line)
-                    
-                    scraped.append({
-                        'url': url,
-                        'title': result['title'],
-                        'content': text[:5000],  # Limit to 5000 chars
-                        'word_count': len(text.split())
+                url = result.get('url', '')
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(url, headers={
+                        'User-Agent': 'QuickOdoo-ResearchAgent/1.0'
                     })
+                    if response.status_code == 200:
+                        soup = BeautifulSoup(response.content, 'html.parser')
+                        
+                        # Extract text content
+                        # Remove scripts and styles
+                        for script in soup(['script', 'style']):
+                            script.decompose()
+                        
+                        text = soup.get_text()
+                        lines = (line.strip() for line in text.splitlines())
+                        text = '\n'.join(line for line in lines if line)
+                        
+                        return {
+                            'url': url,
+                            'title': result.get('title', ''),
+                            'content': text[:5000],  # Limit to 5000 chars
+                            'word_count': len(text.split())
+                        }
             except Exception as e:
-                self.logger.warning(f"Error scraping {result.get('url')}: {e}")
+                self.logger.warning(f"Error scraping {result.get('url', 'unknown')}: {e}")
+                return None
+        
+        # Scrape URLs concurrently
+        async def scrape_all():
+            tasks = [scrape_url(result) for result in search_results[:5]]  # Top 5 only
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            return [r for r in results if r is not None and not isinstance(r, Exception)]
+        
+        # Run async scraping
+        try:
+            scraped = asyncio.run(scrape_all())
+        except RuntimeError:
+            # If event loop is already running, create a new one in a thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, scrape_all())
+                scraped = future.result(timeout=60)  # Longer timeout for multiple requests
         
         return scraped
     
@@ -1346,18 +1457,32 @@ Be specific, accurate, and actionable. Focus on what developers NEED to know."""
                         llm_findings = loop.run_until_complete(
                             self._synthesize_findings_with_llm(research_results, query)
                         )
+                        # CRITICAL: Wait for all pending tasks to complete before closing loop
+                        pending = asyncio.all_tasks(loop)
+                        if pending:
+                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                         if llm_findings:
-                            self.logger.info(f"🤖 LLM synthesis: {len(llm_findings)} insights generated")
+                            self.logger.info(f"[LLM] LLM synthesis: {len(llm_findings)} insights generated")
                             return llm_findings
                     finally:
-                        loop.close()
+                        # Only close loop after all tasks are complete
+                        try:
+                            pending = asyncio.all_tasks(loop)
+                            for task in pending:
+                                task.cancel()
+                            if pending:
+                                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                        except Exception:
+                            pass
+                        finally:
+                            loop.close()
             except Exception as e:
                 self.logger.warning(f"LLM synthesis failed, using basic synthesis: {e}")
         
         # Fallback to basic synthesis
         return self._synthesize_findings_basic(research_results, query)
     
-    async def _synthesize_findings_with_llm(self, research_results: Dict, query: str) -> List[str]:
+    async def _synthesize_findings_with_llm(self, research_results: Dict, query: str, task: Optional[Task] = None) -> List[str]:
         """
         Use LLM to intelligently synthesize research findings.
         
@@ -1430,9 +1555,9 @@ Please synthesize these findings into 5-10 actionable insights."""
             self.logger.warning(f"LLM synthesis failed: {response.error}")
             return []
         
-        # CRITICAL FIX: Track LLM usage for dashboard
-        # Note: synthesis doesn't have a task, so we'll track it at project level if needed
-        # For now, we'll skip tracking synthesis calls (they're less frequent)
+        # CRITICAL: Track LLM usage for dashboard
+        if task:
+            self.track_llm_usage(task, response)
         
         # Parse JSON response
         try:
@@ -1451,7 +1576,7 @@ Please synthesize these findings into 5-10 actionable insights."""
             # Log LLM usage
             if response.usage:
                 self.logger.info(
-                    f"💰 LLM synthesis cost: ${response.usage.total_cost:.4f} "
+                    f"[COST] LLM synthesis cost: ${response.usage.total_cost:.4f} "
                     f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens)"
                 )
             
@@ -1588,7 +1713,7 @@ Please synthesize these findings into 5-10 actionable insights."""
                 project_id=project_id
             )
             
-            self.logger.info(f"✅ Stored research in PostgreSQL: {research_id}")
+            self.logger.info(f"[OK] Stored research in PostgreSQL: {research_id}")
             
         except Exception as e:
             self.logger.warning(f"Could not store in PostgreSQL, using files only: {e}")
@@ -1632,7 +1757,7 @@ Please synthesize these findings into 5-10 actionable insights."""
         self.research_files.append(json_path)
         self.research_files.append(md_path)
         
-        self.logger.info(f"📁 Backup files: {json_filename}, {md_filename}")
+        self.logger.info(f"[FILES] Backup files: {json_filename}, {md_filename}")
         
         return research_id
     

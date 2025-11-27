@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 # Set event loop policy BEFORE importing uvicorn or the app
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    print("✓ Windows event loop policy set to SelectorEventLoop")
+        print("[OK] Windows event loop policy set to SelectorEventLoop")
 
 def run_uvicorn_server(host: str, port: int, app_path: str):
     """Run a uvicorn server in a separate thread."""
@@ -84,8 +84,8 @@ if __name__ == "__main__":
     try:
         asyncio.run(run_dual_stack())
     except KeyboardInterrupt:
-        print("\n✓ Shutting down dual-stack servers...")
+        print("\n[OK] Shutting down dual-stack servers...")
     except Exception as e:
-        print(f"✗ Error starting dual-stack servers: {e}")
+        print(f"[ERROR] Error starting dual-stack servers: {e}")
         sys.exit(1)
 

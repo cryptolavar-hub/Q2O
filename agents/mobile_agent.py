@@ -47,8 +47,16 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
                  project_id: Optional[str] = None,
                  tenant_id: Optional[int] = None,
                  orchestrator: Optional[Any] = None):
-        super().__init__(agent_id, AgentType.MOBILE, project_layout, project_id=project_id, tenant_id=tenant_id, orchestrator=orchestrator)
-        self.workspace_path = workspace_path
+        # CRITICAL: Pass workspace_path to super() to ensure BaseAgent validates it
+        super().__init__(
+            agent_id, 
+            AgentType.MOBILE, 
+            project_layout, 
+            workspace_path=workspace_path,
+            project_id=project_id, 
+            tenant_id=tenant_id, 
+            orchestrator=orchestrator
+        )
         self.project_id = project_id
         self.generated_files: List[str] = []
         
@@ -60,16 +68,16 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
             self.template_learning = get_template_learning_engine()
             self.config_manager = get_configuration_manager()
             self.llm_enabled = True
-            logging.info("✅ MobileAgent: LLM integration enabled (hybrid mode)")
+            logging.info("[OK] MobileAgent: LLM integration enabled (hybrid mode)")
         else:
             self.llm_service = None
             self.template_learning = None
             self.config_manager = None
             self.llm_enabled = False
             if self.use_llm:
-                logging.warning("⚠️  MobileAgent: LLM requested but not available, template-only mode")
+                logging.warning("[WARNING] MobileAgent: LLM requested but not available, template-only mode")
             else:
-                logging.info("ℹ️  MobileAgent: LLM disabled, template-only mode")
+                logging.info("[INFO] MobileAgent: LLM disabled, template-only mode")
     
     def process_task(self, task: Task) -> Task:
         """
@@ -121,8 +129,22 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
                         generated_files = loop.run_until_complete(
                             self._generate_mobile_app_async(description, platforms, features, tech_stack, task)
                         )
+                        # CRITICAL: Wait for all pending tasks to complete before closing loop
+                        pending = asyncio.all_tasks(loop)
+                        if pending:
+                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                     finally:
-                        loop.close()
+                        # Only close loop after all tasks are complete
+                        try:
+                            pending = asyncio.all_tasks(loop)
+                            for task in pending:
+                                task.cancel()
+                            if pending:
+                                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                        except Exception:
+                            pass
+                        finally:
+                            loop.close()
             else:
                 generated_files = self._generate_mobile_app(description, platforms, features, tech_stack, task)
             
@@ -220,7 +242,7 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
                 task_desc, tech_stack
             )
             if learned_template:
-                self.logger.info(f"📚 Using learned template for {feature}")
+                self.logger.info(f"[TEMPLATE] Using learned template for {feature}")
                 self.template_learning.increment_usage(learned_template.template_id)
                 # BUG FIX: Use sanitize_for_filename instead of raw feature name
                 sanitized_name = sanitize_for_filename(feature)
@@ -230,7 +252,7 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
         try:
             content = self._generate_screen_template(feature, platforms)
             if content:
-                self.logger.info(f"📄 Used traditional template for {feature}")
+                self.logger.info(f"[TEMPLATE] Used traditional template for {feature}")
                 # BUG FIX: Use sanitize_for_filename instead of raw feature name
                 sanitized_name = sanitize_for_filename(feature)
                 return [self._write_file(f"src/screens/{sanitized_name}Screen.tsx", content)]
@@ -241,7 +263,7 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
         if not self.llm_service:
             raise ValueError(f"No template for {feature} and LLM not available")
         
-        self.logger.info(f"🤖 Generating {feature} with LLM (no template available)")
+        self.logger.info(f"[LLM] Generating {feature} with LLM (no template available)")
         
         # Get research context
         research_context = task.metadata.get('research_context')
@@ -298,9 +320,12 @@ Generate a complete, working screen component with:
         # Log usage
         if response.usage:
             self.logger.info(
-                f"💰 LLM cost: ${response.usage.total_cost:.4f} "
+                f"[COST] LLM cost: ${response.usage.total_cost:.4f} "
                 f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens)"
             )
+        
+        # CRITICAL: Track LLM usage for dashboard
+        self.track_llm_usage(task, response)
         
         # STEP 4: Learn from successful generation
         if self.template_learning and response.success:
@@ -320,7 +345,7 @@ Generate a complete, working screen component with:
             )
             
             if template_id:
-                self.logger.info(f"✨ Learned new mobile template: {template_id}")
+                self.logger.info(f"[LEARNED] Learned new mobile template: {template_id}")
         
         # Write file (BUG FIX: Use sanitize_for_filename)
         sanitized_name = sanitize_for_filename(feature)

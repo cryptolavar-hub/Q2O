@@ -131,12 +131,10 @@ async def get_graphql_context(
     
     Note: For WebSocket subscriptions, request might be None or have different structure
     Note: Database session cleanup is handled by Strawberry's context lifecycle via __aexit__
-<<<<<<< Updated upstream
-=======
+    
     IMPORTANT: Sessions must be explicitly closed to prevent connection pool exhaustion
     
     CRITICAL FIX: Store context in request.state for middleware cleanup if Strawberry doesn't call __aexit__
->>>>>>> Stashed changes
     """
     # Create async database session using context manager pattern
     # This ensures the session is properly managed even if Strawberry doesn't use __aexit__

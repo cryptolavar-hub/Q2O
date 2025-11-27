@@ -44,7 +44,7 @@ async def test_task_tracking():
         # Create database session
         db = AsyncSessionLocal()
         
-        print("✓ Database session created")
+        print("[OK] Database session created")
         
         # Test 1: Create a task (without tenant_id since it's optional)
         print("\n[Test 1] Creating a task...")
@@ -59,7 +59,7 @@ async def test_task_tracking():
             priority=1,
             tenant_id=None,  # tenant_id is optional
         )
-        print(f"✓ Task created: {task.task_id}")
+        print(f"[OK] Task created: {task.task_id}")
         task_id = task.task_id
         
         # Test 2: Update task status to running
@@ -70,7 +70,7 @@ async def test_task_tracking():
             status="running",
             progress_percentage=25.0,
         )
-        print("✓ Task status updated to 'running'")
+        print("[OK] Task status updated to 'running'")
         
         # Test 3: Update progress
         print("\n[Test 3] Updating task progress to 50%...")
@@ -80,7 +80,7 @@ async def test_task_tracking():
             status="running",
             progress_percentage=50.0,
         )
-        print("✓ Task progress updated to 50%")
+        print("[OK] Task progress updated to 50%")
         
         # Test 4: Update LLM usage
         print("\n[Test 4] Updating LLM usage...")
@@ -92,7 +92,7 @@ async def test_task_tracking():
             llm_tokens_used=1500,
             llm_cost_usd=0.05,
         )
-        print("✓ LLM usage updated")
+        print("[OK] LLM usage updated")
         
         # Test 5: Complete the task
         print("\n[Test 5] Completing the task...")
@@ -103,12 +103,12 @@ async def test_task_tracking():
             progress_percentage=100.0,
             execution_metadata={"files_created": ["test_file.py"], "outputs": {"status": "success"}},
         )
-        print("✓ Task completed")
+        print("[OK] Task completed")
         
         # Test 6: Calculate project progress
         print("\n[Test 6] Calculating project progress...")
         progress = await calculate_project_progress(db, "test-project-123")
-        print(f"✓ Progress calculated:")
+        print(f"[OK] Progress calculated:")
         print(f"  - Total tasks: {progress['total_tasks']}")
         print(f"  - Completed: {progress['completed_tasks']}")
         print(f"  - Failed: {progress['failed_tasks']}")
@@ -117,7 +117,7 @@ async def test_task_tracking():
         # Test 7: Get project tasks
         print("\n[Test 7] Getting project tasks...")
         tasks = await get_project_tasks(db, "test-project-123")
-        print(f"✓ Found {len(tasks)} task(s)")
+        print(f"[OK] Found {len(tasks)} task(s)")
         for task in tasks:
             print(f"  - {task.task_name}: {task.status} ({task.progress_percentage}%)")
         
@@ -125,12 +125,12 @@ async def test_task_tracking():
         await db.close()
         
         print("\n" + "=" * 80)
-        print("✓ All tests passed!")
+        print("[OK] All tests passed!")
         print("=" * 80)
         return True
         
     except Exception as e:
-        print(f"\n✗ Test failed with error: {e}")
+        print(f"\n[ERROR] Test failed with error: {e}")
         import traceback
         traceback.print_exc()
         return False

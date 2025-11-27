@@ -6,7 +6,7 @@ import { AdminHeader } from '../components/AdminHeader';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { Footer } from '../components/Footer';
 import { getCodes, generateCodes, revokeCode, type ActivationCode } from '../lib/api';
-import { getTenants, type Tenant } from '../lib/api';
+import { getTenants, type Tenant, type TenantPage, type TenantQueryParams } from '../lib/api';
 
 export default function CodesPage() {
   const [codes, setCodes] = useState<ActivationCode[]>([]);
@@ -25,8 +25,6 @@ export default function CodesPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loadingTenants, setLoadingTenants] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-<<<<<<< Updated upstream
-=======
   const [showTenantModal, setShowTenantModal] = useState(false);
   const [tenantModalPage, setTenantModalPage] = useState(1);
   const [tenantModalPageSize, setTenantModalPageSize] = useState(10);
@@ -35,7 +33,8 @@ export default function CodesPage() {
   const [tenantModalData, setTenantModalData] = useState<TenantPage | null>(null);
   const [loadingTenantModal, setLoadingTenantModal] = useState(false);
   const [selectedGenerateTenant, setSelectedGenerateTenant] = useState<string>('');
->>>>>>> Stashed changes
+  const [tenantModalSortField, setTenantModalSortField] = useState<'created_at' | 'name' | 'usage_current'>('created_at');
+  const [tenantModalSortDirection, setTenantModalSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Load tenants on mount
   useEffect(() => {
@@ -59,8 +58,6 @@ export default function CodesPage() {
     }
   };
 
-<<<<<<< Updated upstream
-=======
   const loadTenantModalData = async () => {
     try {
       setLoadingTenantModal(true);
@@ -69,8 +66,8 @@ export default function CodesPage() {
         pageSize: tenantModalPageSize,
         search: tenantModalSearch.trim() || undefined,
         status: tenantModalStatus !== 'all' ? tenantModalStatus : undefined,
-        sortField: 'created_at',
-        sortDirection: 'desc',
+        sortField: tenantModalSortField,
+        sortDirection: tenantModalSortDirection,
       };
       const response = await getTenants(params);
       setTenantModalData(response);
@@ -87,7 +84,19 @@ export default function CodesPage() {
     if (showTenantModal) {
       loadTenantModalData();
     }
-  }, [showTenantModal, tenantModalPage, tenantModalPageSize, tenantModalSearch, tenantModalStatus]);
+  }, [showTenantModal, tenantModalPage, tenantModalPageSize, tenantModalSearch, tenantModalStatus, tenantModalSortField, tenantModalSortDirection]);
+
+  const handleTenantModalSort = (field: 'created_at' | 'name' | 'usage_current') => {
+    if (tenantModalSortField === field) {
+      // Toggle direction if same field
+      setTenantModalSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new field with default direction
+      setTenantModalSortField(field);
+      setTenantModalSortDirection('asc');
+    }
+    setTenantModalPage(1); // Reset to first page when sorting changes
+  };
 
   // Reset selected tenant when Generate modal opens
   useEffect(() => {
@@ -117,8 +126,6 @@ export default function CodesPage() {
     }
     setShowTenantModal(false);
   };
-
->>>>>>> Stashed changes
   const loadCodes = async () => {
     try {
       setLoadingCodes(true);
@@ -307,6 +314,20 @@ export default function CodesPage() {
                   <option key={tenant.slug} value={tenant.slug}>{tenant.name} ({tenant.slug})</option>
                 ))}
               </select>
+              {tenants.length > 10 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTenantModal(true);
+                    setTenantModalPage(1);
+                    setTenantModalSearch('');
+                    setTenantModalStatus('all');
+                  }}
+                  className="mt-2 w-full text-sm text-purple-600 hover:text-purple-800 font-medium text-left underline"
+                >
+                  See More →
+                </button>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
@@ -472,18 +493,35 @@ export default function CodesPage() {
             <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
+                  {/* First Page Button */}
                   <button
-                    onClick={() => handlePageChange(currentPage - 1)}
+                    onClick={() => handlePageChange(1)}
                     disabled={currentPage === 1}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    className={`px-3 py-2 rounded-lg font-medium transition-colors ${
                       currentPage === 1
                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
                     }`}
+                    title="First page"
                   >
-                    ← Previous
+                    |&lt;&lt;
                   </button>
                   
+                  {/* Previous Page Button */}
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                      currentPage === 1
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                    }`}
+                    title="Previous page"
+                  >
+                    |&lt;
+                  </button>
+                  
+                  {/* Page Number Buttons */}
                   <div className="flex items-center gap-1">
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                       let pageNum: number;
@@ -513,16 +551,32 @@ export default function CodesPage() {
                     })}
                   </div>
                   
+                  {/* Next Page Button */}
                   <button
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    className={`px-3 py-2 rounded-lg font-medium transition-colors ${
                       currentPage === totalPages
                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
                     }`}
+                    title="Next page"
                   >
-                    Next →
+                    &gt;|
+                  </button>
+                  
+                  {/* Last Page Button */}
+                  <button
+                    onClick={() => handlePageChange(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                      currentPage === totalPages
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                    }`}
+                    title="Last page"
+                  >
+                    &gt;&gt;|
                   </button>
                 </div>
                 
@@ -607,7 +661,7 @@ export default function CodesPage() {
                       </option>
                     ))}
                   </select>
-                  {totalTenants > 10 && (
+                  {tenants.length > 10 && (
                     <button
                       type="button"
                       onClick={() => {
@@ -698,6 +752,203 @@ export default function CodesPage() {
           </motion.div>
         </div>
       )}
+
+      {/* Select Tenant Modal */}
+      {showTenantModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowTenantModal(false);
+            // Reset modal state when closing
+            setTenantModalPage(1);
+            setTenantModalSearch('');
+            setTenantModalStatus('all');
+            setTenantModalSortField('created_at');
+            setTenantModalSortDirection('desc');
+          }}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl p-8 max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-gray-900">Select Tenant</h3>
+              <button
+                onClick={() => {
+                  setShowTenantModal(false);
+                  // Reset modal state when closing
+                  setTenantModalPage(1);
+                  setTenantModalSearch('');
+                  setTenantModalStatus('all');
+                  setTenantModalSortField('created_at');
+                  setTenantModalSortDirection('desc');
+                }}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Search and Filters */}
+            <div className="mb-4 space-y-3">
+              <input
+                type="text"
+                placeholder="Search tenants..."
+                value={tenantModalSearch}
+                onChange={(e) => {
+                  setTenantModalSearch(e.target.value);
+                  setTenantModalPage(1);
+                }}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <select
+                value={tenantModalStatus}
+                onChange={(e) => {
+                  setTenantModalStatus(e.target.value);
+                  setTenantModalPage(1);
+                }}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="all">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="past_due">Past Due</option>
+                <option value="canceled">Canceled</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </div>
+
+            {/* Tenant Table */}
+            <div className="flex-1 overflow-y-auto mb-4">
+              {loadingTenantModal ? (
+                <div className="text-center py-8 text-gray-500">Loading tenants...</div>
+              ) : tenantModalData && tenantModalData.items.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th 
+                          className="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                          onClick={() => handleTenantModalSort('name')}
+                        >
+                          <div className="flex items-center gap-2">
+                            Tenant
+                            {tenantModalSortField === 'name' && (
+                              <span className="text-purple-600">
+                                {tenantModalSortDirection === 'asc' ? '↑' : '↓'}
+                              </span>
+                            )}
+                          </div>
+                        </th>
+                        <th 
+                          className="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                          onClick={() => handleTenantModalSort('created_at')}
+                        >
+                          <div className="flex items-center gap-2">
+                            Plan
+                            {tenantModalSortField === 'created_at' && (
+                              <span className="text-purple-600">
+                                {tenantModalSortDirection === 'asc' ? '↑' : '↓'}
+                              </span>
+                            )}
+                          </div>
+                        </th>
+                        <th 
+                          className="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                          onClick={() => handleTenantModalSort('usage_current')}
+                        >
+                          <div className="flex items-center gap-2">
+                            Activation Codes
+                            {tenantModalSortField === 'usage_current' && (
+                              <span className="text-purple-600">
+                                {tenantModalSortDirection === 'asc' ? '↑' : '↓'}
+                              </span>
+                            )}
+                          </div>
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-600">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {tenantModalData.items.map((tenant) => (
+                        <tr
+                          key={tenant.slug}
+                          onClick={() => handleSelectTenantFromModal(tenant)}
+                          className="cursor-pointer hover:bg-purple-50 transition-colors"
+                        >
+                          <td className="px-4 py-4 align-top">
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-lg border border-gray-200 bg-gray-50" style={{ backgroundColor: tenant.primaryColor ?? '#875A7B' }} />
+                              <div>
+                                <p className="font-semibold text-gray-900">{tenant.name}</p>
+                                <p className="text-xs font-mono text-gray-500">{tenant.slug}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 align-top text-sm text-gray-600">
+                            {tenant.subscription.planName ?? 'Not Assigned'}
+                          </td>
+                          <td className="px-4 py-4 align-top">
+                            <div className="text-sm text-gray-600">
+                              {tenant.activationCodesUsed ?? 0} / {tenant.activationCodesTotal ?? 0}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 align-top">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${
+                              tenant.subscription.status === 'active' 
+                                ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                : tenant.subscription.status === 'past_due'
+                                ? 'bg-amber-100 text-amber-700 border-amber-200'
+                                : tenant.subscription.status === 'canceled'
+                                ? 'bg-gray-100 text-gray-600 border-gray-200'
+                                : tenant.subscription.status === 'suspended'
+                                ? 'bg-purple-100 text-purple-700 border-purple-200'
+                                : 'bg-slate-100 text-slate-600 border-slate-200'
+                            }`}>
+                              {tenant.subscription.status === 'active' ? 'Active' :
+                               tenant.subscription.status === 'past_due' ? 'Past Due' :
+                               tenant.subscription.status === 'canceled' ? 'Canceled' :
+                               tenant.subscription.status === 'suspended' ? 'Suspended' :
+                               'No Subscription'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">No tenants found</div>
+              )}
+            </div>
+
+            {/* Pagination */}
+            {tenantModalData && tenantModalData.total > tenantModalPageSize && (
+              <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => setTenantModalPage(prev => Math.max(1, prev - 1))}
+                  disabled={tenantModalPage === 1}
+                  className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-gray-600">
+                  Page {tenantModalPage} of {Math.ceil(tenantModalData.total / tenantModalPageSize)}
+                </span>
+                <button
+                  onClick={() => setTenantModalPage(prev => prev + 1)}
+                  disabled={tenantModalPage >= Math.ceil(tenantModalData.total / tenantModalPageSize)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
+
       <Footer />
     </div>
   );

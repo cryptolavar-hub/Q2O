@@ -172,28 +172,44 @@ async def create_task_in_db(
             f"task_name={task_name}, tenant_id={tenant_id}"
         )
         
-        db = _get_db_session()
-        if not db:
-            logger.error("Database session not available for task tracking")
-            return None
+        # CRITICAL FIX: Use async context manager to ensure session is properly closed
+        # AsyncSessionLocal() returns a context manager that must be used with 'async with'
+        try:
+            from addon_portal.api.core.db import AsyncSessionLocal
+        except ImportError:
+            import sys
+            from pathlib import Path
+            project_root = Path(__file__).resolve().parents[2]
+            addon_portal_path = project_root / "addon_portal"
+            if str(addon_portal_path) not in sys.path:
+                sys.path.insert(0, str(addon_portal_path))
+            from api.core.db import AsyncSessionLocal
         
-        logger.debug(f"Database session obtained: {type(db)}")
-        
-        task = await create_task(
-            db=db,
-            project_id=project_id,
-            agent_type=agent_type,
-            task_name=task_name,
-            task_description=task_description,
-            task_type=task_type,
-            agent_id=agent_id,
-            priority=priority,
-            tenant_id=tenant_id,
-        )
-        
-        # Note: create_task already commits, so we don't need to commit again
-        logger.info(f"Successfully created task in database: task_id={task.task_id}")
-        return task.task_id
+        # Use async context manager to ensure proper session cleanup
+        async with AsyncSessionLocal() as db:
+            logger.debug(f"Database session obtained: {type(db)}")
+            
+            try:
+                task = await create_task(
+                    db=db,
+                    project_id=project_id,
+                    agent_type=agent_type,
+                    task_name=task_name,
+                    task_description=task_description,
+                    task_type=task_type,
+                    agent_id=agent_id,
+                    priority=priority,
+                    tenant_id=tenant_id,
+                )
+                
+                # Note: create_task already commits, so we don't need to commit again
+                logger.info(f"Successfully created task in database: task_id={task.task_id}")
+                return task.task_id
+            except Exception as db_error:
+                # Rollback on error
+                await db.rollback()
+                logger.error(f"Database error creating task: {db_error}", exc_info=True)
+                raise
     
     except Exception as e:
         logger.error(f"Failed to create task in database: {e}", exc_info=True)
@@ -220,23 +236,36 @@ async def update_task_status_in_db(
     try:
         from addon_portal.api.services.agent_task_service import update_task_status
         
-        db = _get_db_session()
-        if not db:
-            logger.warning("Database session not available for task tracking")
-            return False
+        # CRITICAL FIX: Use async context manager to ensure session is properly closed
+        try:
+            from addon_portal.api.core.db import AsyncSessionLocal
+        except ImportError:
+            import sys
+            from pathlib import Path
+            project_root = Path(__file__).resolve().parents[2]
+            addon_portal_path = project_root / "addon_portal"
+            if str(addon_portal_path) not in sys.path:
+                sys.path.insert(0, str(addon_portal_path))
+            from api.core.db import AsyncSessionLocal
         
-        await update_task_status(
-            db=db,
-            task_id=task_id,
-            status=status,
-            progress_percentage=progress_percentage,
-            error_message=error_message,
-            error_stack_trace=error_stack_trace,
-            execution_metadata=execution_metadata,
-        )
-        
-        # Note: update_task_status already commits, so we don't need to commit again
-        return True
+        async with AsyncSessionLocal() as db:
+            try:
+                await update_task_status(
+                    db=db,
+                    task_id=task_id,
+                    status=status,
+                    progress_percentage=progress_percentage,
+                    error_message=error_message,
+                    error_stack_trace=error_stack_trace,
+                    execution_metadata=execution_metadata,
+                )
+                
+                # Note: update_task_status already commits, so we don't need to commit again
+                return True
+            except Exception as db_error:
+                await db.rollback()
+                logger.error(f"Database error updating task status: {db_error}", exc_info=True)
+                raise
     
     except Exception as e:
         logger.warning(f"Failed to update task status in database: {e}")
@@ -261,21 +290,34 @@ async def update_task_llm_usage_in_db(
     try:
         from addon_portal.api.services.agent_task_service import update_task_llm_usage
         
-        db = _get_db_session()
-        if not db:
-            logger.warning("Database session not available for task tracking")
-            return False
+        # CRITICAL FIX: Use async context manager to ensure session is properly closed
+        try:
+            from addon_portal.api.core.db import AsyncSessionLocal
+        except ImportError:
+            import sys
+            from pathlib import Path
+            project_root = Path(__file__).resolve().parents[2]
+            addon_portal_path = project_root / "addon_portal"
+            if str(addon_portal_path) not in sys.path:
+                sys.path.insert(0, str(addon_portal_path))
+            from api.core.db import AsyncSessionLocal
         
-        await update_task_llm_usage(
-            db=db,
-            task_id=task_id,
-            llm_calls_count=llm_calls_count,
-            llm_tokens_used=llm_tokens_used,
-            llm_cost_usd=llm_cost_usd,
-        )
-        
-        # Note: update_task_llm_usage already commits, so we don't need to commit again
-        return True
+        async with AsyncSessionLocal() as db:
+            try:
+                await update_task_llm_usage(
+                    db=db,
+                    task_id=task_id,
+                    llm_calls_count=llm_calls_count,
+                    llm_tokens_used=llm_tokens_used,
+                    llm_cost_usd=llm_cost_usd,
+                )
+                
+                # Note: update_task_llm_usage already commits, so we don't need to commit again
+                return True
+            except Exception as db_error:
+                await db.rollback()
+                logger.error(f"Database error updating LLM usage: {db_error}", exc_info=True)
+                raise
     
     except Exception as e:
         logger.warning(f"Failed to update LLM usage in database: {e}")

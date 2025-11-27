@@ -59,6 +59,20 @@ export default function PromptManagement() {
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [editingAgent, setEditingAgent] = useState<{ projectId: string; agentType: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Pagination and search state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProjects, setTotalProjects] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Agent Prompts tab search and pagination state
+  const [agentSearchQuery, setAgentSearchQuery] = useState('');
+  const [agentProjectSearch, setAgentProjectSearch] = useState('');
+  const [agentCurrentPage, setAgentCurrentPage] = useState(1);
+  const [agentPageSize] = useState(25);
+  const [allProjects, setAllProjects] = useState<ProjectConfig[]>([]); // Store all projects for Agent Prompts tab
 
   const agentTypes = [
     { id: 'coder', name: 'CoderAgent', description: 'Backend services and APIs' },
@@ -70,12 +84,26 @@ export default function PromptManagement() {
   ];
 
   useEffect(() => {
-    fetchAllData();
+    fetchSystemConfig();
   }, []);
 
-  const fetchAllData = async () => {
+  useEffect(() => {
+    if (activeTab === 'project') {
+      fetchProjects();
+    } else if (activeTab === 'agent') {
+      fetchAllProjectsForAgentTab();
+    }
+  }, [activeTab, currentPage, pageSize, searchQuery]);
+
+  // Also fetch projects when switching to agent tab if allProjects is empty
+  useEffect(() => {
+    if (activeTab === 'agent' && allProjects.length === 0 && !loading) {
+      fetchAllProjectsForAgentTab();
+    }
+  }, [activeTab]);
+
+  const fetchSystemConfig = async () => {
     try {
-      setLoading(true);
       setError(null);
       
       // Fetch system configuration
@@ -100,20 +128,8 @@ export default function PromptManagement() {
           dailyBudget: 50,
         });
       }
-
-      // Fetch projects
-      const projectsRes = await fetch(`${API_BASE}/api/llm/projects?page_size=100`);
-      if (projectsRes.ok) {
-        const projectsData = await projectsRes.json();
-        setProjects(projectsData.items || []);
-      } else {
-        console.warn('Failed to fetch projects:', projectsRes.status);
-        setProjects([]);
-      }
     } catch (error) {
-      console.error('Failed to fetch prompts:', error);
-      setError('Failed to load configuration. Please check your connection and try again.');
-      // Set defaults to allow page to render
+      console.error('Failed to fetch system config:', error);
       setSystemConfig({
         primaryProvider: 'gemini',
         secondaryProvider: 'openai',
@@ -127,7 +143,105 @@ export default function PromptManagement() {
         monthlyBudget: 1000,
         dailyBudget: 50,
       });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        page_size: pageSize.toString(),
+      });
+      
+      if (searchQuery.trim()) {
+        params.append('search', searchQuery.trim());
+      }
+
+      const projectsRes = await fetch(`${API_BASE}/api/llm/projects?${params.toString()}`);
+      if (projectsRes.ok) {
+        const projectsData = await projectsRes.json();
+        setProjects(projectsData.items || []);
+        setTotalProjects(projectsData.total || 0);
+        setTotalPages(Math.ceil((projectsData.total || 0) / pageSize));
+      } else {
+        console.warn('Failed to fetch projects:', projectsRes.status);
+        setProjects([]);
+        setTotalProjects(0);
+        setTotalPages(1);
+      }
+    } catch (error) {
+      console.error('Failed to fetch projects:', error);
+      setError('Failed to load projects. Please check your connection and try again.');
       setProjects([]);
+      setTotalProjects(0);
+      setTotalPages(1);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Fetch all projects for Agent Prompts tab (for client-side filtering and pagination)
+  const fetchAllProjectsForAgentTab = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Fetch all projects - API limits page_size to 100 (le=100)
+      // We'll fetch multiple pages if needed to get all projects
+      let allFetchedProjects: ProjectConfig[] = [];
+      let currentPage = 1;
+      const pageSize = 100; // API maximum
+      let hasMore = true;
+
+      while (hasMore) {
+        const params = new URLSearchParams({
+          page: currentPage.toString(),
+          page_size: pageSize.toString(),
+        });
+
+        const projectsRes = await fetch(`${API_BASE}/api/llm/projects?${params.toString()}`);
+        if (projectsRes.ok) {
+          const projectsData = await projectsRes.json();
+          const fetchedProjects = projectsData.items || [];
+          allFetchedProjects = [...allFetchedProjects, ...fetchedProjects];
+          
+          // Check if there are more pages
+          const totalPages = Math.ceil((projectsData.total || 0) / pageSize);
+          hasMore = currentPage < totalPages;
+          currentPage++;
+        } else {
+          hasMore = false;
+          const errorText = await projectsRes.text();
+          console.error(`Failed to fetch projects for agent tab (${projectsRes.status}):`, errorText);
+          setError(`Failed to load projects (${projectsRes.status}). Please check your connection and try again.`);
+          setAllProjects([]);
+          return;
+        }
+      }
+
+      console.log(`[Agent Prompts] Fetched ${allFetchedProjects.length} projects`);
+      setAllProjects(allFetchedProjects);
+      
+      // If no projects found, log for debugging
+      if (allFetchedProjects.length === 0) {
+        console.warn('[Agent Prompts] No projects found in API response');
+      }
+    } catch (error) {
+      console.error('Failed to fetch projects for agent tab:', error);
+      setError('Failed to load projects. Please check your connection and try again.');
+      setAllProjects([]);
     } finally {
       setLoading(false);
     }
@@ -164,7 +278,7 @@ export default function PromptManagement() {
       if (response.ok) {
         const data = await response.json();
         alert('✅ System prompt saved successfully! Restart services for changes to take effect.');
-        await fetchAllData();
+        await fetchSystemConfig();
       } else {
         let errorMessage = `Failed to save (${response.status}): ${response.statusText}`;
         try {
@@ -202,7 +316,7 @@ export default function PromptManagement() {
       if (response.ok) {
         alert(`✅ Project prompt saved for ${project.clientName}!`);
         setEditingProject(null);
-        await fetchAllData();
+        await fetchProjects();
       } else {
         const error = await response.json();
         alert(`❌ Failed to save: ${error.detail || 'Unknown error'}`);
@@ -239,7 +353,7 @@ export default function PromptManagement() {
       if (response.ok) {
         alert(`✅ ${agentType} prompt saved for ${project.clientName}!`);
         setEditingAgent(null);
-        await fetchAllData();
+        await fetchProjects();
       } else {
         const error = await response.json();
         alert(`❌ Failed to save: ${error.detail || 'Unknown error'}`);
@@ -262,7 +376,7 @@ export default function PromptManagement() {
     field: keyof AgentPrompt,
     value: any
   ) => {
-    setProjects(prev => prev.map(project => {
+    const updateProject = (project: ProjectConfig) => {
       if (project.projectId !== projectId) return project;
       
       const existingAgent = project.agentPrompts.find(ap => ap.agentType === agentType);
@@ -277,7 +391,19 @@ export default function PromptManagement() {
           updatedAgent,
         ],
       };
-    }));
+    };
+
+    setProjects(prev => prev.map(updateProject));
+    setAllProjects(prev => prev.map(updateProject));
+  };
+
+  const fetchAllData = async () => {
+    await fetchSystemConfig();
+    if (activeTab === 'project') {
+      await fetchProjects();
+    } else if (activeTab === 'agent') {
+      await fetchAllProjectsForAgentTab();
+    }
   };
 
   if (loading) {
@@ -362,7 +488,7 @@ export default function PromptManagement() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Project Prompts ({projects.length})
+              Project Prompts ({totalProjects})
             </button>
             <button
               onClick={() => setActiveTab('agent')}
@@ -424,6 +550,20 @@ export default function PromptManagement() {
                   This page is for assigning and managing <strong>Agent Prompts</strong> to existing projects.
                 </p>
               </div>
+
+              {/* Search */}
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder="Search projects by name, ID, or description..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1); // Reset to first page when searching
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
             </Card>
 
             {projects.length === 0 ? (
@@ -438,7 +578,8 @@ export default function PromptManagement() {
                 </Button>
               </Card>
             ) : (
-              projects.map((project) => {
+              <>
+                {projects.map((project) => {
                 const isEditing = editingProject === project.projectId;
 
                 return (
@@ -533,7 +674,107 @@ export default function PromptManagement() {
                     )}
                   </Card>
                 );
-              })
+              })}
+
+                {/* Pagination Controls - Show if more than 10 items */}
+                {totalProjects > 10 && (
+                  <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {/* First Page Button */}
+                        <button
+                          onClick={() => handlePageChange(1)}
+                          disabled={currentPage === 1}
+                          className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                            currentPage === 1
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                          }`}
+                          title="First page"
+                        >
+                          |&lt;&lt;
+                        </button>
+                        
+                        {/* Previous Page Button */}
+                        <button
+                          onClick={() => handlePageChange(currentPage - 1)}
+                          disabled={currentPage === 1}
+                          className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                            currentPage === 1
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                          }`}
+                          title="Previous page"
+                        >
+                          |&lt;
+                        </button>
+                        
+                        {/* Page Number Buttons */}
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum: number;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (currentPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (currentPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = currentPage - 2 + i;
+                            }
+                            
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => handlePageChange(pageNum)}
+                                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                                  currentPage === pageNum
+                                    ? 'bg-purple-600 text-white'
+                                    : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                                }`}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        
+                        {/* Next Page Button */}
+                        <button
+                          onClick={() => handlePageChange(currentPage + 1)}
+                          disabled={currentPage === totalPages}
+                          className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                            currentPage === totalPages
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                          }`}
+                          title="Next page"
+                        >
+                          &gt;|
+                        </button>
+                        
+                        {/* Last Page Button */}
+                        <button
+                          onClick={() => handlePageChange(totalPages)}
+                          disabled={currentPage === totalPages}
+                          className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                            currentPage === totalPages
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                          }`}
+                          title="Last page"
+                        >
+                          &gt;&gt;|
+                        </button>
+                      </div>
+                      
+                      <div className="text-sm text-gray-600">
+                        Page {currentPage} of {totalPages} ({totalProjects} total)
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -541,26 +782,102 @@ export default function PromptManagement() {
         {/* Agent Prompts Tab */}
         {activeTab === 'agent' && (
           <div className="space-y-6">
-            {projects.length === 0 ? (
+            {/* Search Controls */}
+            <Card>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Search Projects
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Search projects by name, ID, or description..."
+                    value={agentProjectSearch}
+                    onChange={(e) => {
+                      setAgentProjectSearch(e.target.value);
+                      setAgentCurrentPage(1); // Reset to first page when search changes
+                    }}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Search Agents
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Search agents by type (e.g., coder, researcher, orchestrator)..."
+                    value={agentSearchQuery}
+                    onChange={(e) => setAgentSearchQuery(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+            </Card>
+
+            {loading && allProjects.length === 0 ? (
+              <Card className="text-center p-12">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+                <p className="text-gray-600 mt-4">Loading projects...</p>
+              </Card>
+            ) : allProjects.length === 0 ? (
               <Card className="text-center p-12">
                 <p className="text-gray-600">Create a project first to configure agent prompts.</p>
               </Card>
             ) : (
-              projects.map((project) => (
+              <>
+                {(() => {
+                  // Filter projects based on search
+                  const filteredProjects = allProjects.filter((project) => {
+                    if (agentProjectSearch.trim()) {
+                      const searchLower = agentProjectSearch.toLowerCase();
+                      return (
+                        project.clientName.toLowerCase().includes(searchLower) ||
+                        project.projectId.toLowerCase().includes(searchLower) ||
+                        (project.description || '').toLowerCase().includes(searchLower)
+                      );
+                    }
+                    return true;
+                  });
+
+                  // Calculate pagination for filtered results
+                  const agentTotalProjects = filteredProjects.length;
+                  const agentTotalPages = Math.ceil(agentTotalProjects / agentPageSize);
+                  
+                  // Slice to get current page
+                  const startIndex = (agentCurrentPage - 1) * agentPageSize;
+                  const endIndex = startIndex + agentPageSize;
+                  const paginatedProjects = filteredProjects.slice(startIndex, endIndex);
+
+                  return (
+                    <>
+                      {paginatedProjects.map((project) => (
                 <Card key={project.projectId}>
                   <h4 className="text-lg font-semibold text-gray-900 mb-4">
                     {project.clientName} ({project.projectId})
                   </h4>
                   
                   <div className="space-y-4">
-                    {agentTypes.map((agent) => {
-                      const agentPrompt = project.agentPrompts.find(ap => ap.agentType === agent.id) || {
-                        agentType: agent.id,
-                        enabled: false,
-                      };
-                      const isEditing = editingAgent?.projectId === project.projectId && editingAgent?.agentType === agent.id;
+                    {agentTypes
+                      .filter((agent) => {
+                        if (agentSearchQuery.trim()) {
+                          const searchLower = agentSearchQuery.toLowerCase();
+                          return (
+                            agent.name.toLowerCase().includes(searchLower) ||
+                            agent.id.toLowerCase().includes(searchLower) ||
+                            agent.description.toLowerCase().includes(searchLower)
+                          );
+                        }
+                        return true;
+                      })
+                      .map((agent) => {
+                        const agentPrompt = project.agentPrompts.find(ap => ap.agentType === agent.id) || {
+                          agentType: agent.id,
+                          enabled: false,
+                        };
+                        const isEditing = editingAgent?.projectId === project.projectId && editingAgent?.agentType === agent.id;
 
-                      return (
+                        return (
                         <div key={agent.id} className="border border-gray-200 rounded-lg p-4">
                           <div className="flex items-start justify-between mb-3">
                             <div>
@@ -629,7 +946,136 @@ export default function PromptManagement() {
                     })}
                   </div>
                 </Card>
-              ))
+                      ))}
+                    </>
+                  );
+                })()}
+
+                {/* Pagination Controls for Agent Prompts Tab */}
+                {(() => {
+                  const filteredProjects = allProjects.filter((project) => {
+                    if (agentProjectSearch.trim()) {
+                      const searchLower = agentProjectSearch.toLowerCase();
+                      return (
+                        project.clientName.toLowerCase().includes(searchLower) ||
+                        project.projectId.toLowerCase().includes(searchLower) ||
+                        (project.description || '').toLowerCase().includes(searchLower)
+                      );
+                    }
+                    return true;
+                  });
+                  const agentTotalProjects = filteredProjects.length;
+                  const agentTotalPages = Math.ceil(agentTotalProjects / agentPageSize);
+
+                  const handleAgentPageChange = (page: number) => {
+                    if (page >= 1 && page <= agentTotalPages) {
+                      setAgentCurrentPage(page);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                  };
+
+                  // Show pagination if more than 10 items
+                  if (agentTotalProjects <= 10) return null;
+
+                  return (
+                    <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {/* First Page Button */}
+                          <button
+                            onClick={() => handleAgentPageChange(1)}
+                            disabled={agentCurrentPage === 1}
+                            className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                              agentCurrentPage === 1
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                            }`}
+                            title="First page"
+                          >
+                            |&lt;&lt;
+                          </button>
+                          
+                          {/* Previous Page Button */}
+                          <button
+                            onClick={() => handleAgentPageChange(agentCurrentPage - 1)}
+                            disabled={agentCurrentPage === 1}
+                            className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                              agentCurrentPage === 1
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                            }`}
+                            title="Previous page"
+                          >
+                            |&lt;
+                          </button>
+                          
+                          {/* Page Number Buttons */}
+                          <div className="flex items-center gap-1">
+                            {Array.from({ length: Math.min(5, agentTotalPages) }, (_, i) => {
+                              let pageNum: number;
+                              if (agentTotalPages <= 5) {
+                                pageNum = i + 1;
+                              } else if (agentCurrentPage <= 3) {
+                                pageNum = i + 1;
+                              } else if (agentCurrentPage >= agentTotalPages - 2) {
+                                pageNum = agentTotalPages - 4 + i;
+                              } else {
+                                pageNum = agentCurrentPage - 2 + i;
+                              }
+                              
+                              return (
+                                <button
+                                  key={pageNum}
+                                  onClick={() => handleAgentPageChange(pageNum)}
+                                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                                    agentCurrentPage === pageNum
+                                      ? 'bg-purple-600 text-white'
+                                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                                  }`}
+                                >
+                                  {pageNum}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* Next Page Button */}
+                          <button
+                            onClick={() => handleAgentPageChange(agentCurrentPage + 1)}
+                            disabled={agentCurrentPage === agentTotalPages}
+                            className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                              agentCurrentPage === agentTotalPages
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                            }`}
+                            title="Next page"
+                          >
+                            &gt;|
+                          </button>
+                          
+                          {/* Last Page Button */}
+                          <button
+                            onClick={() => handleAgentPageChange(agentTotalPages)}
+                            disabled={agentCurrentPage === agentTotalPages}
+                            className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                              agentCurrentPage === agentTotalPages
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                            }`}
+                            title="Last page"
+                          >
+                            &gt;&gt;|
+                          </button>
+                        </div>
+                        
+                        <div className="text-sm text-gray-600">
+                          Page {agentCurrentPage} of {agentTotalPages} ({agentTotalProjects} total)
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </>
             )}
           </div>
         )}

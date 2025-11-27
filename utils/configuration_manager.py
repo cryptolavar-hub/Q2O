@@ -135,15 +135,15 @@ class ConfigurationManager:
         self.use_database = use_database and self._check_database_available()
         
         if self.use_database:
-            logging.info("✅ Using PostgreSQL for configuration (scalable!)")
+            logging.info("[OK] Using PostgreSQL for configuration (scalable!)")
         else:
-            logging.info("ℹ️  Using file-based configuration (fallback)")
+            logging.info("[INFO] Using file-based configuration (fallback)")
         
         # Load configurations
         self.system_config = self._load_system_config()
         self.projects = self._load_projects_config()
         
-        logging.info("✅ ConfigurationManager initialized")
+        logging.info("[OK] ConfigurationManager initialized")
     
     def _check_database_available(self) -> bool:
         """
@@ -208,13 +208,13 @@ class ConfigurationManager:
         return """You are an expert software developer.
 
 Generate production-quality code with:
-✅ Complete type hints (mypy strict mode)
-✅ Comprehensive docstrings (Google style)
-✅ Proper error handling (specific exceptions)
-✅ Input validation (Pydantic where applicable)
-✅ Security best practices
-✅ Structured logging
-✅ Best practices for the technology stack
+[REQ] Complete type hints (mypy strict mode)
+[REQ] Comprehensive docstrings (Google style)
+[REQ] Proper error handling (specific exceptions)
+[REQ] Input validation (Pydantic where applicable)
+[REQ] Security best practices
+[REQ] Structured logging
+[REQ] Best practices for the technology stack
 
 Output ONLY the code - no explanations, no markdown."""
     
@@ -239,7 +239,7 @@ Output ONLY the code - no explanations, no markdown."""
             json.dump(config.to_dict(), f, indent=2)
         
         self.system_config = config
-        logging.info("💾 System configuration saved")
+        logging.info("[SAVED] System configuration saved")
     
     def save_project_config(self, project: ProjectConfig):
         """Save project-level configuration."""
@@ -254,7 +254,7 @@ Output ONLY the code - no explanations, no markdown."""
         with open(self.projects_config_file, 'w') as f:
             json.dump(projects_data, f, indent=2)
         
-        logging.info(f"💾 Project configuration saved: {project.project_name}")
+        logging.info(f"[SAVED] Project configuration saved: {project.project_name}")
     
     def get_llm_provider_for_task(
         self,
@@ -337,21 +337,21 @@ Output ONLY the code - no explanations, no markdown."""
             project_env_key = f"Q2O_LLM_PROMPT_PROJECT_{project_id.upper()}"
             project_prompt_from_env = os.getenv(project_env_key)
             if project_prompt_from_env:
-                custom_instructions.append(f"\n📋 Project-Specific Requirements:\n{project_prompt_from_env}")
+                custom_instructions.append(f"\n[PROJECT] Project-Specific Requirements:\n{project_prompt_from_env}")
         
         # Add project-level customizations from config file
         if project_id and project_id in self.projects:
             project = self.projects[project_id]
             
             if project.llm_config.custom_instructions:
-                custom_instructions.append(f"\n📋 {project.client_name} Requirements:\n{project.llm_config.custom_instructions}")
+                custom_instructions.append(f"\n[PROJECT] {project.client_name} Requirements:\n{project.llm_config.custom_instructions}")
             
             # Add agent-level customizations from project config
             agent_key = agent_type.value
             if agent_key in project.agent_overrides:
                 agent_config = project.agent_overrides[agent_key]
                 if agent_config.custom_instructions:
-                    custom_instructions.append(f"\n🤖 {agent_type.value} Specific:\n{agent_config.custom_instructions}")
+                    custom_instructions.append(f"\n[AGENT] {agent_type.value} Specific:\n{agent_config.custom_instructions}")
         
         # Merge custom instructions into system prompt
         if custom_instructions:
@@ -434,7 +434,7 @@ Generate complete, production-ready implementation."""
         
         self.save_project_config(project)
         
-        logging.info(f"✅ Created project config: {project_name} ({client_name})")
+        logging.info(f"[OK] Created project config: {project_name} ({client_name})")
         
         return project
     
@@ -471,7 +471,7 @@ Generate complete, production-ready implementation."""
         project.agent_overrides[agent_key] = agent_config
         self.save_project_config(project)
         
-        logging.info(f"✅ Set agent override: {project.project_name} / {agent_type.value}")
+        logging.info(f"[OK] Set agent override: {project.project_name} / {agent_type.value}")
     
     def get_project_config(self, project_id: str) -> Optional[ProjectConfig]:
         """Get project configuration by ID."""
@@ -495,7 +495,7 @@ Generate complete, production-ready implementation."""
             with open(self.projects_config_file, 'w') as f:
                 json.dump(projects_data, f, indent=2)
             
-            logging.info(f"🗑️  Deleted project config: {project_id}")
+            logging.info(f"[DELETE] Deleted project config: {project_id}")
             return True
         
         return False
@@ -522,10 +522,14 @@ Generate complete, production-ready implementation."""
         quality = self.get_quality_threshold(project_id)
         
         # Get model for provider
+        # Updated to use current models (Nov 2025):
+        # - Gemini: gemini-2.5-flash (fast) or gemini-3-pro (advanced)
+        # - OpenAI: gpt-4o (latest) or gpt-4-turbo (fallback)
+        # - Anthropic: claude-3-5-sonnet-20250219 (latest) or claude-3-5-sonnet-20241022 (fallback)
         model_map = {
-            "gemini": os.getenv("GEMINI_MODEL", "gemini-1.5-pro"),
-            "openai": os.getenv("OPENAI_MODEL", "gpt-4-turbo"),
-            "anthropic": os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+            "gemini": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            "openai": os.getenv("OPENAI_MODEL", "gpt-4o"),
+            "anthropic": os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20250219")
         }
         
         model = model_map.get(provider, "unknown")
@@ -604,7 +608,7 @@ Generate complete, production-ready implementation."""
                 project = ProjectConfig.from_dict(project_data)
                 self.save_project_config(project)
         
-        logging.info("✅ Configuration imported successfully")
+        logging.info("[OK] Configuration imported successfully")
 
 
 class DynamicBudgetAllocator:
@@ -646,7 +650,7 @@ class DynamicBudgetAllocator:
             self.allocations = {agent: per_agent for agent in common_agents}
             self.allocations["reserve"] = self.total_budget * 0.1
             
-            logging.info("📊 Initial budget allocation (equal split)")
+            logging.info("[BUDGET] Initial budget allocation (equal split)")
             return self.allocations
         
         # Calculate based on usage
@@ -672,7 +676,7 @@ class DynamicBudgetAllocator:
         
         self.allocations["reserve"] = self.total_budget * 0.1
         
-        logging.info(f"📊 Dynamic budget allocation (based on {total_calls} historical calls)")
+        logging.info(f"[BUDGET] Dynamic budget allocation (based on {total_calls} historical calls)")
         return self.allocations
     
     def record_usage(self, agent_type: str, calls: int, cost: float):

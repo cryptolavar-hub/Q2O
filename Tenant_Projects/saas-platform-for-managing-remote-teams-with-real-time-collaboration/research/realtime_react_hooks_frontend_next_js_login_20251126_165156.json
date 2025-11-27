@@ -1,0 +1,38 @@
+{
+  "query": "Frontend: Next.js pages for: Login, Register, Dashboard, Team management, Projects, Tasks, Chat, Video call module (WebRTC), Realtime React Hooks, Reusable component library (Sidebar, Tables, Cards, Modals) DevOps, Docker files, Docker compose template, GitHub Actions CI/CD pipeline, Environment variable blueprint, Production deployment (AWS ECS / Vercel)",
+  "timestamp": "2025-11-25T01:23:06.052484",
+  "depth": "adaptive",
+  "search_results": [],
+  "key_findings": [
+    "\"https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API\",",
+    "\"https://docs.github.com/en/actions\",",
+    "\"https://docs.aws.amazon.com/ecs/\",",
+    "\"https://zustand-demo.pmnd.rs/\",",
+    "\"https://www.npmjs.com/package/react-webcam\"",
+    "\"description\": \"Next.js Login Page Structure (pages/login.js)\",",
+    "\"code\": \"import { useState } from 'react';\\nimport { useRouter } from 'next/router';\\n\\nexport default function LoginPage() {\\n  const [email, setEmail] = useState('');\\n  const [password, setPassword] = useState('');\\n  const [error, setError] = useState(null);\\n  const router = useRouter();\\n\\n  const handleSubmit = async (e) => {\\n    e.preventDefault();\\n    setError(null);\\n    try {\\n      const response = await fetch('/api/auth/login', {\\n        method: 'POST',\\n        headers: { 'Content-Type': 'application/json' },\\n        body: JSON.stringify({ email, password }),\\n      });\\n      const data = await response.json();\\n      if (response.ok) {\\n        // Store token (e.g., in HTTP-only cookie via backend response)\\n        router.push('/dashboard');\\n      } else {\\n        setError(data.message || 'Login failed');\\n      }\\n    } catch (err) {\\n      setError('Network error or server unavailable');\\n    }\\n  };\\n\\n  return (\\n    <div className=\\\"flex min-h-screen items-center justify-center bg-gray-100\\\">\\n      <form onSubmit={handleSubmit} className=\\\"p-8 bg-white rounded shadow-md w-full max-w-sm\\\">\\n        <h2 className=\\\"text-2xl font-bold mb-6 text-center\\\">Login</h2>\\n        {error && <p className=\\\"text-red-500 text-sm mb-4\\\">{error}</p>}\\n        <div className=\\\"mb-4\\\">\\n          <label htmlFor=\\\"email\\\" className=\\\"block text-gray-700 text-sm font-bold mb-2\\\">Email</label>\\n          <input\\n            type=\\\"email\\\"\\n            id=\\\"email\\\"\\n            className=\\\"shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline\\\"\\n            value={email}\\n            onChange={(e) => setEmail(e.target.value)}\\n            required\\n          />\\n        </div>\\n        <div className=\\\"mb-6\\\">\\n          <label htmlFor=\\\"password\\\" className=\\\"block text-gray-700 text-sm font-bold mb-2\\\">Password</label>\\n          <input\\n            type=\\\"password\\\"\\n            id=\\\"password\\\"\\n            className=\\\"shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline\\\"\\n            value={password}\\n            onChange={(e) => setPassword(e.target.value)}\\n            required\\n          />\\n        </div>\\n        <button\\n          type=\\\"submit\\\"\\n          className=\\\"bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full\\\"\\n        >\\n          Sign In\\n        </button>\\n      </form>\\n    </div>\\n  );\\n}\"",
+    "\"description\": \"Reusable Sidebar Component (components/Sidebar.js)\",",
+    "\"code\": \"import Link from 'next/link';\\nimport { useRouter } from 'next/router';\\n\\nexport default function Sidebar({ isOpen, toggleSidebar }) {\\n  const router = useRouter();\\n\\n  const navItems = [\\n    { name: 'Dashboard', href: '/dashboard' },\\n    { name: 'Team', href: '/team' },\\n    { name: 'Projects', href: '/projects' },\\n    { name: 'Tasks', href: '/tasks' },\\n    { name: 'Chat', href: '/chat' },\\n    { name: 'Video Call', href: '/video-call' },\\n  ];\\n\\n  return (\\n    <aside className={`fixed inset-y-0 left-0 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-200 ease-in-out bg-gray-800 text-white w-64 z-30`}>\\n      <div className=\\\"p-4 text-xl font-bold border-b border-gray-700\\\">App Name</div>\\n      <nav className=\\\"mt-4\\\">\\n        <ul>\\n          {navItems.map((item) => (\\n            <li key={item.name}>\\n              <Link href={item.href} className={`block py-2 px-4 hover:bg-gray-700 ${router.pathname === item.href ? 'bg-gray-700 border-l-4 border-blue-500' : ''}`}>\\n                {item.name}\\n              </Link>\\n            </li>\\n          ))}\\n        </ul>\\n      </nav>\\n      {/* Close button for mobile */}\\n      <button\\n        onClick={toggleSidebar}\\n        className=\\\"absolute top-4 right-4 md:hidden text-white focus:outline-none\\\"\\n      >\\n        <svg className=\\\"h-6 w-6\\\" fill=\\\"none\\\" viewBox=\\\"0 0 24 24\\\" stroke=\\\"currentColor\\\">\\n          <path strokeLinecap=\\\"round\\\" strokeLinejoin=\\\"round\\\" strokeWidth={2} d=\\\"M6 18L18 6M6 6l12 12\\\" />\\n        </svg>\\n      </button>\\n    </aside>\\n  );\\n}\"",
+    "\"description\": \"Realtime React Hook for Chat (hooks/useChatWebSocket.js)\","
+  ],
+  "documentation_urls": [
+    "https://www.npmjs.com/package/react-webcam\"",
+    "https://docs.github.com/en/actions\",",
+    "https://swr.vercel.app/\",",
+    "https://docs.aws.amazon.com/ecs/\",",
+    "https://nextjs.org/docs\",",
+    "https://react.dev/learn\",",
+    "https://docs.docker.com/\",",
+    "https://vercel.com/docs\",",
+    "https://zustand-demo.pmnd.rs/\",",
+    "https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API\","
+  ],
+  "code_examples": [],
+  "best_practices": [],
+  "confidence_score": 45,
+  "sources_consulted": [
+    "llm_research_text",
+    "llm_research"
+  ],
+  "cached": true
+}

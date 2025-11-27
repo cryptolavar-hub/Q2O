@@ -18,7 +18,7 @@ from pathlib import Path
 # Set event loop policy BEFORE importing uvicorn or the app
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    print("✓ Windows event loop policy set to SelectorEventLoop")
+    print("[OK] Windows event loop policy set to SelectorEventLoop")
 
 # Get the directory where this script is located
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -26,8 +26,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 def start_ipv4_server(port: int):
     """Start IPv4 server in a separate subprocess."""
     print(f"[IPv4] Starting server on 0.0.0.0:{port}...")
+    # Use wrapper script to ensure event loop policy is set before uvicorn starts
+    wrapper_script = SCRIPT_DIR / "run_uvicorn.py"
     process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", str(port), "--log-level", "info"],
+        [sys.executable, str(wrapper_script), "api.main:app", "--host", "0.0.0.0", "--port", str(port), "--log-level", "info"],
         cwd=SCRIPT_DIR,
         env={**os.environ, "SERVER_TYPE": "IPv4"},
         stdout=subprocess.PIPE,
@@ -40,8 +42,10 @@ def start_ipv4_server(port: int):
 def start_ipv6_server(port: int):
     """Start IPv6 server in a separate subprocess."""
     print(f"[IPv6] Starting server on [::]:{port}...")
+    # Use wrapper script to ensure event loop policy is set before uvicorn starts
+    wrapper_script = SCRIPT_DIR / "run_uvicorn.py"
     process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "api.main:app", "--host", "::", "--port", str(port), "--log-level", "info"],
+        [sys.executable, str(wrapper_script), "api.main:app", "--host", "::", "--port", str(port), "--log-level", "info"],
         cwd=SCRIPT_DIR,
         env={**os.environ, "SERVER_TYPE": "IPv6"},
         stdout=subprocess.PIPE,
@@ -92,7 +96,7 @@ if __name__ == "__main__":
         
         def signal_handler(sig, frame):
             """Handle shutdown signals."""
-            print("\n✓ Shutting down dual-stack servers...")
+            print("\n[OK] Shutting down dual-stack servers...")
             ipv4_process.terminate()
             ipv6_process.terminate()
             try:
@@ -113,7 +117,7 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             signal_handler(None, None)
         except Exception as e:
-            print(f"✗ Error in dual-stack servers: {e}")
+            print(f"[ERROR] Error in dual-stack servers: {e}")
             ipv4_process.terminate()
             ipv6_process.terminate()
             sys.exit(1)

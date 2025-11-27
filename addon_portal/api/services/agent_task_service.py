@@ -258,15 +258,17 @@ async def get_project_tasks(
     project_id: str,
     status: Optional[str] = None,
     agent_type: Optional[str] = None,
+    execution_started_at: Optional[datetime] = None,
 ) -> list[AgentTask]:
     """
-    Get all tasks for a project, optionally filtered by status and agent type.
+    Get all tasks for a project, optionally filtered by status, agent type, and execution_started_at.
     
     Args:
         db: Database session
         project_id: Project ID
         status: Optional status filter
         agent_type: Optional agent type filter
+        execution_started_at: Optional datetime - only get tasks created after this time
     
     Returns:
         List of AgentTask objects
@@ -277,6 +279,13 @@ async def get_project_tasks(
         stmt = stmt.where(AgentTask.status == status)
     if agent_type:
         stmt = stmt.where(AgentTask.agent_type == agent_type)
+    
+    # CRITICAL: Filter by execution_started_at to only get tasks from current run
+    if execution_started_at:
+        # Ensure timezone-aware datetime
+        if execution_started_at.tzinfo is None:
+            execution_started_at = execution_started_at.replace(tzinfo=timezone.utc)
+        stmt = stmt.where(AgentTask.created_at >= execution_started_at)
     
     stmt = stmt.order_by(AgentTask.created_at.desc())
     
@@ -337,10 +346,14 @@ async def calculate_project_progress(
     in_progress_tasks = stats.in_progress or 0
     pending_tasks = stats.pending or 0
     
-    # Calculate completion percentage (capped at 100%)
+    # Calculate completion percentage (percentage of tasks that have finished)
+    # Completion Rate = (Completed + Failed) / Total * 100%
+    # This shows how many tasks have finished (regardless of success/failure)
     if total_tasks > 0:
-        completion_percentage = (completed_tasks / total_tasks) * 100.0
+        finished_tasks = completed_tasks + failed_tasks
+        completion_percentage = (finished_tasks / total_tasks) * 100.0
         completion_percentage = max(0.0, min(100.0, completion_percentage))  # Cap at 100%
+        completion_percentage = round(completion_percentage)  # Round to whole number for clean display
     else:
         completion_percentage = 0.0
     

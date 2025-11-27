@@ -6,7 +6,7 @@ Provides CRUD operations for Tenants, Activation Codes, and Devices
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -71,10 +71,16 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     revoked_devices = sum(1 for d in all_devices if d.is_revoked)
     
     # Count projects
+    # Load all projects (needed for trends calculation based on created_at)
     result = await db.execute(select(LLMProjectConfig))
     all_projects = result.scalars().all()
     total_projects = len(all_projects)
-    active_projects = sum(1 for p in all_projects if p.is_active == True)
+    
+    # Active projects: 
+    # - is_active is True (explicitly active)
+    # - is_active is NULL (default is True, so NULL counts as active)
+    # - OR project_status is 'active' (status-based active, even if is_active is False)
+    active_projects = sum(1 for p in all_projects if (p.is_active is not False) or (p.project_status == 'active'))
     
     # Count tenants (eagerly load subscriptions to avoid lazy loading issues)
     result = await db.execute(
@@ -207,22 +213,22 @@ async def get_recent_activities(
     
     # Map event types to icons and backdrops (using string values since event_type/severity are now strings)
     event_icons = {
-        EventType.TENANT_CREATED.value: "👥",
-        EventType.TENANT_UPDATED.value: "✏️",
-        EventType.TENANT_DELETED.value: "🗑️",
-        EventType.PROJECT_CREATED.value: "🚀",
-        EventType.PROJECT_UPDATED.value: "📝",
-        EventType.PROJECT_DELETED.value: "❌",
-        EventType.CODE_GENERATED.value: "🔑",
-        EventType.CODE_REVOKED.value: "🔒",
-        EventType.CODE_ACTIVATED.value: "✅",
-        EventType.DEVICE_ENROLLED.value: "📱",
-        EventType.DEVICE_REVOKED.value: "🚫",
-        EventType.USER_LOGIN.value: "🔐",
-        EventType.USER_LOGOUT.value: "👋",
-        EventType.SESSION_CREATED.value: "🎫",
-        EventType.SESSION_EXPIRED.value: "⏰",
-        EventType.CONFIG_UPDATED.value: "⚙️",
+        EventType.TENANT_CREATED.value: "[TENANT]",
+        EventType.TENANT_UPDATED.value: "[EDIT]",
+        EventType.TENANT_DELETED.value: "[DELETE]",
+        EventType.PROJECT_CREATED.value: "[PROJECT]",
+        EventType.PROJECT_UPDATED.value: "[UPDATE]",
+        EventType.PROJECT_DELETED.value: "[REMOVE]",
+        EventType.CODE_GENERATED.value: "[CODE]",
+        EventType.CODE_REVOKED.value: "[REVOKE]",
+        EventType.CODE_ACTIVATED.value: "[ACTIVE]",
+        EventType.DEVICE_ENROLLED.value: "[DEVICE]",
+        EventType.DEVICE_REVOKED.value: "[BLOCK]",
+        EventType.USER_LOGIN.value: "[LOGIN]",
+        EventType.USER_LOGOUT.value: "[LOGOUT]",
+        EventType.SESSION_CREATED.value: "[SESSION]",
+        EventType.SESSION_EXPIRED.value: "[EXPIRED]",
+        EventType.CONFIG_UPDATED.value: "[CONFIG]",
     }
     
     event_backdrops = {
@@ -251,7 +257,7 @@ async def get_recent_activities(
     activities = []
     for event in events:
         # event.event_type and event.severity are now strings, not enums
-        icon = event_icons.get(event.event_type, "📋")
+        icon = event_icons.get(event.event_type, "[EVENT]")
         backdrop = event_backdrops.get(event.severity, {}).get(event.event_type, "bg-gray-100 text-gray-600")
         
         # Get tenant name from relationship or metadata
@@ -1037,14 +1043,18 @@ async def delete_code(code_id: int, db: AsyncSession = Depends(get_db)):
 async def get_all_devices(
     db: AsyncSession = Depends(get_db),
     tenant_slug: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100)
 ):
-    """Get all devices with optional filtering."""
+    """Get all devices with optional filtering and pagination."""
     
     base_stmt = select(Device).join(Tenant)
+    count_stmt = select(func.count()).select_from(Device).join(Tenant)
     
     if tenant_slug:
         base_stmt = base_stmt.where(Tenant.slug == tenant_slug)
+        count_stmt = count_stmt.where(Tenant.slug == tenant_slug)
     
     if search:
         search_pattern = f"%{search}%"
@@ -1053,6 +1063,19 @@ async def get_all_devices(
             (Device.hw_fingerprint.ilike(search_pattern)) |
             (Tenant.name.ilike(search_pattern))
         )
+        count_stmt = count_stmt.where(
+            (Device.label.ilike(search_pattern)) |
+            (Device.hw_fingerprint.ilike(search_pattern)) |
+            (Tenant.name.ilike(search_pattern))
+        )
+    
+    # Get total count
+    total_result = await db.execute(count_stmt)
+    total = total_result.scalar() or 0
+    
+    # Apply pagination
+    offset = (page - 1) * page_size
+    base_stmt = base_stmt.offset(offset).limit(page_size)
     
     result = await db.execute(base_stmt)
     devices = result.scalars().all()
@@ -1071,7 +1094,7 @@ async def get_all_devices(
             "isRevoked": device.is_revoked
         })
     
-    return {"devices": result, "total": len(result)}
+    return {"devices": result, "total": total}
 
 
 @router.delete("/devices/{device_id}")

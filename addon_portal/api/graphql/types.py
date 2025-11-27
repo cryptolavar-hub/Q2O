@@ -4,9 +4,13 @@ GraphQL Types for Q2O Multi-Agent Dashboard
 Strongly-typed schema definitions for all entities exposed via GraphQL.
 """
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 import strawberry
+from sqlalchemy.ext.asyncio import AsyncSession
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -144,23 +148,126 @@ class Project:
         status: Optional[TaskStatus] = None,
         limit: int = 50
     ) -> List[Task]:
-        """Get project tasks (filtered, batched)"""
-        loader = getattr(info.context, "tasks_by_project_loader", None) if info.context else None
-        if loader:
-            all_tasks = await loader.load(self.id)
-            # Filter by status if provided
-            if status:
-                all_tasks = [t for t in all_tasks if t.status == status]
-            return all_tasks[:limit]
-        return []
+        """
+        Get project tasks (filtered, batched).
+        
+        For COMPLETED status: Only returns tasks with completed_at set, sorted chronologically (oldest first).
+        This ensures the Task Timeline shows tasks in the order they were completed.
+        """
+        db: AsyncSession = getattr(info.context, 'db', None) if info.context else None
+        if not db:
+            logger.warning("No database session available for project.tasks query")
+            return []
+        
+        from ..models.agent_tasks import AgentTask
+        from sqlalchemy import select, and_
+        
+        # Build query for this project
+        stmt = select(AgentTask).where(AgentTask.project_id == self.id)
+        
+        # Apply status filter
+        if status:
+            if status == TaskStatus.COMPLETED:
+                # For completed tasks: only return tasks with completed_at set
+                stmt = stmt.where(
+                    and_(
+                        AgentTask.status == 'completed',
+                        AgentTask.completed_at.isnot(None)
+                    )
+                )
+                # Sort by completed_at ascending (oldest first for timeline)
+                stmt = stmt.order_by(AgentTask.completed_at.asc())
+            elif status == TaskStatus.IN_PROGRESS:
+                stmt = stmt.where(AgentTask.status.in_(['started', 'running']))
+                stmt = stmt.order_by(AgentTask.created_at.desc())
+            elif status == TaskStatus.FAILED:
+                stmt = stmt.where(AgentTask.status == 'failed')
+                stmt = stmt.order_by(AgentTask.created_at.desc())
+            elif status == TaskStatus.PENDING:
+                stmt = stmt.where(AgentTask.status == 'pending')
+                stmt = stmt.order_by(AgentTask.created_at.desc())
+        else:
+            # No status filter: return all tasks, sorted by created_at
+            stmt = stmt.order_by(AgentTask.created_at.desc())
+        
+        stmt = stmt.limit(limit)
+        
+        result = await db.execute(stmt)
+        db_tasks = result.scalars().all()
+        
+        # Convert to GraphQL Task objects
+        tasks = []
+        for db_task in db_tasks:
+            # Map agent_type to AgentType enum
+            try:
+                agent_type_str = db_task.agent_type.upper()
+                agent_type = AgentType[agent_type_str] if agent_type_str in [e.name for e in AgentType] else AgentType.CODER
+            except (KeyError, AttributeError):
+                agent_type = AgentType.CODER
+            
+            # Map status
+            status_map = {
+                'pending': TaskStatus.PENDING,
+                'started': TaskStatus.IN_PROGRESS,
+                'running': TaskStatus.IN_PROGRESS,
+                'completed': TaskStatus.COMPLETED,
+                'failed': TaskStatus.FAILED,
+                'cancelled': TaskStatus.CANCELLED,
+            }
+            task_status = status_map.get(db_task.status, TaskStatus.PENDING)
+            
+            # Ensure timezone-aware datetimes
+            created_at = db_task.created_at
+            if created_at and created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            
+            started_at = db_task.started_at
+            if started_at and started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
+            
+            completed_at = db_task.completed_at
+            if completed_at and completed_at.tzinfo is None:
+                completed_at = completed_at.replace(tzinfo=timezone.utc)
+            
+            tasks.append(Task(
+                id=db_task.task_id,
+                project_id=db_task.project_id,
+                agent_type=agent_type,
+                title=db_task.task_name,
+                description=db_task.task_description or "",
+                status=task_status,
+                priority=db_task.priority,
+                created_at=created_at,
+                started_at=started_at,
+                completed_at=completed_at,
+                error_message=db_task.error_message
+            ))
+        
+        return tasks
     
     @strawberry.field
     def success_rate(self) -> float:
-        """Calculate project success rate (capped at 100%)"""
-        if self.total_tasks == 0:
-            return 0.0
-        rate = (self.completed_tasks / self.total_tasks) * 100.0
-        return max(0.0, min(100.0, rate))  # Cap at 100%
+        """
+        Calculate project success rate based on finished tasks only.
+        
+        Success Rate = (Completed Tasks) / (Completed + Failed Tasks) * 100%
+        
+        This shows the percentage of finished tasks that succeeded.
+        Only counts tasks that have finished (completed or failed), not pending/in_progress.
+        
+        Examples:
+        - 50 completed, 3 failed, 28 active, 19 pending
+          Success Rate = 50 / (50 + 3) = 94.3%
+        - 100 completed, 0 failed
+          Success Rate = 100 / (100 + 0) = 100%
+        - 0 completed, 10 failed
+          Success Rate = 0 / (0 + 10) = 0%
+        """
+        finished_tasks = self.completed_tasks + self.failed_tasks
+        if finished_tasks == 0:
+            return 0.0  # No finished tasks = 0% success rate
+        rate = (self.completed_tasks / finished_tasks) * 100.0
+        return max(0.0, min(100.0, rate))  # Cap between 0% and 100%
 
 
 @strawberry.type

@@ -41,6 +41,7 @@ export default function EditProjectPage() {
     try {
       setLoading(true);
       setError(null);
+      setProject(null);  // Clear project state before fetching
       const data = await getProject(projectId);
       setProject(data);
       // Ensure all fields are populated correctly from the mapped data
@@ -53,9 +54,18 @@ export default function EditProjectPage() {
         objectives: data.objectives || '',  // This is mapped from custom_instructions
         status: data.status,
       });
+      setError(null);  // Clear any previous errors on success
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load project';
       setError(errorMessage);
+      setProject(null);  // Clear project state on error
+      setFormData({  // Clear form data on error
+        name: '',
+        client_name: '',
+        description: '',
+        objectives: '',
+        status: 'pending',
+      });
       
       // If session expired, logout
       if (errorMessage.includes('Session expired')) {
@@ -173,6 +183,9 @@ export default function EditProjectPage() {
               {error && (
                 <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-red-700 font-medium">{error}</p>
+                  <p className="text-red-600 text-sm mt-2">
+                    If this project exists, please check your session and try refreshing the page.
+                  </p>
                 </div>
               )}
 

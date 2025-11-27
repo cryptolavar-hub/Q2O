@@ -7,10 +7,18 @@ import os
 import re
 import time
 import logging
+import asyncio
 from typing import Dict, List, Set, Optional
 from urllib.parse import urljoin, urlparse
-import requests
 from bs4 import BeautifulSoup
+
+# Try to import httpx for async HTTP, fallback to requests if not available
+try:
+    import httpx
+    HTTPX_AVAILABLE = True
+except ImportError:
+    import requests
+    HTTPX_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +134,8 @@ class RecursiveResearcher:
                     endpoints = self._extract_api_endpoints(content)
                     research_data['api_endpoints'].extend(endpoints)
                 
-                # Rate limiting
+                # Rate limiting (sync context, so use time.sleep)
+                # Note: If this method becomes async, change to await asyncio.sleep(0.5)
                 time.sleep(0.5)
         
         logger.info(f"Recursive research complete: {research_data['total_pages_scraped']} pages scraped, "
@@ -179,9 +188,9 @@ class RecursiveResearcher:
         
         return [result for score, result in scored_results[:limit]]
     
-    def _scrape_page(self, url: str) -> Optional[Dict]:
+    async def _scrape_page_async(self, url: str) -> Optional[Dict]:
         """
-        Scrape a single page.
+        Scrape a single page asynchronously.
         
         Args:
             url: URL to scrape
@@ -195,12 +204,22 @@ class RecursiveResearcher:
         self.visited_urls.add(url)
         
         try:
-            response = requests.get(url, timeout=self.request_timeout, headers={
-                'User-Agent': 'Mozilla/5.0 (compatible; Quick2OdooBot/1.0; +https://github.com/cryptolavar-hub/Q2O)'
-            })
-            response.raise_for_status()
+            if HTTPX_AVAILABLE:
+                async with httpx.AsyncClient(timeout=self.request_timeout) as client:
+                    response = await client.get(url, headers={
+                        'User-Agent': 'Mozilla/5.0 (compatible; Quick2OdooBot/1.0; +https://github.com/cryptolavar-hub/Q2O)'
+                    })
+                    response.raise_for_status()
+                    content = response.text
+            else:
+                # Fallback to sync requests if httpx not available
+                response = requests.get(url, timeout=self.request_timeout, headers={
+                    'User-Agent': 'Mozilla/5.0 (compatible; Quick2OdooBot/1.0; +https://github.com/cryptolavar-hub/Q2O)'
+                })
+                response.raise_for_status()
+                content = response.text
             
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(content, 'html.parser')
             
             # Remove script and style elements
             for element in soup(['script', 'style', 'nav', 'footer', 'header']):
@@ -216,6 +235,28 @@ class RecursiveResearcher:
                 'html': str(soup),
                 'links': [a.get('href') for a in soup.find_all('a', href=True)]
             }
+        except Exception as e:
+            logger.warning(f"Error scraping {url}: {e}")
+            return None
+    
+    def _scrape_page(self, url: str) -> Optional[Dict]:
+        """
+        Scrape a single page (sync wrapper).
+        
+        Args:
+            url: URL to scrape
+            
+        Returns:
+            Dictionary with page content and metadata
+        """
+        try:
+            return asyncio.run(self._scrape_page_async(url))
+        except RuntimeError:
+            # If event loop is already running, create a new one in a thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self._scrape_page_async(url))
+                return future.result(timeout=self.request_timeout + 5)
             
         except Exception as e:
             logger.warning(f"Could not scrape {url}: {e}")

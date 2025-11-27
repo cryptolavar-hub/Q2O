@@ -179,7 +179,7 @@ class MigrationOrchestrator:
                     "timestamp": datetime.now().isoformat()
                 })
         
-        logger.info(f"✓ {entity_type}: {success_count} succeeded, {fail_count} failed")
+        logger.info(f"[OK] {entity_type}: {success_count} succeeded, {fail_count} failed")
         
         self.migration_log.append({
             "entity_type": entity_type,

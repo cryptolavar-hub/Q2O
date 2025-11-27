@@ -2,8 +2,13 @@
 """Update DB_DSN in .env to use existing 'q2o' database."""
 
 from pathlib import Path
+import sys
 
-ENV_PATH = Path(r'C:\Q2O_Combined\.env')
+# Add utils to path
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'utils'))
+from project_root import get_env_file_path
+
+ENV_PATH = get_env_file_path()
 NEW_DSN = 'DB_DSN=postgresql+psycopg://q2o_user:Q2OPostgres2025(@localhost:5432/q2o'
 
 print('=' * 60)

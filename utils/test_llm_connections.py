@@ -27,7 +27,7 @@ for module, package in DEPENDENCIES.items():
         missing_deps.append(package)
 
 if missing_deps:
-    print("❌ Missing dependencies:")
+    print("[ERROR] Missing dependencies:")
     for dep in missing_deps:
         print(f"   pip install {dep}")
     print()
@@ -46,11 +46,11 @@ async def test_gemini():
     api_key = os.getenv("GOOGLE_API_KEY")
     
     if not api_key:
-        print("❌ GOOGLE_API_KEY not set in .env")
+        print("[ERROR] GOOGLE_API_KEY not set in .env")
         return False
     
     if not api_key.startswith("AIzaSy"):
-        print("⚠️  API key doesn't start with 'AIzaSy' - might be invalid")
+        print("[WARNING] API key doesn't start with 'AIzaSy' - might be invalid")
     
     try:
         genai.configure(api_key=api_key)
@@ -61,7 +61,7 @@ async def test_gemini():
             "Say 'Gemini API working!' if you can read this."
         )
         
-        print(f"✅ Connection successful!")
+        print(f"[OK] Connection successful!")
         print(f"   Response: {response.text}")
         print(f"   Tokens: {response.usage_metadata.prompt_token_count} input, "
               f"{response.usage_metadata.candidates_token_count} output")
@@ -75,7 +75,7 @@ async def test_gemini():
         return True
         
     except Exception as e:
-        print(f"❌ Connection failed: {e}")
+        print(f"[ERROR] Connection failed: {e}")
         return False
 
 
@@ -87,11 +87,11 @@ async def test_openai():
     api_key = os.getenv("OPENAI_API_KEY")
     
     if not api_key:
-        print("❌ OPENAI_API_KEY not set in .env")
+        print("[ERROR] OPENAI_API_KEY not set in .env")
         return False
     
     if not api_key.startswith("sk-"):
-        print("⚠️  API key doesn't start with 'sk-' - might be invalid")
+        print("[WARNING] API key doesn't start with 'sk-' - might be invalid")
     
     try:
         client = openai.OpenAI(api_key=api_key)
@@ -106,7 +106,7 @@ async def test_openai():
             max_tokens=20
         )
         
-        print(f"✅ Connection successful!")
+        print(f"[OK] Connection successful!")
         print(f"   Response: {response.choices[0].message.content}")
         print(f"   Model: {response.model}")
         print(f"   Tokens: {response.usage.prompt_tokens} input, "
@@ -121,7 +121,7 @@ async def test_openai():
         return True
         
     except Exception as e:
-        print(f"❌ Connection failed: {e}")
+        print(f"[ERROR] Connection failed: {e}")
         return False
 
 
@@ -133,11 +133,11 @@ async def test_anthropic():
     api_key = os.getenv("ANTHROPIC_API_KEY")
     
     if not api_key:
-        print("⚠️  ANTHROPIC_API_KEY not set in .env (optional)")
+        print("[WARNING] ANTHROPIC_API_KEY not set in .env (optional)")
         return None  # Not required
     
     if not api_key.startswith("sk-ant-"):
-        print("⚠️  API key doesn't start with 'sk-ant-' - might be invalid")
+        print("[WARNING] API key doesn't start with 'sk-ant-' - might be invalid")
     
     try:
         client = Anthropic(api_key=api_key)
@@ -152,7 +152,7 @@ async def test_anthropic():
             }]
         )
         
-        print(f"✅ Connection successful!")
+        print(f"[OK] Connection successful!")
         print(f"   Response: {response.content[0].text}")
         print(f"   Model: {response.model}")
         print(f"   Tokens: {response.usage.input_tokens} input, "
@@ -161,7 +161,7 @@ async def test_anthropic():
         return True
         
     except Exception as e:
-        print(f"⚠️  Connection failed: {e} (optional provider)")
+        print(f"[WARNING] Connection failed: {e} (optional provider)")
         return None
 
 
@@ -186,17 +186,17 @@ async def main():
     openai_ok = results[1] if not isinstance(results[1], Exception) else False
     claude_ok = results[2] if not isinstance(results[2], Exception) else None
     
-    print(f"\n✅ Gemini 1.5 Pro: {'READY' if gemini_ok else 'NOT CONFIGURED'}")
-    print(f"✅ OpenAI GPT-4:   {'READY' if openai_ok else 'NOT CONFIGURED'}")
-    print(f"{'✅' if claude_ok else '⚠️ '} Anthropic Claude: {'READY' if claude_ok else 'NOT CONFIGURED (optional)'}")
+    print(f"\n[OK] Gemini 1.5 Pro: {'READY' if gemini_ok else 'NOT CONFIGURED'}")
+    print(f"[OK] OpenAI GPT-4:   {'READY' if openai_ok else 'NOT CONFIGURED'}")
+    print(f"{'[OK]' if claude_ok else '[WARNING]'} Anthropic Claude: {'READY' if claude_ok else 'NOT CONFIGURED (optional)'}")
     
     print()
     
     if gemini_ok and openai_ok:
-        print("🎉 ALL REQUIRED PROVIDERS READY!")
+        print("[SUCCESS] ALL REQUIRED PROVIDERS READY!")
         print()
-        print("✅ Gemini configured (Primary - 87% cheaper)")
-        print("✅ OpenAI configured (Fallback - Premium quality)")
+        print("[OK] Gemini configured (Primary - 87% cheaper)")
+        print("[OK] OpenAI configured (Fallback - Premium quality)")
         print()
         print("Next steps:")
         print("  1. Review configuration in env.llm.example.txt")
@@ -206,17 +206,17 @@ async def main():
         return 0
     
     elif gemini_ok:
-        print("⚠️  Partial Configuration")
+        print("[WARNING] Partial Configuration")
         print()
-        print("✅ Gemini configured (works alone, but no fallback)")
-        print("❌ OpenAI not configured (fallback won't work)")
+        print("[OK] Gemini configured (works alone, but no fallback)")
+        print("[ERROR] OpenAI not configured (fallback won't work)")
         print()
         print("Recommendation: Configure OpenAI for production reliability")
         print()
         return 1
     
     else:
-        print("❌ PROVIDERS NOT CONFIGURED")
+        print("[ERROR] PROVIDERS NOT CONFIGURED")
         print()
         print("Required API keys missing. Please:")
         print("  1. Get Gemini key: https://makersuite.google.com/app/apikey")

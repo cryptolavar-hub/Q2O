@@ -18,8 +18,8 @@ try:
     with engine.connect() as conn:
         result = conn.execute(text('SELECT COUNT(*) FROM tenants'))
         tenant_count = result.scalar()
-        print(f'✓ Connected successfully')
-        print(f'✓ Tenants in database: {tenant_count}')
+        print(f'[OK] Connected successfully')
+        print(f'[OK] Tenants in database: {tenant_count}')
         print()
         
         # Test tenant query with relationships
@@ -34,40 +34,40 @@ try:
         '''))
         rows = result.fetchall()
         if rows:
-            print(f'✓ Tenant query with relationships works: {len(rows)} rows')
+            print(f'[OK] Tenant query with relationships works: {len(rows)} rows')
             for row in rows[:3]:
                 print(f'  - {row[1]} ({row[2]}) - Email: {row[3] or "N/A"}')
         else:
-            print('⚠ No tenants found (this is OK if database is empty)')
+            print('[WARNING] No tenants found (this is OK if database is empty)')
         print()
         
         # Check platform_events table
         print('Checking platform_events table...')
         result = conn.execute(text('SELECT COUNT(*) FROM platform_events'))
         events_count = result.scalar()
-        print(f'✓ platform_events table accessible: {events_count} events')
+        print(f'[OK] platform_events table accessible: {events_count} events')
         print()
         
         # Check llm_project_config table
         print('Checking llm_project_config table...')
         result = conn.execute(text('SELECT COUNT(*) FROM llm_project_config'))
         projects_count = result.scalar()
-        print(f'✓ llm_project_config table accessible: {projects_count} projects')
+        print(f'[OK] llm_project_config table accessible: {projects_count} projects')
         print()
         
         # Check activation_codes table
         print('Checking activation_codes table...')
         result = conn.execute(text('SELECT COUNT(*) FROM activation_codes'))
         codes_count = result.scalar()
-        print(f'✓ activation_codes table accessible: {codes_count} codes')
+        print(f'[OK] activation_codes table accessible: {codes_count} codes')
         print()
         
     print('=' * 60)
-    print('✓ All database checks passed!')
+    print('[OK] All database checks passed!')
     print('=' * 60)
     
 except Exception as e:
-    print(f'✗ Error: {e}')
+    print(f'[ERROR] Error: {e}')
     import traceback
     traceback.print_exc()
 

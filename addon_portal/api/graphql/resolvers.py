@@ -380,6 +380,17 @@ class Query:
         failed_tasks = task_stats["failed_tasks"]
         completion_percentage = task_stats["completion_percentage"]
         
+        # CRITICAL: Check if all tasks are done and update project status automatically
+        if db_project.execution_status == 'running' and total_tasks > 0:
+            from ..services.project_execution_service import check_and_update_project_completion
+            try:
+                # This will automatically mark project as completed/failed if all tasks are done
+                await check_and_update_project_completion(id)
+                # Refresh project data after potential status update
+                await db.refresh(db_project)
+            except Exception as e:
+                logger.warning(f"Failed to check project completion for {id}: {e}")
+        
         logger.info(
             f"Project {id} task stats: total={total_tasks}, completed={completed_tasks}, "
             f"failed={failed_tasks}, completion={completion_percentage}%"
@@ -395,43 +406,85 @@ class Query:
                 completion_percentage = 0.0
             else:
                 completion_percentage = 0.0
+        else:
+            # Round completion percentage to whole number for clean display
+            completion_percentage = round(completion_percentage)
         
-        # Map agent_configs to Agent objects with REAL task statistics
+        # Get agents from BOTH agent_configs AND actual task activity
+        # This ensures we show all agents that are working, not just configured ones
         agents = []
+        
+        # Get task counts per agent type from actual tasks
+        agent_task_counts = {}
+        agent_types_seen = set()
+        
+        if total_tasks > 0:
+            agent_tasks = await get_project_tasks(db, id, execution_started_at=execution_started_at)
+            for task in agent_tasks:
+                agent_type = task.agent_type
+                agent_types_seen.add(agent_type)  # Track which agent types have tasks
+                
+                if agent_type not in agent_task_counts:
+                    agent_task_counts[agent_type] = {"completed": 0, "failed": 0, "running": None, "last_activity": None}
+                
+                if task.status == 'completed':
+                    agent_task_counts[agent_type]["completed"] += 1
+                elif task.status == 'failed':
+                    agent_task_counts[agent_type]["failed"] += 1
+                elif task.status in ('started', 'running') and not agent_task_counts[agent_type]["running"]:
+                    agent_task_counts[agent_type]["running"] = task.task_id
+                
+                # Track last activity (most recent task update)
+                # AgentTask doesn't have updated_at, use completed_at, started_at, or created_at
+                last_activity = None
+                if task.completed_at:
+                    last_activity = task.completed_at
+                elif task.started_at:
+                    last_activity = task.started_at
+                elif task.created_at:
+                    last_activity = task.created_at
+                
+                if last_activity:
+                    if not agent_task_counts[agent_type]["last_activity"] or last_activity > agent_task_counts[agent_type]["last_activity"]:
+                        agent_task_counts[agent_type]["last_activity"] = last_activity
+        
+        # Create agents from agent_configs (if they exist)
+        agent_configs_by_type = {}
         if db_project.agent_configs:
-            # Get task counts per agent type
-            agent_task_counts = {}
-            if total_tasks > 0:
-                agent_tasks = await get_project_tasks(db, id)
-                for task in agent_tasks:
-                    agent_type = task.agent_type
-                    if agent_type not in agent_task_counts:
-                        agent_task_counts[agent_type] = {"completed": 0, "failed": 0, "running": None}
-                    if task.status == 'completed':
-                        agent_task_counts[agent_type]["completed"] += 1
-                    elif task.status == 'failed':
-                        agent_task_counts[agent_type]["failed"] += 1
-                    elif task.status in ('started', 'running') and not agent_task_counts[agent_type]["running"]:
-                        agent_task_counts[agent_type]["running"] = task.task_id
-            
             for agent_config in db_project.agent_configs:
+                agent_configs_by_type[agent_config.agent_type] = agent_config
+        
+        # Create agents from BOTH agent_configs AND actual task activity
+        # This ensures we show all agents that are working, even if not in agent_configs
+        all_agent_types = set(agent_types_seen)
+        if agent_configs_by_type:
+            all_agent_types.update(agent_configs_by_type.keys())
+        
+        for agent_type_str in all_agent_types:
                 try:
                     # Map agent_type string to AgentType enum
-                    agent_type_str = agent_config.agent_type.upper()
-                    agent_type = AgentType[agent_type_str] if agent_type_str in [e.name for e in AgentType] else AgentType.CODER
+                    agent_type_upper = agent_type_str.upper()
+                    agent_type = AgentType[agent_type_upper] if agent_type_upper in [e.name for e in AgentType] else AgentType.CODER
                 except (KeyError, AttributeError):
                     agent_type = AgentType.CODER
                 
                 # Get real task statistics for this agent
-                agent_stats = agent_task_counts.get(agent_config.agent_type, {"completed": 0, "failed": 0, "running": None})
+                agent_stats = agent_task_counts.get(agent_type_str, {"completed": 0, "failed": 0, "running": None, "last_activity": None})
                 tasks_completed = agent_stats["completed"]
                 tasks_failed = agent_stats["failed"]
                 current_task_id = agent_stats["running"]
+                last_activity = agent_stats["last_activity"]
                 
-                # Agent is "active" if project is running AND agent is enabled AND has active tasks
+                # Get agent config if it exists
+                agent_config = agent_configs_by_type.get(agent_type_str)
+                
+                # Agent is "active" if:
+                # 1. Project is running AND
+                # 2. (Agent is enabled in config OR no config exists) AND
+                # 3. Has active/running tasks
                 agent_status = "active" if (
                     db_project.execution_status == 'running' 
-                    and agent_config.enabled 
+                    and (agent_config is None or agent_config.enabled)
                     and current_task_id is not None
                 ) else "idle"
                 
@@ -444,16 +497,27 @@ class Query:
                 else:
                     health_score = 0.0
                 
+                # Use last_activity from tasks, or fallback to agent_config, or current time
+                if not last_activity:
+                    if agent_config:
+                        last_activity = agent_config.updated_at or agent_config.created_at
+                    if not last_activity:
+                        last_activity = datetime.now(timezone.utc)
+                
+                # Ensure timezone-aware
+                if last_activity.tzinfo is None:
+                    last_activity = last_activity.replace(tzinfo=timezone.utc)
+                
                 agents.append(Agent(
-                    id=f"{db_project.project_id}-{agent_config.agent_type}",
+                    id=f"{db_project.project_id}-{agent_type_str}",
                     type=agent_type,
-                    name=f"{agent_config.agent_type.title()} Agent",
+                    name=f"{agent_type_str.title()} Agent",
                     status=agent_status,
                     health_score=health_score,
                     tasks_completed=tasks_completed,
                     tasks_failed=tasks_failed,
                     current_task_id=current_task_id,
-                    last_activity=agent_config.updated_at or agent_config.created_at or datetime.now(timezone.utc)
+                    last_activity=last_activity
                 ))
         
         # Calculate estimated time remaining based on REAL task data
@@ -583,18 +647,20 @@ class Query:
         )
         completed_tasks_today = result.scalar() or 0
         
-        # Calculate average success rate
+        # Calculate average success rate (based on finished tasks only)
+        # Success Rate = Completed / (Completed + Failed) * 100%
         from sqlalchemy import case
         result = await db.execute(
             select(
-                func.count(AgentTask.id).label('total'),
-                func.sum(case((AgentTask.status == 'completed', 1), else_=0)).label('completed')
+                func.sum(case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
+                func.sum(case((AgentTask.status == 'failed', 1), else_=0)).label('failed')
             )
         )
         stats = result.first()
-        total_completed = stats.total or 0
         completed = stats.completed or 0
-        average_success_rate = (completed / total_completed * 100.0) if total_completed > 0 else 0.0
+        failed = stats.failed or 0
+        finished_tasks = completed + failed
+        average_success_rate = round((completed / finished_tasks * 100.0) if finished_tasks > 0 else 0.0)
         
         # Find most active agent type
         result = await db.execute(
@@ -750,25 +816,27 @@ class Query:
         )
         avg_duration = result.scalar() or 0.0
         
-        # System health score (based on success rate)
+        # System health score (based on success rate of finished tasks)
+        # Success Rate = Completed / (Completed + Failed) * 100%
+        # Only counts tasks that have finished, not pending/in_progress
         from sqlalchemy import case
         result = await db.execute(
             select(
-                func.count(AgentTask.id).label('total'),
                 func.sum(case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
                 func.sum(case((AgentTask.status == 'failed', 1), else_=0)).label('failed')
             )
         )
         stats = result.first()
-        total = stats.total or 0
         completed = stats.completed or 0
         failed = stats.failed or 0
+        finished_tasks = completed + failed
         
-        if total > 0:
-            system_health_score = ((completed - failed * 0.5) / total) * 100.0
+        if finished_tasks > 0:
+            # Success rate: percentage of finished tasks that succeeded
+            system_health_score = (completed / finished_tasks) * 100.0
             system_health_score = max(0.0, min(100.0, system_health_score))
         else:
-            system_health_score = 100.0  # No tasks = healthy
+            system_health_score = 100.0  # No finished tasks = healthy (nothing to judge)
         
         # System resource usage (from psutil)
         try:
@@ -1000,26 +1068,16 @@ class Subscription:
         """
         logger.info(f"New subscription: system_metrics_stream (interval: {interval_seconds}s, project_id: {project_id})")
         
-        db: AsyncSession = getattr(info.context, 'db', None) if info.context else None
+        # Get tenant_id from context (we'll create a new session for each iteration)
         tenant_id = getattr(info.context, 'tenant_id', None) if info.context else None
         
-        if not db:
-            logger.warning("No database session available for system_metrics_stream")
-            while True:
-                yield SystemMetrics(
-                    timestamp=datetime.now(timezone.utc),
-                    active_agents=0,
-                    active_tasks=0,
-                    tasks_completed_today=0,
-                    tasks_failed_today=0,
-                    average_task_duration_seconds=0.0,
-                    system_health_score=0.0,
-                    cpu_usage_percent=0.0,
-                    memory_usage_percent=0.0
-                )
-                await asyncio.sleep(interval_seconds)
+        # CRITICAL FIX: Create a new database session for each iteration to prevent connection leaks
+        # The context's db session should not be kept open for the entire subscription duration
+        from ..core.db import AsyncSessionLocal
         
         while True:
+            # Create a new session for each iteration
+            db = AsyncSessionLocal()
             try:
                 # Get REAL metrics filtered by tenant and optionally project
                 from ..models.agent_tasks import AgentTask
@@ -1090,9 +1148,10 @@ class Subscription:
                 result = await db.execute(duration_query)
                 avg_duration = result.scalar() or 0.0
                 
-                # System health score (success rate, capped at 100%)
+                # System health score (success rate of finished tasks)
+                # Success Rate = Completed / (Completed + Failed) * 100%
+                # Only counts tasks that have finished, not pending/in_progress
                 stats_query = select(
-                    func.count(AgentTask.id).label('total'),
                     func.sum(case((AgentTask.status == 'completed', 1), else_=0)).label('completed'),
                     func.sum(case((AgentTask.status == 'failed', 1), else_=0)).label('failed')
                 )
@@ -1100,15 +1159,16 @@ class Subscription:
                     stats_query = stats_query.where(and_(*query_filters))
                 result = await db.execute(stats_query)
                 stats = result.first()
-                total = stats.total or 0
                 completed = stats.completed or 0
                 failed = stats.failed or 0
+                finished_tasks = completed + failed
                 
-                if total > 0:
-                    system_health_score = ((completed - failed * 0.5) / total) * 100.0
+                if finished_tasks > 0:
+                    # Success rate: percentage of finished tasks that succeeded
+                    system_health_score = (completed / finished_tasks) * 100.0
                     system_health_score = max(0.0, min(100.0, system_health_score))  # Cap at 100%
                 else:
-                    system_health_score = 100.0
+                    system_health_score = 100.0  # No finished tasks = healthy (nothing to judge)
                 
                 # System resource usage (from psutil)
                 try:
@@ -1138,6 +1198,11 @@ class Subscription:
                 yield metrics
             except Exception as e:
                 logger.error(f"Error in system_metrics_stream: {e}", exc_info=True)
+                # CRITICAL: Rollback transaction on error to prevent PendingRollbackError
+                try:
+                    await db.rollback()
+                except Exception as rollback_error:
+                    logger.warning(f"Error rolling back transaction in system_metrics_stream: {rollback_error}")
                 # Yield default metrics on error
                 yield SystemMetrics(
                     timestamp=datetime.now(timezone.utc),
@@ -1150,6 +1215,12 @@ class Subscription:
                     cpu_usage_percent=0.0,
                     memory_usage_percent=0.0
                 )
+            finally:
+                # CRITICAL: Always close the session after each iteration to prevent connection leaks
+                try:
+                    await db.close()
+                except Exception as close_error:
+                    logger.warning(f"Error closing database session in system_metrics_stream: {close_error}")
             
             await asyncio.sleep(interval_seconds)
     

@@ -17,10 +17,10 @@ try:
     # Check if table exists
     tables = insp.get_table_names()
     if 'tenant_sessions' not in tables:
-        print('✗ tenant_sessions table does NOT exist')
+        print('[ERROR] tenant_sessions table does NOT exist')
         print(f'Available tables: {", ".join(sorted(tables))}')
     else:
-        print('✓ tenant_sessions table exists')
+        print('[OK] tenant_sessions table exists')
         print()
         
         # Get columns
@@ -50,7 +50,7 @@ try:
                 print('  No active OTPs found in database')
         
 except Exception as e:
-    print(f'✗ Error: {e}')
+    print(f'[ERROR] Error: {e}')
     import traceback
     traceback.print_exc()
 
