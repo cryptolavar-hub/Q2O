@@ -99,6 +99,13 @@ class OrchestratorAgent(BaseAgent):
         for task in tasks:
             self.project_tasks[task.id] = task
             self.task_queue.append(task)
+            # Register task in global registry for cross-agent access
+            try:
+                from utils.task_registry import register_task
+                register_task(task)
+            except ImportError:
+                # Task registry not available, continue without it
+                pass
 
         self.logger.info(f"Created {len(tasks)} tasks from project breakdown")
         return tasks
@@ -164,34 +171,58 @@ class OrchestratorAgent(BaseAgent):
         if not self.llm_service:
             return []
         
-        # Build comprehensive prompt
-        system_prompt = """You are a senior project manager and software architect.
+        # Build comprehensive prompt with objective understanding
+        system_prompt = """You are a senior project manager and software architect with deep understanding of software development.
 
-Your task: Break down a development objective into a sequence of implementation tasks.
+**STEP 1: UNDERSTAND THE OBJECTIVE**
+First, analyze and classify the objective to understand:
+- What TYPE of system/app/service is being built? (mobile_app, web_app, saas_platform, api_service, data_pipeline, microservice, desktop_app, cli_tool, library, infrastructure, blockchain_app, ml_service, etc.)
+- What PLATFORMS does it target? (android, ios, web, desktop, cloud, serverless, multi-platform, etc.)
+- What DOMAIN/INDUSTRY? (finance, healthcare, ecommerce, education, productivity, supply_chain, etc.)
+- What KEY FEATURES are mentioned? (authentication, payments, real-time, offline, collaboration, etc.)
+- What TECHNOLOGIES are likely needed? (React Native, Python, FastAPI, Next.js, blockchain, ML frameworks, etc.)
+- What COMPLEXITY level? (low, medium, high)
+
+**STEP 2: CREATE INTELLIGENT TASK BREAKDOWN**
+Based on your understanding, break down the objective into a sequence of implementation tasks.
 
 Available Agent Types:
-- RESEARCHER: Web research for documentation, best practices, code examples
-- INFRASTRUCTURE: Cloud infrastructure, Terraform, Kubernetes, Azure/AWS resources
-- INTEGRATION: API integrations, OAuth flows, webhooks, external services  
-- WORKFLOW: Business workflows, orchestration, Temporal workflows
-- FRONTEND: React/Next.js UI components, pages, dashboards
-- CODER: Backend services, APIs, data models, business logic
-- TESTING: Unit tests, integration tests, test automation
-- QA: Quality assurance, code review, validation
-- SECURITY: Security scanning, vulnerability checks, compliance
+- RESEARCHER: Web research for documentation, best practices, code examples (use for new/unfamiliar technologies)
+- INFRASTRUCTURE: Cloud infrastructure, Terraform, Kubernetes, Azure/AWS resources, deployment configs
+- INTEGRATION: API integrations, OAuth flows, webhooks, external services, third-party APIs
+- WORKFLOW: Business workflows, orchestration, Temporal workflows, data pipelines
+- MOBILE: Mobile app development (React Native, iOS, Android, Flutter, native mobile code)
+- FRONTEND: React/Next.js UI components, pages, dashboards, web interfaces
+- CODER: Backend services, APIs, data models, business logic, server-side code
+- TESTING: Unit tests, integration tests, test automation, test suites
+- QA: Quality assurance, code review, validation, quality checks
+- SECURITY: Security scanning, vulnerability checks, compliance, security reviews
 
-Create a task breakdown with:
-1. Proper sequencing (dependencies)
-2. Appropriate agent assignments
-3. Tech stack identification
-4. Complexity estimates (low/medium/high)
+**CRITICAL REQUIREMENTS:**
+1. **UNDERSTAND FIRST**: Classify the objective type and understand its nature before creating tasks
+2. **INTELLIGENT ASSIGNMENT**: Assign agents based on what the objective ACTUALLY needs, not just keywords
+3. **PROPER SEQUENCING**: Research → Infrastructure → Integration → Implementation → Testing → QA → Security
+4. **TECH STACK**: Identify appropriate technologies based on objective type and requirements
+5. **CONCISE TITLES**: Task titles must be SHORT (max 60-70 chars) and descriptive
+   - DO NOT use the full objective text as the title
+   - Extract key concepts (technologies, actions, entities)
+   - Examples: "Mobile: Fields Operations App" NOT "Build a mobile app in Android and iOS for the Use in the Fields Operations"
+   - Format: "{AgentType}: {ConciseDescription}" (e.g., "Backend: QuickBooks API Check")
 
 Return JSON:
 {
+  "objective_classification": {
+    "type": "mobile_app" | "web_app" | "saas_platform" | "api_service" | etc.,
+    "platforms": ["android", "ios"] | ["web"] | etc.,
+    "domain": "finance" | "healthcare" | etc.,
+    "complexity": "low" | "medium" | "high",
+    "key_features": ["authentication", "payments", "real-time"],
+    "tech_stack": ["React Native", "TypeScript"] | ["Python", "FastAPI"] | etc.
+  },
   "tasks": [
     {
       "agent_type": "RESEARCHER",
-      "title": "Research Stripe API integration patterns",
+      "title": "Research: Stripe API Integration",
       "description": "Research Stripe payment API, webhook handling, and security best practices",
       "tech_stack": ["Stripe API", "FastAPI", "Webhooks"],
       "complexity": "medium",
@@ -199,7 +230,7 @@ Return JSON:
     },
     {
       "agent_type": "CODER",
-      "title": "Implement Stripe API client",
+      "title": "Backend: Stripe API Client",
       "description": "Create Stripe API client with payment methods and webhook handlers",
       "tech_stack": ["Python", "Stripe API", "FastAPI"],
       "complexity": "high",
@@ -209,19 +240,23 @@ Return JSON:
   ]
 }
 
-Rules:
-- Research tasks FIRST if needed for new/unfamiliar tech
+**RULES:**
+- Research tasks FIRST if needed for new/unfamiliar tech or complex domains
 - Infrastructure tasks before dependent services
 - Implementation tasks after research/infrastructure
 - Testing tasks after implementation
 - QA tasks at the end
-- Use dependency indices (0-based) to reference prior tasks"""
+- Security tasks after implementation
+- Use dependency indices (0-based) to reference prior tasks
+- **Think beyond keywords** - understand the objective's true nature and requirements"""
         
         user_prompt = f"""Objective: {objective}
 
 Project Context: {context}
 
-Break this objective into a sequence of tasks with proper agent assignments and dependencies."""
+**FIRST**: Classify and understand this objective - what type of system/app/service is being built? What platforms? What domain? What features?
+
+**THEN**: Break this objective into a sequence of tasks with proper agent assignments and dependencies based on your understanding."""
         
         # Generate breakdown with LLM
         response = await self.llm_service.complete(
@@ -231,22 +266,49 @@ Break this objective into a sequence of tasks with proper agent assignments and 
             max_tokens=2048
         )
         
+        # CRITICAL FIX: Track LLM usage for task breakdown
+        # Create a temporary task object for tracking (orchestrator doesn't have a task yet)
+        # We'll track usage at the project level instead
+        if response.success and response.usage:
+            try:
+                from agents.task_tracking import update_task_llm_usage_in_db, run_async
+                # Note: Orchestrator doesn't have a specific task, so we track at project level
+                # For now, we'll skip tracking here - individual agents will track their own usage
+                self.logger.debug(
+                    f"LLM task breakdown used {response.usage.total_tokens} tokens, "
+                    f"${response.usage.total_cost:.4f} ({response.provider})"
+                )
+            except Exception as e:
+                self.logger.debug(f"Could not track orchestrator LLM usage: {e}")
+        
         if not response.success:
             self.logger.warning(f"LLM task breakdown failed: {response.error}")
             return []
         
-        # Parse JSON response
+        # Parse JSON response with robust parsing
         try:
-            import json
-            content = response.content
+            from utils.json_parser import parse_json_robust
             
-            # Extract JSON if wrapped in markdown
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0]
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0]
+            # Use robust JSON parser to handle malformed responses
+            result = parse_json_robust(
+                response.content,
+                required_fields=['tasks']
+            )
             
-            result = json.loads(content.strip())
+            if not result:
+                self.logger.error("Failed to parse LLM task breakdown: Could not extract valid JSON")
+                return []
+            
+            # Extract objective classification (if provided by LLM)
+            classification = result.get('objective_classification', {})
+            if classification:
+                self.logger.info(
+                    f"[LLM] Objective classified as: {classification.get('type', 'unknown')} "
+                    f"(platforms: {classification.get('platforms', [])}, "
+                    f"domain: {classification.get('domain', 'unknown')}, "
+                    f"complexity: {classification.get('complexity', 'unknown')})"
+                )
+            
             task_specs = result.get('tasks', [])
             
             # Convert LLM task specs to actual Task objects
@@ -270,19 +332,33 @@ Break this objective into a sequence of tasks with proper agent assignments and 
                 dep_indices = spec.get('dependencies', [])
                 dependencies = [task_id_map[dep_idx] for dep_idx in dep_indices if dep_idx in task_id_map]
                 
+                # Generate concise title if not provided or if it's too long
+                raw_title = spec.get('title', '')
+                if not raw_title or len(raw_title) > 70:
+                    from utils.name_generator import generate_task_title
+                    title = generate_task_title(objective, agent_type_str, max_length=70)
+                else:
+                    title = raw_title
+                
                 # Create task
+                task_metadata = {
+                    "objective": objective,
+                    "complexity": spec.get('complexity', 'medium'),
+                    "llm_generated": True
+                }
+                
+                # Add classification to metadata if available
+                if classification:
+                    task_metadata["objective_classification"] = classification
+                
                 task = Task(
                     id=task_id,
-                    title=spec.get('title', f"{agent_type.value}: {objective}"),
+                    title=title,
                     description=spec.get('description', objective),
                     agent_type=agent_type,
                     tech_stack=spec.get('tech_stack', []),
                     dependencies=dependencies,
-                    metadata={
-                        "objective": objective,
-                        "complexity": spec.get('complexity', 'medium'),
-                        "llm_generated": True
-                    }
+                    metadata=task_metadata
                 )
                 
                 tasks.append(task)
@@ -297,7 +373,7 @@ Break this objective into a sequence of tasks with proper agent assignments and 
             return tasks
             
         except Exception as e:
-            self.logger.error(f"Failed to parse LLM task breakdown: {e}")
+            self.logger.error(f"Failed to process LLM task breakdown: {e}", exc_info=True)
             return []
     
     def _analyze_objective_basic(self, objective: str, context: str, start_counter: int) -> List[Task]:
@@ -325,9 +401,11 @@ Break this objective into a sequence of tasks with proper agent assignments and 
         needs_research = self._needs_research(objective_lower, objective_type, tech_stack, context)
         
         if needs_research:
+            from utils.name_generator import generate_task_title
+            research_title = generate_task_title(objective, "RESEARCHER", max_length=70)
             research_task = Task(
                 id=f"task_{start_counter:04d}_research",
-                title=f"Research: {objective}",
+                title=research_title,
                 description=f"Conduct web research for: {objective}\n\nContext: {context}\n\nResearch needed to gather information about implementation approaches, best practices, and code examples.",
                 agent_type=AgentType.RESEARCHER,
                 tech_stack=tech_stack,
@@ -343,9 +421,11 @@ Break this objective into a sequence of tasks with proper agent assignments and 
         
         # Create infrastructure tasks first (if needed)
         if objective_type in ["infrastructure", "terraform", "helm", "kubernetes", "k8s", "waf", "azure"]:
+            from utils.name_generator import generate_task_title
+            infra_title = generate_task_title(objective, "INFRASTRUCTURE", max_length=70)
             infra_task = Task(
                 id=f"task_{start_counter:04d}_infrastructure",
-                title=f"Infrastructure: {objective}",
+                title=infra_title,
                 description=f"Create infrastructure configuration for: {objective}\n\nContext: {context}",
                 agent_type=AgentType.INFRASTRUCTURE,
                 tech_stack=tech_stack,
@@ -363,9 +443,11 @@ Break this objective into a sequence of tasks with proper agent assignments and 
             # Add research dependency if research task exists
             dependencies = [t.id for t in tasks if t.agent_type in [AgentType.INFRASTRUCTURE, AgentType.RESEARCHER]]
             
+            from utils.name_generator import generate_task_title
+            integration_title = generate_task_title(objective, "INTEGRATION", max_length=70)
             integration_task = Task(
                 id=f"task_{start_counter:04d}_integration",
-                title=f"Integration: {objective}",
+                title=integration_title,
                 description=f"Implement integration for: {objective}\n\nContext: {context}",
                 agent_type=AgentType.INTEGRATION,
                 tech_stack=tech_stack,
@@ -384,9 +466,11 @@ Break this objective into a sequence of tasks with proper agent assignments and 
             # Add research dependency if research task exists
             dependencies = [t.id for t in tasks if t.agent_type in [AgentType.INTEGRATION, AgentType.RESEARCHER]]
             
+            from utils.name_generator import generate_task_title
+            workflow_title = generate_task_title(objective, "WORKFLOW", max_length=70)
             workflow_task = Task(
                 id=f"task_{start_counter:04d}_workflow",
-                title=f"Workflow: {objective}",
+                title=workflow_title,
                 description=f"Create Temporal workflow for: {objective}\n\nContext: {context}",
                 agent_type=AgentType.WORKFLOW,
                 tech_stack=tech_stack,
@@ -400,11 +484,56 @@ Break this objective into a sequence of tasks with proper agent assignments and 
             tasks.append(workflow_task)
             start_counter += 1
         
+        # Create mobile tasks (if needed) - Check BEFORE frontend since mobile is more specific
+        if objective_type == "mobile":
+            # Extract platforms from objective
+            platforms = []
+            if "android" in objective_lower:
+                platforms.append("android")
+            if "ios" in objective_lower or "iphone" in objective_lower:
+                platforms.append("ios")
+            if not platforms:
+                platforms = ["android", "ios"]  # Default to both
+            
+            # Extract features from objective
+            features = []
+            if "field" in objective_lower or "operation" in objective_lower:
+                features.append("field_operations")
+            if "inventory" in objective_lower:
+                features.append("inventory_management")
+            if "finance" in objective_lower or "financial" in objective_lower:
+                features.append("finance")
+            
+            # Mobile tasks depend on research and backend
+            dependencies = [t.id for t in tasks if t.agent_type in [AgentType.RESEARCHER, AgentType.CODER]]
+            
+            from utils.name_generator import generate_task_title
+            mobile_title = generate_task_title(objective, "MOBILE", max_length=70)
+            mobile_task = Task(
+                id=f"task_{start_counter:04d}_mobile",
+                title=mobile_title,
+                description=f"Build mobile app for: {objective}\n\nContext: {context}\n\nPlatforms: {', '.join(platforms)}\nFeatures: {', '.join(features) if features else 'General mobile app'}",
+                agent_type=AgentType.MOBILE,
+                tech_stack=["React Native", "TypeScript"] if "react native" in objective_lower else tech_stack + ["React Native", "TypeScript"],
+                dependencies=dependencies,
+                metadata={
+                    "objective": objective,
+                    "platforms": platforms,
+                    "features": features,
+                    "complexity": self._estimate_complexity(objective),
+                    "mobile_type": "cross_platform" if len(platforms) > 1 else platforms[0] if platforms else "android"
+                }
+            )
+            tasks.append(mobile_task)
+            start_counter += 1
+        
         # Create frontend tasks (if needed)
         if objective_type in ["frontend", "nextjs", "react", "ui", "page", "component", "onboarding", "mapping", "theme"]:
+            from utils.name_generator import generate_task_title
+            frontend_title = generate_task_title(objective, "FRONTEND", max_length=70)
             frontend_task = Task(
                 id=f"task_{start_counter:04d}_frontend",
-                title=f"Frontend: {objective}",
+                title=frontend_title,
                 description=f"Create frontend for: {objective}\n\nContext: {context}",
                 agent_type=AgentType.FRONTEND,
                 tech_stack=tech_stack,
@@ -418,29 +547,49 @@ Break this objective into a sequence of tasks with proper agent assignments and 
             tasks.append(frontend_task)
             start_counter += 1
         
+<<<<<<< Updated upstream
         # Create backend/coder tasks (if needed - for non-specialized code)
         if objective_type in ["api", "backend", "service", "model"] or not tasks:
+=======
+        # Create backend/coder tasks
+        # CRITICAL FIX: Always create a coder task when code generation is needed
+        # Integration, workflow, and frontend objectives ALWAYS need backend support
+        needs_coder = self._needs_coder_task(objective_type, tasks, objective)
+        
+        if needs_coder:
+            # Build dependencies: coder tasks depend on research, infrastructure, and integration tasks
+            coder_dependencies = [
+                t.id for t in tasks 
+                if t.agent_type in [AgentType.INFRASTRUCTURE, AgentType.INTEGRATION, AgentType.RESEARCHER]
+            ]
+            
+            from utils.name_generator import generate_task_title
+            coder_title = generate_task_title(objective, "CODER", max_length=70)
+>>>>>>> Stashed changes
             coder_task = Task(
                 id=f"task_{start_counter:04d}_coder",
-                title=f"Backend: {objective}",
+                title=coder_title,
                 description=f"Implement backend functionality for: {objective}\n\nContext: {context}",
                 agent_type=AgentType.CODER,
                 tech_stack=tech_stack,
                 dependencies=[t.id for t in tasks if t.agent_type in [AgentType.INFRASTRUCTURE, AgentType.INTEGRATION]],
                 metadata={
                     "objective": objective,
-                    "complexity": self._estimate_complexity(objective)
+                    "complexity": self._estimate_complexity(objective),
+                    "requires_backend": True  # Mark as requiring backend
                 }
             )
             tasks.append(coder_task)
             start_counter += 1
 
         # Create testing tasks (depends on implementation tasks)
-        impl_tasks = [t for t in tasks if t.agent_type in [AgentType.CODER, AgentType.INTEGRATION, AgentType.WORKFLOW, AgentType.FRONTEND]]
+        impl_tasks = [t for t in tasks if t.agent_type in [AgentType.CODER, AgentType.INTEGRATION, AgentType.WORKFLOW, AgentType.FRONTEND, AgentType.MOBILE]]
         if impl_tasks:
+            from utils.name_generator import generate_task_title
+            testing_title = generate_task_title(objective, "TESTING", max_length=70)
             testing_task = Task(
                 id=f"task_{start_counter:04d}_testing",
-                title=f"Test: {objective}",
+                title=testing_title,
                 description=f"Write and execute tests for: {objective}\n\nContext: {context}",
                 agent_type=AgentType.TESTING,
                 tech_stack=tech_stack,
@@ -452,9 +601,11 @@ Break this objective into a sequence of tasks with proper agent assignments and 
 
         # Create QA task (depends on testing task)
         if impl_tasks:
+            from utils.name_generator import generate_task_title
+            qa_title = generate_task_title(objective, "QA", max_length=70)
             qa_task = Task(
                 id=f"task_{start_counter:04d}_qa",
-                title=f"QA Review: {objective}",
+                title=qa_title,
                 description=f"Perform quality assurance review for: {objective}\n\nContext: {context}",
                 agent_type=AgentType.QA,
                 tech_stack=tech_stack,
@@ -466,9 +617,11 @@ Break this objective into a sequence of tasks with proper agent assignments and 
 
         # Create security task (depends on implementation tasks)
         if impl_tasks:
+            from utils.name_generator import generate_task_title
+            security_title = generate_task_title(objective, "SECURITY", max_length=70)
             security_task = Task(
                 id=f"task_{start_counter:04d}_security",
-                title=f"Security Review: {objective}",
+                title=security_title,
                 description=f"Perform security review for: {objective}\n\nContext: {context}",
                 agent_type=AgentType.SECURITY,
                 tech_stack=tech_stack,
@@ -479,6 +632,51 @@ Break this objective into a sequence of tasks with proper agent assignments and 
 
         return tasks
 
+    def _needs_coder_task(self, objective_type: str, tasks: List[Task], objective: str) -> bool:
+        """
+        Determine if a coder task is needed for this objective.
+        
+        CRITICAL: Integration, workflow, and frontend objectives ALWAYS need backend code.
+        This ensures coder agents receive tasks even when objectives are classified as
+        integration/workflow/frontend types.
+        
+        Args:
+            objective_type: Detected objective type
+            tasks: List of tasks already created
+            objective: Original objective string
+            
+        Returns:
+            True if coder task is needed
+        """
+        # Always create coder task for explicit backend objectives
+        if objective_type in ["api", "backend", "service", "model"]:
+            return True
+        
+        # CRITICAL FIX: Integration/workflow/frontend/mobile objectives ALWAYS need backend code
+        # This fixes the bug where coder agents don't receive tasks for integration/mobile objectives
+        if objective_type in ["integration", "workflow", "frontend", "mobile"]:
+            return True
+        
+        # If no tasks created, create generic coder task
+        if not tasks:
+            return True
+        
+        # Check if objective mentions code generation keywords
+        code_keywords = ["code", "implement", "create", "build", "develop", "generate"]
+        if any(keyword in objective.lower() for keyword in code_keywords):
+            return True
+        
+        # Check if implementation tasks exist (integration/workflow/frontend/mobile)
+        # These always need backend support
+        impl_tasks_exist = any(
+            t.agent_type in [AgentType.INTEGRATION, AgentType.WORKFLOW, AgentType.FRONTEND, AgentType.MOBILE] 
+            for t in tasks
+        )
+        if impl_tasks_exist:
+            return True
+        
+        return False
+
     def _detect_objective_type(self, objective: str) -> str:
         """Detect the type of objective for task breakdown."""
         if any(keyword in objective for keyword in ["terraform", "helm", "kubernetes", "k8s", "azure", "waf", "infrastructure"]):
@@ -487,6 +685,8 @@ Break this objective into a sequence of tasks with proper agent assignments and 
             return "integration"
         elif any(keyword in objective for keyword in ["temporal", "workflow", "backfill", "sync"]):
             return "workflow"
+        elif any(keyword in objective for keyword in ["mobile", "android", "ios", "react native", "react-native", "flutter", "mobile app", "mobile application", "app for", "app in"]):
+            return "mobile"
         elif any(keyword in objective for keyword in ["nextjs", "react", "frontend", "page", "component", "ui", "onboarding", "mapping", "theme"]):
             return "frontend"
         elif any(keyword in objective for keyword in ["api", "backend", "service", "model"]):
@@ -496,16 +696,21 @@ Break this objective into a sequence of tasks with proper agent assignments and 
     def _detect_tech_stack(self, objective: str) -> List[str]:
         """Detect technology stack from objective."""
         tech_stack = []
+        objective_lower = objective.lower()
         
-        if any(keyword in objective for keyword in ["python", "fastapi", "api"]):
+        if any(keyword in objective_lower for keyword in ["python", "fastapi", "api"]):
             tech_stack.append("python")
-        if any(keyword in objective for keyword in ["nextjs", "react", "typescript", "frontend"]):
+        if any(keyword in objective_lower for keyword in ["nextjs", "react", "typescript", "frontend"]):
             tech_stack.append("nextjs")
-        if any(keyword in objective for keyword in ["terraform", "infrastructure"]):
+        if any(keyword in objective_lower for keyword in ["mobile", "android", "ios", "react native", "react-native", "flutter"]):
+            tech_stack.append("react-native")
+            if "flutter" in objective_lower:
+                tech_stack.append("flutter")
+        if any(keyword in objective_lower for keyword in ["terraform", "infrastructure"]):
             tech_stack.append("terraform")
-        if any(keyword in objective for keyword in ["temporal", "workflow"]):
+        if any(keyword in objective_lower for keyword in ["temporal", "workflow"]):
             tech_stack.append("temporal")
-        if any(keyword in objective for keyword in ["helm", "kubernetes", "k8s"]):
+        if any(keyword in objective_lower for keyword in ["helm", "kubernetes", "k8s"]):
             tech_stack.append("kubernetes")
         
         return tech_stack if tech_stack else ["python"]  # Default
@@ -750,6 +955,14 @@ Break this objective into a sequence of tasks with proper agent assignments and 
         task = self.project_tasks[task_id]
         task.status = status
         
+        # Update task in global registry to keep it in sync
+        try:
+            from utils.task_registry import register_task
+            register_task(task)
+        except ImportError:
+            # Task registry not available, continue without it
+            pass
+        
         if status == TaskStatus.COMPLETED:
             task.complete(result)
             # Check if any blocked tasks can now be assigned
@@ -772,6 +985,12 @@ Break this objective into a sequence of tasks with proper agent assignments and 
                 )
                 task.metadata["retry_count"] = retry_count + 1
                 task.status = TaskStatus.PENDING  # Reset to pending for retry
+                # Update task in global registry again after status change
+                try:
+                    from utils.task_registry import register_task
+                    register_task(task)
+                except ImportError:
+                    pass
                 # Task will be picked up by distribute_tasks() on next iteration
             else:
                 self.logger.error(f"Task {task_id} failed after {retry_count} retries, giving up")

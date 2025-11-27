@@ -13,6 +13,7 @@ from .core.settings import settings
 from .core.exceptions import register_exception_handlers
 from .core.logging import configure_logging, get_logger
 from .middleware.cors_options import CORSOptionsMiddleware
+from .middleware.graphql_cleanup import GraphQLContextCleanupMiddleware
 from .routers import authz, licenses, billing_stripe, admin_pages, auth_sso, usage, llm_management, admin_api, tenant_api
 
 # Configure logging first
@@ -85,6 +86,11 @@ base_app.add_middleware(
 )
 
 base_app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
+
+# GraphQL context cleanup middleware (must be added before GraphQL router)
+# This ensures database sessions are closed even if Strawberry doesn't call __aexit__
+if GRAPHQL_AVAILABLE:
+    base_app.add_middleware(GraphQLContextCleanupMiddleware)
 
 register_exception_handlers(base_app)
 

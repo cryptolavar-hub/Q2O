@@ -19,9 +19,10 @@ class TestingAgent(BaseAgent):
     def __init__(self, agent_id: str = "testing_main", workspace_path: str = ".", 
                  project_layout: Optional[ProjectLayout] = None,
                  project_id: Optional[str] = None,
-                 tenant_id: Optional[int] = None):
+                 tenant_id: Optional[int] = None,
+                 orchestrator: Optional[Any] = None):
         super().__init__(agent_id, AgentType.TESTING, project_layout, 
-                        project_id=project_id, tenant_id=tenant_id)
+                        project_id=project_id, tenant_id=tenant_id, orchestrator=orchestrator)
         self.workspace_path = workspace_path
         self.test_files: List[str] = []
         self.test_results: Dict[str, Dict[str, Any]] = {}
@@ -84,38 +85,117 @@ class TestingAgent(BaseAgent):
     def _get_implemented_files(self, task: Task) -> List[str]:
         """
         Get list of implemented files to test.
-        Looks for files created by the coder agent in dependencies.
+        Gets actual file paths from dependency task results (coder, integration, workflow, frontend).
+        
+        Priority:
+        1. Get files from dependency task results (most reliable)
+        2. Check task metadata for file references
+        3. Search workspace for Python files (fallback)
         
         Args:
             task: The testing task
             
         Returns:
-            List of file paths to test
+            List of absolute file paths to test
         """
         implemented_files = []
         
-        # Check if task has dependency info pointing to coder task
-        # In a real system, we'd query the orchestrator for dependency results
-        # For now, we'll look for common patterns
+        # Get files from dependency tasks (coder, integration, workflow, frontend)
+        for dep_id in task.dependencies:
+            dep_task = self._get_dependency_task(dep_id)
+            
+            if dep_task and dep_task.status == TaskStatus.COMPLETED:
+                # Get files from task result
+                if dep_task.result and isinstance(dep_task.result, dict):
+                    # Try various file list keys used by different agents
+                    files = (
+                        dep_task.result.get("files_created", []) or
+                        dep_task.result.get("integration_files", []) or
+                        dep_task.result.get("frontend_files", []) or
+                        dep_task.result.get("workflow_files", []) or
+                        dep_task.result.get("node_files", [])
+                    )
+                    
+                    if files:
+                        # Convert relative paths to absolute if needed
+                        for file_path in files:
+                            if not os.path.isabs(file_path):
+                                full_path = os.path.join(self.workspace_path, file_path)
+                            else:
+                                full_path = file_path
+                            
+                            # Verify file exists
+                            if os.path.exists(full_path):
+                                implemented_files.append(full_path)
+                            else:
+                                self.logger.warning(f"File from dependency not found: {full_path}")
         
-        # Check task description for file references
-        description = task.description.lower()
-        
-        # Look for Python files in the workspace that might be related
-        if "implement" in description or "code" in description:
-            # Try to find related files
-            obj = task.metadata.get("objective", "")
-            if obj:
-                potential_file = f"src/{obj.lower().replace(' ', '_')}.py"
-                if os.path.exists(os.path.join(self.workspace_path, potential_file)):
-                    implemented_files.append(potential_file)
-        
-        # If nothing found, create a generic test structure
+        # Fallback: Check task metadata for file references
         if not implemented_files:
-            obj = task.metadata.get("objective", task.title)
-            implemented_files.append(f"src/{obj.lower().replace(' ', '_')}.py")
+            metadata_files = task.metadata.get("files_to_test", [])
+            for file_path in metadata_files:
+                full_path = os.path.join(self.workspace_path, file_path)
+                if os.path.exists(full_path):
+                    implemented_files.append(full_path)
         
+        # Last resort: Search workspace for Python files
+        if not implemented_files:
+            self.logger.warning(f"No implemented files found via dependencies, searching workspace")
+            # Search for Python files in common locations
+            search_dirs = [
+                os.path.join(self.workspace_path, "src"),
+                os.path.join(self.workspace_path, "api"),
+                os.path.join(self.workspace_path, "app"),
+                os.path.join(self.workspace_path, "addon_portal", "api"),
+                self.workspace_path
+            ]
+            
+            for search_dir in search_dirs:
+                if os.path.exists(search_dir):
+                    for root, dirs, files in os.walk(search_dir):
+                        # Skip test directories and cache
+                        if any(skip in root.lower() for skip in ["test", "__pycache__", ".pytest_cache", "node_modules"]):
+                            continue
+                        
+                        for file in files:
+                            if file.endswith(".py") and not file.startswith("test_"):
+                                file_path = os.path.join(root, file)
+                                # Skip if already in list
+                                if file_path not in implemented_files:
+                                    implemented_files.append(file_path)
+                    
+                    if implemented_files:
+                        break
+        
+        self.logger.info(f"Found {len(implemented_files)} implemented files to test")
         return implemented_files
+    
+    def _get_dependency_task(self, dep_id: str):
+        """Get dependency task from orchestrator or registry.
+        
+        Args:
+            dep_id: Dependency task ID
+            
+        Returns:
+            Task if found, None otherwise
+        """
+        # Try to get from orchestrator (now available via BaseAgent!)
+        if hasattr(self, 'orchestrator') and self.orchestrator:
+            task = self.orchestrator.project_tasks.get(dep_id)
+            if task:
+                return task
+        
+        # Fallback: Try to get from global task registry
+        try:
+            from utils.task_registry import get_task
+            task = get_task(dep_id)
+            if task:
+                return task
+        except ImportError:
+            # Task registry not available
+            pass
+        
+        return None
 
     def _create_test_file(self, source_file: str, task: Task) -> str:
         """
@@ -141,14 +221,15 @@ class TestingAgent(BaseAgent):
         # Generate test content
         test_content = self._generate_test_content(source_file, source_name, task)
         
-        # Write test file
-        with open(full_test_path, 'w', encoding='utf-8') as f:
-            f.write(test_content)
-        
-        self.logger.info(f"Created test file: {test_path}")
-        self.test_files.append(test_path)
-        
-        return test_path
+        # Write test file using safe file writer (HARD GUARANTEE)
+        try:
+            self.safe_write_file(test_path, test_content)
+            self.logger.info(f"Created test file: {test_path}")
+            self.test_files.append(test_path)
+            return test_path
+        except Exception as e:
+            self.logger.error(f"[ERROR] Failed to write test file {test_path}: {e}")
+            raise
 
     def _generate_test_content(self, source_file: str, source_name: str, task: Task) -> str:
         """

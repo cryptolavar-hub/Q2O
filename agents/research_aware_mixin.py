@@ -68,16 +68,32 @@ class ResearchAwareMixin:
         return research_results
     
     def _get_dependency_task(self, dep_id: str):
-        """Get dependency task from orchestrator or registry."""
-        # Try to get from orchestrator
-        if hasattr(self, 'orchestrator') and self.orchestrator:
-            return self.orchestrator.project_tasks.get(dep_id)
+        """Get dependency task from orchestrator or registry.
         
-        # Try to get from global task registry (if available)
+        Priority:
+        1. Orchestrator reference (if available) - most reliable
+        2. Global task registry - fallback for cross-process scenarios
+        
+        Args:
+            dep_id: Dependency task ID
+            
+        Returns:
+            Task if found, None otherwise
+        """
+        # Try to get from orchestrator (now available via BaseAgent!)
+        if hasattr(self, 'orchestrator') and self.orchestrator:
+            task = self.orchestrator.project_tasks.get(dep_id)
+            if task:
+                return task
+        
+        # Fallback: Try to get from global task registry
         try:
             from utils.task_registry import get_task
-            return get_task(dep_id)
+            task = get_task(dep_id)
+            if task:
+                return task
         except ImportError:
+            # Task registry not available
             pass
         
         return None

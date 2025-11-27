@@ -17,9 +17,10 @@ class WorkflowAgent(BaseAgent):
     def __init__(self, agent_id: str = "workflow_main", workspace_path: str = ".", 
                  project_layout: Optional[ProjectLayout] = None,
                  project_id: Optional[str] = None,
-                 tenant_id: Optional[int] = None):
+                 tenant_id: Optional[int] = None,
+                 orchestrator: Optional[Any] = None):
         super().__init__(agent_id, AgentType.WORKFLOW, project_layout,
-                        project_id=project_id, tenant_id=tenant_id)
+                        project_id=project_id, tenant_id=tenant_id, orchestrator=orchestrator)
         self.workspace_path = workspace_path
         self.workflow_files: List[str] = []
         self.template_renderer = get_renderer()

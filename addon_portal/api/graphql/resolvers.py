@@ -369,8 +369,12 @@ class Query:
         from ..services.agent_task_service import calculate_project_progress, get_project_tasks
         from ..models.agent_tasks import AgentTask
         
-        # Get real task statistics
-        task_stats = await calculate_project_progress(db, id)
+        # CRITICAL FIX: Pass execution_started_at to only count tasks from current run
+        # This prevents showing stale data from previous runs when project is restarted
+        execution_started_at = db_project.execution_started_at
+        
+        # Get real task statistics (filtered by execution_started_at if available)
+        task_stats = await calculate_project_progress(db, id, execution_started_at=execution_started_at)
         total_tasks = task_stats["total_tasks"]
         completed_tasks = task_stats["completed_tasks"]
         failed_tasks = task_stats["failed_tasks"]

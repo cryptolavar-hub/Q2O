@@ -478,12 +478,17 @@ class LLMService:
         self.failed_calls = 0
         self.cache_hits = 0
         
+        # Model names (will be set during initialization)
+        self.gemini_model_name = None
+        self.openai_model_name = None
+        self.anthropic_model_name = None
+        
         # Initialize providers
         self._init_gemini()
         self._init_openai()
         self._init_anthropic()
         
-        logging.info(f"✅ LLMService initialized (primary: {self.primary}, budget: ${budget}/month)")
+        logging.info(f"[OK] LLMService initialized (primary: {self.primary}, budget: ${budget}/month)")
     
     def _init_gemini(self):
         """Initialize Gemini client."""
@@ -494,12 +499,14 @@ class LLMService:
         api_key = os.getenv("GOOGLE_API_KEY")
         if api_key:
             genai.configure(api_key=api_key)
-            model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
+            model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
             self.gemini_model = genai.GenerativeModel(model_name)
-            logging.info(f"✅ Gemini initialized ({model_name})")
+            self.gemini_model_name = model_name  # Store actual model name
+            logging.info(f"[OK] Gemini initialized ({model_name})")
         else:
             self.gemini_model = None
-            logging.warning("⚠️  GOOGLE_API_KEY not set - Gemini unavailable")
+            self.gemini_model_name = None
+            logging.warning("[WARNING] GOOGLE_API_KEY not set - Gemini unavailable")
     
     def _init_openai(self):
         """Initialize OpenAI client."""
@@ -510,10 +517,12 @@ class LLMService:
         api_key = os.getenv("OPENAI_API_KEY")
         if api_key:
             self.openai_client = openai.OpenAI(api_key=api_key)
-            logging.info("✅ OpenAI initialized")
+            self.openai_model_name = os.getenv("OPENAI_MODEL", "gpt-4-turbo")  # Store actual model name
+            logging.info(f"[OK] OpenAI initialized ({self.openai_model_name})")
         else:
             self.openai_client = None
-            logging.warning("⚠️  OPENAI_API_KEY not set - OpenAI unavailable")
+            self.openai_model_name = None
+            logging.warning("[WARNING] OPENAI_API_KEY not set - OpenAI unavailable")
     
     def _init_anthropic(self):
         """Initialize Anthropic client."""
@@ -524,10 +533,12 @@ class LLMService:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if api_key:
             self.anthropic_client = Anthropic(api_key=api_key)
-            logging.info("✅ Anthropic initialized")
+            self.anthropic_model_name = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")  # Store actual model name
+            logging.info(f"[OK] Anthropic initialized ({self.anthropic_model_name})")
         else:
             self.anthropic_client = None
-            logging.debug("ℹ️  ANTHROPIC_API_KEY not set - Claude unavailable (optional)")
+            self.anthropic_model_name = None
+            logging.debug("[INFO] ANTHROPIC_API_KEY not set - Claude unavailable (optional)")
     
     def _is_provider_available(self, provider: LLMProvider) -> bool:
         """Check if a provider is configured and available."""
@@ -631,8 +642,58 @@ class LLMService:
                         response.content,
                         response.usage.to_dict()
                     )
+                
+                # Log to database (background task, non-blocking)
+                try:
+                    import uuid
+                    from utils.llm_logger import log_llm_usage_background
+                    import os
+                    
+                    request_id = str(uuid.uuid4())
+                    log_llm_usage_background(
+                        request_id=request_id,
+                        provider=response.provider,
+                        model=response.model,
+                        usage=response.usage,
+                        duration_seconds=response.usage.duration_seconds,
+                        success=True,
+                        cache_hit=response.cache_hit,
+                        project_id=os.getenv("Q2O_PROJECT_ID"),
+                        agent_type=os.getenv("Q2O_AGENT_TYPE", "unknown"),
+                        agent_id=os.getenv("Q2O_AGENT_ID"),
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        response_content=response.content[:500] if response.content else None,
+                    )
+                except Exception as e:
+                    # Logging failure shouldn't break LLM calls
+                    logging.debug(f"Failed to log LLM usage: {e}")
         else:
             self.failed_calls += 1
+            
+            # Log failed call
+            try:
+                import uuid
+                from utils.llm_logger import log_llm_usage_background
+                import os
+                
+                request_id = str(uuid.uuid4())
+                log_llm_usage_background(
+                    request_id=request_id,
+                    provider=response.provider,
+                    model=response.model or "unknown",
+                    usage=None,
+                    duration_seconds=0.0,
+                    success=False,
+                    error_message=response.error,
+                    project_id=os.getenv("Q2O_PROJECT_ID"),
+                    agent_type=os.getenv("Q2O_AGENT_TYPE", "unknown"),
+                    agent_id=os.getenv("Q2O_AGENT_ID"),
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                )
+            except Exception as e:
+                logging.debug(f"Failed to log failed LLM call: {e}")
         
         return response
     
@@ -764,9 +825,12 @@ class LLMService:
         output_cost = (output_tokens / 1000) * 0.005
         total_cost = input_cost + output_cost
         
+        # Get actual model name from the model object or stored name
+        actual_model_name = self.gemini_model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        
         usage = LLMUsage(
             provider="gemini",
-            model=os.getenv("GEMINI_MODEL", "gemini-1.5-pro"),
+            model=actual_model_name,  # Use actual model name
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=total_tokens,
@@ -797,7 +861,8 @@ class LLMService:
         if not self.openai_client:
             raise ValueError("OpenAI not available")
         
-        model = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+        # Get actual model name from stored name or env
+        model = self.openai_model_name or os.getenv("OPENAI_MODEL", "gpt-4-turbo")
         
         response = self.openai_client.chat.completions.create(
             model=model,
@@ -819,9 +884,12 @@ class LLMService:
         output_cost = (output_tokens / 1000) * 0.03
         total_cost = input_cost + output_cost
         
+        # Use actual model name from response (may differ from requested)
+        actual_model_name = response.model or model
+        
         usage = LLMUsage(
             provider="openai",
-            model=response.model,
+            model=actual_model_name,  # Use actual model name from response
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=total_tokens,
@@ -852,7 +920,8 @@ class LLMService:
         if not self.anthropic_client:
             raise ValueError("Anthropic not available")
         
-        model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+        # Get actual model name from stored name or env
+        model = self.anthropic_model_name or os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
         
         response = self.anthropic_client.messages.create(
             model=model,
@@ -983,22 +1052,76 @@ Generate complete, production-ready implementation."""
         cache_stats = self.cache.get_stats() if self.cache else {}
         budget_status = self.cost_monitor.get_budget_status()
         
-        # Group by provider
+        # Group by provider and model, tracking actual model names
         by_provider = {}
         for usage in self.usage_log:
-            if usage.provider not in by_provider:
-                by_provider[usage.provider] = {
+            provider_key = usage.provider
+            model_key = usage.model or "unknown"
+            
+            if provider_key not in by_provider:
+                by_provider[provider_key] = {
+                    "calls": 0,
+                    "total_cost": 0.0,
+                    "total_tokens": 0,
+                    "models": {}  # Nested dictionary: {model_name: {calls, total_cost}}
+                }
+            
+            by_provider[provider_key]["calls"] += 1
+            by_provider[provider_key]["total_cost"] += usage.total_cost
+            by_provider[provider_key]["total_tokens"] += usage.total_tokens
+            
+            # Track by model
+            if model_key not in by_provider[provider_key]["models"]:
+                by_provider[provider_key]["models"][model_key] = {
                     "calls": 0,
                     "total_cost": 0.0,
                     "total_tokens": 0
                 }
-            by_provider[usage.provider]["calls"] += 1
-            by_provider[usage.provider]["total_cost"] += usage.total_cost
-            by_provider[usage.provider]["total_tokens"] += usage.total_tokens
+            
+            by_provider[provider_key]["models"][model_key]["calls"] += 1
+            by_provider[provider_key]["models"][model_key]["total_cost"] += usage.total_cost
+            by_provider[provider_key]["models"][model_key]["total_tokens"] += usage.total_tokens
         
-        # Round costs
+        # Round costs and format
         for provider in by_provider:
             by_provider[provider]["total_cost"] = round(by_provider[provider]["total_cost"], 2)
+            # Round model costs
+            for model_data in by_provider[provider]["models"].values():
+                model_data["total_cost"] = round(model_data["total_cost"], 2)
+            # Calculate avg cost
+            calls = by_provider[provider]["calls"]
+            by_provider[provider]["avg_cost"] = round(by_provider[provider]["total_cost"] / calls, 4) if calls > 0 else 0.0
+        
+        # Add providers with no usage yet (use configured model names)
+        if "gemini" not in by_provider:
+            gemini_model = self.gemini_model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            by_provider["gemini"] = {
+                "calls": 0,
+                "total_cost": 0.0,
+                "total_tokens": 0,
+                "avg_cost": 0.0,
+                "models": {gemini_model: {"calls": 0, "total_cost": 0.0, "total_tokens": 0}}
+            }
+        
+        if "openai" not in by_provider:
+            openai_model = self.openai_model_name or os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+            by_provider["openai"] = {
+                "calls": 0,
+                "total_cost": 0.0,
+                "total_tokens": 0,
+                "avg_cost": 0.0,
+                "models": {openai_model: {"calls": 0, "total_cost": 0.0, "total_tokens": 0}}
+            }
+        
+        if "anthropic" not in by_provider:
+            anthropic_model = self.anthropic_model_name or os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+            by_provider["anthropic"] = {
+                "calls": 0,
+                "total_cost": 0.0,
+                "total_tokens": 0,
+                "avg_cost": 0.0,
+                "models": {anthropic_model: {"calls": 0, "total_cost": 0.0, "total_tokens": 0}}
+            }
         
         return {
             "total_calls": self.total_calls,

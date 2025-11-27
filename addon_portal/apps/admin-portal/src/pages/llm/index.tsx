@@ -18,9 +18,9 @@ interface LLMStats {
   avgResponseTime: number;
   successRate: number;
   providerBreakdown: {
-    gemini: { calls: number; cost: number };
-    openai: { calls: number; cost: number };
-    anthropic: { calls: number; cost: number };
+    gemini: { calls: number; cost: number; model?: string };
+    openai: { calls: number; cost: number; model?: string };
+    anthropic: { calls: number; cost: number; model?: string };
   };
   dailyCosts: Array<{ date: string; cost: number }>;
   templateStats: {
@@ -35,6 +35,51 @@ interface LLMStats {
     timestamp: string;
   }>;
 }
+
+// Helper function to format model names nicely
+const formatModelName = (modelName: string | undefined): string => {
+  if (!modelName) return 'Unknown Model';
+  
+  // Convert "gemini-2.5-flash" -> "Gemini 2.5 Flash"
+  // Convert "gpt-4-turbo" -> "GPT-4 Turbo"
+  // Convert "claude-3-5-sonnet-20241022" -> "Claude 3.5 Sonnet"
+  
+  const parts = modelName.split('-');
+  
+  // Handle Gemini models
+  if (modelName.startsWith('gemini')) {
+    const version = parts[1] || '';
+    const variant = parts[2] || '';
+    const variantName = variant.charAt(0).toUpperCase() + variant.slice(1);
+    return `Gemini ${version} ${variantName}`.trim();
+  }
+  
+  // Handle GPT models
+  if (modelName.startsWith('gpt')) {
+    const version = parts[1] || '';
+    const variant = parts[2] || '';
+    const variantName = variant.charAt(0).toUpperCase() + variant.slice(1);
+    return `GPT-${version} ${variantName}`.trim();
+  }
+  
+  // Handle Claude models
+  if (modelName.startsWith('claude')) {
+    const version = parts[1] || '';
+    const subversion = parts[2] || '';
+    const variant = parts[3] || '';
+    const variantName = variant.charAt(0).toUpperCase() + variant.slice(1);
+    if (subversion) {
+      return `Claude ${version}.${subversion} ${variantName}`.trim();
+    }
+    return `Claude ${version} ${variantName}`.trim();
+  }
+  
+  // Fallback: capitalize first letter of each word
+  return modelName
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
 
 export default function LLMOverview() {
   const router = useRouter();
@@ -280,7 +325,9 @@ export default function LLMOverview() {
           {/* Gemini */}
           <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Gemini 1.5 Pro</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {formatModelName(stats.providerBreakdown?.gemini?.model)}
+              </h3>
               <span className="text-2xl">💎</span>
             </div>
             <div className="space-y-2">
@@ -290,7 +337,7 @@ export default function LLMOverview() {
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Total Cost:</span>
-                <span className="text-sm font-semibold text-blue-600">${(stats.providerBreakdown?.gemini?.cost ?? 0).toFixed(2)}</span>
+                <span className="text-sm font-semibold text-blue-600">${(stats.providerBreakdown?.gemini?.cost ?? stats.providerBreakdown?.gemini?.total_cost ?? 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Avg Cost:</span>
@@ -302,7 +349,9 @@ export default function LLMOverview() {
           {/* GPT-4 */}
           <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">GPT-4 Turbo</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {formatModelName(stats.providerBreakdown?.openai?.model)}
+              </h3>
               <span className="text-2xl">🤖</span>
             </div>
             <div className="space-y-2">
@@ -312,7 +361,7 @@ export default function LLMOverview() {
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Total Cost:</span>
-                <span className="text-sm font-semibold text-green-600">${(stats.providerBreakdown?.openai?.cost ?? 0).toFixed(2)}</span>
+                <span className="text-sm font-semibold text-green-600">${(stats.providerBreakdown?.openai?.cost ?? stats.providerBreakdown?.openai?.total_cost ?? 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Avg Cost:</span>
@@ -324,7 +373,9 @@ export default function LLMOverview() {
           {/* Claude */}
           <div className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Claude 3.5 Sonnet</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {formatModelName(stats.providerBreakdown?.anthropic?.model)}
+              </h3>
               <span className="text-2xl">🧠</span>
             </div>
             <div className="space-y-2">
@@ -334,7 +385,7 @@ export default function LLMOverview() {
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Total Cost:</span>
-                <span className="text-sm font-semibold text-orange-600">${(stats.providerBreakdown?.anthropic?.cost ?? 0).toFixed(2)}</span>
+                <span className="text-sm font-semibold text-orange-600">${(stats.providerBreakdown?.anthropic?.cost ?? stats.providerBreakdown?.anthropic?.total_cost ?? 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Avg Cost:</span>
@@ -376,17 +427,17 @@ export default function LLMOverview() {
                 <tr>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      Gemini 1.5 Pro
+                      {formatModelName(stats.providerBreakdown?.gemini?.model)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {stats.providerBreakdown?.gemini?.calls ?? 0}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${(stats.providerBreakdown?.gemini?.cost ?? 0).toFixed(2)}
+                    ${(stats.providerBreakdown?.gemini?.cost ?? stats.providerBreakdown?.gemini?.total_cost ?? 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${((stats.providerBreakdown?.gemini?.cost ?? 0) / ((stats.providerBreakdown?.gemini?.calls ?? 0) || 1)).toFixed(4)}
+                    ${((stats.providerBreakdown?.gemini?.cost ?? stats.providerBreakdown?.gemini?.total_cost ?? 0) / ((stats.providerBreakdown?.gemini?.calls ?? 0) || 1)).toFixed(4)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
                     99.2%
@@ -395,17 +446,17 @@ export default function LLMOverview() {
                 <tr>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      GPT-4 Turbo
+                      {formatModelName(stats.providerBreakdown?.openai?.model)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {stats.providerBreakdown?.openai?.calls ?? 0}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${(stats.providerBreakdown?.openai?.cost ?? 0).toFixed(2)}
+                    ${(stats.providerBreakdown?.openai?.cost ?? stats.providerBreakdown?.openai?.total_cost ?? 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${((stats.providerBreakdown?.openai?.cost ?? 0) / ((stats.providerBreakdown?.openai?.calls ?? 0) || 1)).toFixed(4)}
+                    ${((stats.providerBreakdown?.openai?.cost ?? stats.providerBreakdown?.openai?.total_cost ?? 0) / ((stats.providerBreakdown?.openai?.calls ?? 0) || 1)).toFixed(4)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
                     98.8%
@@ -414,17 +465,17 @@ export default function LLMOverview() {
                 <tr>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                      Claude 3.5 Sonnet
+                      {formatModelName(stats.providerBreakdown?.anthropic?.model)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {stats.providerBreakdown?.anthropic?.calls ?? 0}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${(stats.providerBreakdown?.anthropic?.cost ?? 0).toFixed(2)}
+                    ${(stats.providerBreakdown?.anthropic?.cost ?? stats.providerBreakdown?.anthropic?.total_cost ?? 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${((stats.providerBreakdown?.anthropic?.cost ?? 0) / ((stats.providerBreakdown?.anthropic?.calls ?? 0) || 1)).toFixed(4)}
+                    ${((stats.providerBreakdown?.anthropic?.cost ?? stats.providerBreakdown?.anthropic?.total_cost ?? 0) / ((stats.providerBreakdown?.anthropic?.calls ?? 0) || 1)).toFixed(4)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
                     99.5%

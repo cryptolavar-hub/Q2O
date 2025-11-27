@@ -1,0 +1,38 @@
+# Research Report: * Tasks: assignments, mentions, comments.
+**Date**: 2025-11-24T21:39:57.765118
+**Task**: task_0175_researcher - Research: Collaboration Platform Requirements
+**Depth**: deep
+**Confidence Score**: 45/100
+**Cached**: No
+
+---
+
+## Summary
+
+### Key Findings
+
+- "**Event-Driven Architecture for Notifications:** Implementing assignments, mentions, and comments effectively requires an event-driven approach to trigger real-time notifications (in-app, email, push) to relevant users without blocking core operations.",
+- "**Robust Relational Data Modeling:** A well-designed relational database schema is crucial for managing the complex relationships between tasks, users, assignments, comments, and mentions, ensuring data integrity and efficient querying.",
+- "**Asynchronous Processing is Key:** Operations like sending notifications, parsing mentions, or updating search indexes should be handled asynchronously to maintain responsiveness and scalability of the main application.",
+- "**Clear Authorization and Access Control:** Every action (assigning, commenting, mentioning, editing/deleting) must be strictly governed by granular authorization rules to ensure users can only perform actions they are permitted to.",
+- "**Real-time User Experience:** Features like live comment updates, instant mention notifications, and immediate assignment changes significantly enhance user engagement and collaboration, often requiring WebSocket or similar real-time communication protocols.",
+- "**Scalability through Indexing and Caching:** As the volume of tasks, comments, and users grows, efficient database indexing, query optimization, and strategic caching are essential to maintain performance.",
+- "**Comprehensive Input Validation:** User-generated content (comments, mentions) must undergo rigorous validation and sanitization to prevent security vulnerabilities like XSS and ensure data quality.",
+- "**Auditability and Versioning:** Tracking changes to assignments, and allowing editing/deletion with an audit trail for comments, provides transparency and accountability, which is critical for collaborative environments."
+- "https://cloud.google.com/apis/design/resources",
+- "https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design",
+
+### Official Documentation
+
+- https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API",
+- https://martinfowler.com/articles/microservices.html",
+- https://cloud.google.com/apis/design/resources",
+- https://www.postgresql.org/docs/current/ddl-constraints.html"
+- https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design",
+
+### Search Results
+
+---
+
+*Research conducted by ResearcherAgent (researcher_main)*
+*Sources consulted: llm_research_text, llm_research*

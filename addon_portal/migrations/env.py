@@ -40,6 +40,7 @@ from api.models.licensing import (
     Tenant, Plan, Subscription, Device, 
     UsageEvent, MonthlyUsageRollup, ActivationCode
 )
+from api.models.llm_usage import LLMUsageLog
 
 # this is the Alembic Config object
 config = context.config

@@ -25,6 +25,17 @@ export default function CodesPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loadingTenants, setLoadingTenants] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+<<<<<<< Updated upstream
+=======
+  const [showTenantModal, setShowTenantModal] = useState(false);
+  const [tenantModalPage, setTenantModalPage] = useState(1);
+  const [tenantModalPageSize, setTenantModalPageSize] = useState(10);
+  const [tenantModalSearch, setTenantModalSearch] = useState('');
+  const [tenantModalStatus, setTenantModalStatus] = useState('all');
+  const [tenantModalData, setTenantModalData] = useState<TenantPage | null>(null);
+  const [loadingTenantModal, setLoadingTenantModal] = useState(false);
+  const [selectedGenerateTenant, setSelectedGenerateTenant] = useState<string>('');
+>>>>>>> Stashed changes
 
   // Load tenants on mount
   useEffect(() => {
@@ -48,6 +59,66 @@ export default function CodesPage() {
     }
   };
 
+<<<<<<< Updated upstream
+=======
+  const loadTenantModalData = async () => {
+    try {
+      setLoadingTenantModal(true);
+      const params: TenantQueryParams = {
+        page: tenantModalPage,
+        pageSize: tenantModalPageSize,
+        search: tenantModalSearch.trim() || undefined,
+        status: tenantModalStatus !== 'all' ? tenantModalStatus : undefined,
+        sortField: 'created_at',
+        sortDirection: 'desc',
+      };
+      const response = await getTenants(params);
+      setTenantModalData(response);
+    } catch (error) {
+      console.error('Error loading tenant modal data:', error);
+      setTenantModalData(null);
+    } finally {
+      setLoadingTenantModal(false);
+    }
+  };
+
+  // Load tenant modal data when modal opens or filters change
+  useEffect(() => {
+    if (showTenantModal) {
+      loadTenantModalData();
+    }
+  }, [showTenantModal, tenantModalPage, tenantModalPageSize, tenantModalSearch, tenantModalStatus]);
+
+  // Reset selected tenant when Generate modal opens
+  useEffect(() => {
+    if (showGenerateModal && !selectedGenerateTenant) {
+      setSelectedGenerateTenant('');
+    }
+  }, [showGenerateModal]);
+
+  const handleSelectTenantFromModal = (tenant: Tenant) => {
+    // Ensure the selected tenant is in the tenants list for the dropdown
+    // If it's not already there, add it to the beginning of the list
+    setTenants(prevTenants => {
+      const tenantExists = prevTenants.some(t => t.slug === tenant.slug);
+      if (!tenantExists) {
+        return [tenant, ...prevTenants];
+      }
+      return prevTenants;
+    });
+
+    // If Generate modal is open, update the tenant selection in the form
+    if (showGenerateModal) {
+      setSelectedGenerateTenant(tenant.slug);
+    } else {
+      // Otherwise, update the filter on the main page
+      setSelectedTenant(tenant.slug);
+      setCurrentPage(1); // Reset to first page when filter changes
+    }
+    setShowTenantModal(false);
+  };
+
+>>>>>>> Stashed changes
   const loadCodes = async () => {
     try {
       setLoadingCodes(true);
@@ -500,6 +571,7 @@ export default function CodesPage() {
           onClick={() => {
             setShowGenerateModal(false);
             setErrorMessage(null);
+            setSelectedGenerateTenant(''); // Reset selection when closing
           }}
         >
           <motion.div
@@ -519,19 +591,37 @@ export default function CodesPage() {
             <form onSubmit={handleGenerateCodes} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Tenant *</label>
-                <select 
-                  name="tenant_slug" 
-                  required
-                  disabled={loadingTenants}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  <option value="">{loadingTenants ? 'Loading tenants...' : 'Select tenant...'}</option>
-                  {tenants.map(tenant => (
-                    <option key={tenant.slug} value={tenant.slug}>
-                      {tenant.name} ({tenant.slug})
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-2">
+                  <select 
+                    name="tenant_slug" 
+                    value={selectedGenerateTenant}
+                    onChange={(e) => setSelectedGenerateTenant(e.target.value)}
+                    required
+                    disabled={loadingTenants}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">{loadingTenants ? 'Loading tenants...' : 'Select tenant...'}</option>
+                    {tenants.map(tenant => (
+                      <option key={tenant.slug} value={tenant.slug}>
+                        {tenant.name} ({tenant.slug})
+                      </option>
+                    ))}
+                  </select>
+                  {totalTenants > 10 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTenantModal(true);
+                        setTenantModalPage(1);
+                        setTenantModalSearch('');
+                        setTenantModalStatus('all');
+                      }}
+                      className="w-full text-sm text-purple-600 hover:text-purple-800 font-medium text-left underline"
+                    >
+                      See More →
+                    </button>
+                  )}
+                </div>
                 {tenants.length === 0 && !loadingTenants && (
                   <p className="mt-1 text-sm text-amber-600">No tenants available. Create a tenant first.</p>
                 )}
@@ -587,7 +677,10 @@ export default function CodesPage() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowGenerateModal(false)}
+                  onClick={() => {
+                    setShowGenerateModal(false);
+                    setSelectedGenerateTenant(''); // Reset selection when closing
+                  }}
                   disabled={loading}
                   className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >

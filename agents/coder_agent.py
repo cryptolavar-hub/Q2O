@@ -18,6 +18,7 @@ from agents.research_aware_mixin import ResearchAwareMixin
 from utils.template_renderer import TemplateRenderer, get_renderer
 from utils.project_layout import ProjectLayout, get_default_layout
 from utils.name_sanitizer import sanitize_objective, sanitize_for_filename, sanitize_for_class_name
+from utils.name_generator import generate_component_name, generate_concise_name
 
 # LLM Integration (with graceful fallback if not available)
 try:
@@ -44,8 +45,9 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
     def __init__(self, agent_id: str = "coder_main", workspace_path: str = ".", 
                  project_layout: Optional[ProjectLayout] = None,
                  project_id: Optional[str] = None,
-                 tenant_id: Optional[int] = None):
-        super().__init__(agent_id, AgentType.CODER, project_layout, project_id=project_id, tenant_id=tenant_id)
+                 tenant_id: Optional[int] = None,
+                 orchestrator: Optional[Any] = None):
+        super().__init__(agent_id, AgentType.CODER, project_layout, project_id=project_id, tenant_id=tenant_id, orchestrator=orchestrator)
         self.workspace_path = workspace_path
         self.implemented_files: List[str] = []
         self.template_renderer = get_renderer()
@@ -248,7 +250,9 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
         # For Next.js/React projects
         if "nextjs" in tech_stack:
             if "page" in description_lower:
-                page_name = sanitize_for_filename(objective)
+                # Generate concise name first, then sanitize
+                concise_name = generate_concise_name(objective, max_length=40)
+                page_name = sanitize_for_filename(concise_name)
                 structure["files"].append({
                     "type": "page",
                     "path": os.path.join(self.project_layout.web_pages_dir, f"{page_name}.tsx"),
@@ -256,7 +260,9 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
                 })
             
             if "component" in description_lower:
-                component_name = sanitize_for_class_name(objective)
+                # Generate concise name first, then sanitize
+                concise_name = generate_concise_name(objective, max_length=40)
+                component_name = sanitize_for_class_name(concise_name)
                 structure["files"].append({
                     "type": "component",
                     "path": os.path.join(self.project_layout.web_components_dir, f"{component_name}.tsx"),
@@ -265,7 +271,9 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
 
         # If no specific files identified, create a generic implementation
         if not structure["files"]:
-            filename = sanitize_for_filename(objective)
+            # Generate concise name first, then sanitize
+            concise_name = generate_concise_name(objective, max_length=40)
+            filename = sanitize_for_filename(concise_name)
             if "python" in tech_stack:
                 structure["files"].append({
                     "type": "generic",
@@ -316,12 +324,23 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
                 file_type, file_info, objective, task, tech_stack
             )
             
+<<<<<<< Updated upstream
             # Write file
             with open(full_path, 'w', encoding='utf-8') as f:
                 f.write(code_content)
             
             implemented_files.append(file_path)
             self.logger.info(f"✅ Created file: {file_path}")
+=======
+            # Write file using safe file writer (HARD GUARANTEE)
+            try:
+                self.safe_write_file(file_path, code_content)
+                implemented_files.append(file_path)
+                self.logger.info(f"[OK] Created file: {file_path}")
+            except Exception as e:
+                self.logger.error(f"[ERROR] Failed to write file {file_path}: {e}")
+                raise
+>>>>>>> Stashed changes
 
         return implemented_files
     
@@ -495,7 +514,9 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
 
     def _generate_api_code(self, objective: str, task: Task) -> str:
         """Generate FastAPI endpoint code using template."""
-        sanitized = sanitize_objective(objective)
+        # Generate concise name first, then sanitize
+        concise_name = generate_concise_name(objective, max_length=40)
+        sanitized = sanitize_objective(concise_name)
         module_name = sanitized['filename']
         endpoint_path = f"/api/{module_name}"
         class_name = sanitized['class_name']
@@ -673,7 +694,9 @@ async def delete_{module_name}(
 
     def _generate_model_code(self, objective: str, task: Task) -> str:
         """Generate SQLAlchemy data model code using template."""
-        sanitized = sanitize_objective(objective)
+        # Generate concise name first, then sanitize
+        concise_name = generate_concise_name(objective, max_length=40)
+        sanitized = sanitize_objective(concise_name)
         class_name = sanitized['class_name']
         table_name = sanitized['filename']
         
@@ -744,7 +767,9 @@ class {class_name}(Base):
 
     def _generate_service_code(self, objective: str, task: Task) -> str:
         """Generate service/business logic code."""
-        sanitized = sanitize_objective(objective)
+        # Generate concise name first, then sanitize
+        concise_name = generate_concise_name(objective, max_length=40)
+        sanitized = sanitize_objective(concise_name)
         class_name = sanitized['class_name'] + "Service"
         method_name = sanitized['function_name']
         return f'''"""
@@ -803,7 +828,9 @@ class {class_name}:
 
     def _generate_component_code(self, objective: str, task: Task) -> str:
         """Generate UI component code."""
-        sanitized = sanitize_objective(objective)
+        # Generate concise name first, then sanitize
+        concise_name = generate_concise_name(objective, max_length=40)
+        sanitized = sanitize_objective(concise_name)
         class_name = sanitized['class_name'] + "Component"
         return f'''"""
 UI Component for {objective}
@@ -854,7 +881,9 @@ class {class_name}:
 
     def _generate_generic_code(self, objective: str, task: Task) -> str:
         """Generate generic implementation code."""
-        sanitized = sanitize_objective(objective)
+        # Generate concise name first, then sanitize
+        concise_name = generate_concise_name(objective, max_length=40)
+        sanitized = sanitize_objective(concise_name)
         module_name = sanitized['filename']
         class_name = sanitized['class_name']
         display_name = sanitized['display_name']

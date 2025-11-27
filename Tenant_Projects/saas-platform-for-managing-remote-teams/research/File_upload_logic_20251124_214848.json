@@ -1,0 +1,37 @@
+{
+  "query": "* File upload logic.",
+  "timestamp": "2025-11-24T21:48:48.815824",
+  "depth": "quick",
+  "search_results": [],
+  "key_findings": [
+    "\"https://www.w3.org/TR/html401/interact/forms.html#h-17.13.4.2\",",
+    "\"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Disposition\",",
+    "\"https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file\",",
+    "\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html\",",
+    "\"https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blobs-overview\",",
+    "\"https://cloud.google.com/storage/docs/overview\",",
+    "\"https://requests.readthedocs.io/en/latest/\",",
+    "\"https://flask.palletsprojects.com/en/latest/patterns/fileuploads/\"",
+    "\"description\": \"Server-side: Flask application receiving a file via HTTP POST (multipart/form-data)\",",
+    "\"code\": \"from flask import Flask, request, redirect, url_for\\nfrom werkzeug.utils import secure_filename\\nimport os\\n\\nUPLOAD_FOLDER = '/tmp/uploads'\\nALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}\\n\\napp = Flask(__name__)\\napp.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER\\napp.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB limit\\n\\ndef allowed_file(filename):\\n    return '.' in filename and \\\\\\n           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS\\n\\n@app.route('/upload', methods=['GET', 'POST'])\\ndef upload_file():\\n    if request.method == 'POST':\\n        # Check if the post request has the file part\\n        if 'file' not in request.files:\\n            return 'No file part', 400\\n        file = request.files['file']\\n        # If the user does not select a file, the browser submits an\\n        # empty file without a filename.\\n        if file.filename == '':\\n            return 'No selected file', 400\\n        if file and allowed_file(file.filename):\\n            filename = secure_filename(file.filename)\\n            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))\\n            return f'File {filename} uploaded successfully', 200\\n        else:\\n            return 'Invalid file type or size', 400\\n    return '''\\n    <!doctype html>\\n    <title>Upload new File</title>\\n    <h1>Upload new File</h1>\\n    <form method=post enctype=multipart/form-data>\\n      <input type=file name=file>\\n      <input type=submit value=Upload>\\n    </form>\\n    '''\\n\\nif __name__ == '__main__':\\n    os.makedirs(UPLOAD_FOLDER, exist_ok=True)\\n    app.run(debug=True)\""
+  ],
+  "documentation_urls": [
+    "https://requests.readthedocs.io/en/latest/\",",
+    "https://flask.palletsprojects.com/en/latest/patterns/fileuploads/\"",
+    "http://127.0.0.1:5000/upload'\\nfilepath",
+    "https://cloud.google.com/storage/docs/overview\",",
+    "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file\",",
+    "https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html\",",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Disposition\",",
+    "https://www.w3.org/TR/html401/interact/forms.html#h-17.13.4.2\",",
+    "https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blobs-overview\","
+  ],
+  "code_examples": [],
+  "best_practices": [],
+  "confidence_score": 45,
+  "sources_consulted": [
+    "llm_research_text",
+    "llm_research"
+  ],
+  "cached": false
+}

@@ -91,7 +91,9 @@ class BaseAgent(ABC):
         project_layout: Optional[ProjectLayout] = None, 
         enable_messaging: bool = True,
         project_id: Optional[str] = None,
-        tenant_id: Optional[int] = None
+        tenant_id: Optional[int] = None,
+        orchestrator: Optional[Any] = None,
+        workspace_path: Optional[str] = None
     ):
         self.agent_id = agent_id
         self.agent_type = agent_type
@@ -104,6 +106,24 @@ class BaseAgent(ABC):
         self.project_id = project_id or os.getenv("Q2O_PROJECT_ID")
         self.tenant_id = tenant_id or (int(os.getenv("Q2O_TENANT_ID")) if os.getenv("Q2O_TENANT_ID") else None)
         self.db_task_ids: Dict[str, str] = {}  # Map task.id -> db_task_id
+        self.orchestrator = orchestrator  # Reference to orchestrator for dependency access
+        
+        # CRITICAL: Validate and set workspace_path with hard security guarantees
+        if workspace_path:
+            from utils.safe_file_writer import validate_workspace_path
+            try:
+                self.workspace_path = str(validate_workspace_path(workspace_path, self.project_id))
+            except Exception as e:
+                self.logger.error(f"CRITICAL: Invalid workspace_path '{workspace_path}': {e}")
+                raise
+        else:
+            # Default to current directory (for backward compatibility, but warn)
+            self.workspace_path = "."
+            self.logger.warning(
+                f"Agent {agent_id} initialized without workspace_path! "
+                f"This may cause files to be written to the wrong location. "
+                f"Set workspace_path to Tenant_Projects/{{project_id}}/"
+            )
         
         # Initialize messaging if enabled
         if enable_messaging:
@@ -276,31 +296,65 @@ class BaseAgent(ABC):
         return task.agent_type == self.agent_type
 
     def _emit_task_started(self, task_id: str, task: Task):
-        """Emit dashboard event for task started."""
+        """Emit dashboard event for task started.
+        
+        Uses background thread with its own event loop to avoid blocking
+        and prevent event loop conflicts. Fire-and-forget pattern.
+        """
         try:
             from api.dashboard.events import get_event_manager
             import asyncio
+            import threading
             
             event_manager = get_event_manager()
-            asyncio.create_task(event_manager.emit_task_update(
-                task_id=task_id,
-                status="in_progress",
-                title=task.title,
-                agent_id=self.agent_id,
-                agent_type=self.agent_type.value,
-                started_at=task.started_at.isoformat() if task.started_at else None,
-                dependencies=task.dependencies,
-                progress=0
-            ))
+            
+            def emit_in_background():
+                """Emit events in background thread with its own event loop."""
+                try:
+                    # Create new event loop for this thread
+                    # This prevents event loop conflicts
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    try:
+                        loop.run_until_complete(event_manager.emit_task_update(
+                            task_id=task_id,
+                            status="in_progress",
+                            title=task.title,
+                            agent_id=self.agent_id,
+                            agent_type=self.agent_type.value,
+                            started_at=task.started_at.isoformat() if task.started_at else None,
+                            dependencies=task.dependencies,
+                            progress=0
+                        ))
+                    finally:
+                        loop.close()
+                        # Clean up event loop reference
+                        try:
+                            asyncio.set_event_loop(None)
+                        except Exception:
+                            pass
+                except Exception as e:
+                    self.logger.debug(f"Failed to emit task started event: {e}")
+            
+            # Run in background thread (fire-and-forget)
+            # Daemon thread ensures it doesn't block process shutdown
+            thread = threading.Thread(target=emit_in_background, daemon=True)
+            thread.start()
         except Exception:
             # Fail silently if dashboard not available
             pass
     
     def _emit_task_complete(self, task_id: str, task: Task):
-        """Emit dashboard event for task completed."""
+        """Emit dashboard event for task completed.
+        
+        Uses background thread with its own event loop to avoid blocking
+        and prevent event loop conflicts. Fire-and-forget pattern.
+        """
         try:
             from api.dashboard.events import get_event_manager
             import asyncio
+            import threading
             
             event_manager = get_event_manager()
             
@@ -309,29 +363,94 @@ class BaseAgent(ABC):
             if task.started_at and task.completed_at:
                 duration = (task.completed_at - task.started_at).total_seconds()
             
-            asyncio.create_task(event_manager.emit_task_update(
-                task_id=task_id,
-                status="completed",
-                title=task.title,
-                agent_id=self.agent_id,
-                agent_type=self.agent_type.value,
-                started_at=task.started_at.isoformat() if task.started_at else None,
-                completed_at=task.completed_at.isoformat() if task.completed_at else None,
-                duration=duration,
-                progress=100
-            ))
+            def emit_in_background():
+                """Emit events in background thread with its own event loop."""
+                try:
+                    # Create new event loop for this thread
+                    # This prevents event loop conflicts
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    try:
+                        # Emit task update
+                        loop.run_until_complete(event_manager.emit_task_update(
+                            task_id=task_id,
+                            status="completed",
+                            title=task.title,
+                            agent_id=self.agent_id,
+                            agent_type=self.agent_type.value,
+                            started_at=task.started_at.isoformat() if task.started_at else None,
+                            completed_at=task.completed_at.isoformat() if task.completed_at else None,
+                            duration=duration,
+                            progress=100
+                        ))
+                        
+                        # Emit agent activity
+                        loop.run_until_complete(event_manager.emit_agent_activity(
+                            agent_id=self.agent_id,
+                            agent_type=self.agent_type.value,
+                            activity="task_completed",
+                            task_id=task_id,
+                            status="idle" if len(self.active_tasks) == 0 else "active"
+                        ))
+                    finally:
+                        loop.close()
+                        # Clean up event loop reference
+                        try:
+                            asyncio.set_event_loop(None)
+                        except Exception:
+                            pass
+                except Exception as e:
+                    self.logger.debug(f"Failed to emit task complete event: {e}")
             
-            # Emit agent activity
-            asyncio.create_task(event_manager.emit_agent_activity(
-                agent_id=self.agent_id,
-                agent_type=self.agent_type.value,
-                activity="task_completed",
-                task_id=task_id,
-                status="idle" if len(self.active_tasks) == 0 else "active"
-            ))
+            # Run in background thread (fire-and-forget)
+            # Daemon thread ensures it doesn't block process shutdown
+            thread = threading.Thread(target=emit_in_background, daemon=True)
+            thread.start()
         except Exception:
             # Fail silently if dashboard not available
             pass
+    
+    def safe_write_file(self, file_path: str, content: str, encoding: str = 'utf-8', create_dirs: bool = True) -> str:
+        """
+        Safely write a file with hard guarantees that it won't corrupt platform code.
+        
+        This is the ONLY method agents should use to write files.
+        All file writes MUST go through this method.
+        
+        Args:
+            file_path: Relative path to the file (relative to workspace_path)
+            content: Content to write
+            encoding: File encoding (default: utf-8)
+            create_dirs: Whether to create parent directories (default: True)
+            
+        Returns:
+            Absolute path to the written file
+            
+        Raises:
+            WorkspaceSecurityError: If any security rule is violated
+            OSError: If file cannot be written
+        """
+        from utils.safe_file_writer import safe_write_file, WorkspaceSecurityError
+        
+        workspace_path = getattr(self, 'workspace_path', '.')
+        
+        try:
+            written_path = safe_write_file(
+                file_path=file_path,
+                content=content,
+                workspace_path=workspace_path,
+                project_id=self.project_id,
+                encoding=encoding,
+                create_dirs=create_dirs
+            )
+            return str(written_path)
+        except WorkspaceSecurityError as e:
+            self.logger.error(f"SECURITY VIOLATION: {e}")
+            raise
+        except Exception as e:
+            self.logger.error(f"Failed to write file '{file_path}': {e}")
+            raise
     
     def _auto_commit_task(self, task: Task):
         """Automatically commit files created by completed task."""
@@ -372,33 +491,63 @@ class BaseAgent(ABC):
             self.logger.debug(f"Auto-commit failed (optional feature): {e}")
     
     def _emit_task_failed(self, task_id: str, task: Task, error: str):
-        """Emit dashboard event for task failed."""
+        """Emit dashboard event for task failed.
+        
+        Uses background thread with its own event loop to avoid blocking
+        and prevent event loop conflicts. Fire-and-forget pattern.
+        """
         try:
             from api.dashboard.events import get_event_manager
             import asyncio
+            import threading
             
             event_manager = get_event_manager()
-            asyncio.create_task(event_manager.emit_task_update(
-                task_id=task_id,
-                status="failed",
-                title=task.title,
-                agent_id=self.agent_id,
-                agent_type=self.agent_type.value,
-                started_at=task.started_at.isoformat() if task.started_at else None,
-                completed_at=task.completed_at.isoformat() if task.completed_at else None,
-                error=error,
-                progress=0
-            ))
+<<<<<<< Updated upstream
+            def emit_in_background():
+                """Emit events in background thread with its own event loop."""
+                try:
+                    # Create new event loop for this thread
+                    # This prevents event loop conflicts
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    try:
+                        # Emit task update
+                        loop.run_until_complete(event_manager.emit_task_update(
+                            task_id=task_id,
+                            status="failed",
+                            title=task.title,
+                            agent_id=self.agent_id,
+                            agent_type=self.agent_type.value,
+                            started_at=task.started_at.isoformat() if task.started_at else None,
+                            completed_at=task.completed_at.isoformat() if task.completed_at else None,
+                            error=error,
+                            progress=0
+                        ))
+                        
+                        # Emit agent activity
+                        loop.run_until_complete(event_manager.emit_agent_activity(
+                            agent_id=self.agent_id,
+                            agent_type=self.agent_type.value,
+                            activity="task_failed",
+                            task_id=task_id,
+                            error=error,
+                            status="idle" if len(self.active_tasks) == 0 else "active"
+                        ))
+                    finally:
+                        loop.close()
+                        # Clean up event loop reference
+                        try:
+                            asyncio.set_event_loop(None)
+                        except Exception:
+                            pass
+                except Exception as e:
+                    self.logger.debug(f"Failed to emit task failed event: {e}")
             
-            # Emit agent activity
-            asyncio.create_task(event_manager.emit_agent_activity(
-                agent_id=self.agent_id,
-                agent_type=self.agent_type.value,
-                activity="task_failed",
-                task_id=task_id,
-                error=error,
-                status="idle" if len(self.active_tasks) == 0 else "active"
-            ))
+            # Run in background thread (fire-and-forget)
+            # Daemon thread ensures it doesn't block process shutdown
+            thread = threading.Thread(target=emit_in_background, daemon=True)
+            thread.start()
         except Exception:
             # Fail silently if dashboard not available
             pass
@@ -456,12 +605,29 @@ class BaseAgent(ABC):
         
         # Emit dashboard event
         self._emit_task_started(task.id, task)
+    
+    def track_llm_usage(self, task: Task, llm_response):
+        """
+        Track LLM usage for a task.
         
-        # Emit agent activity
+        CRITICAL FIX: Agents must call this after each LLM call to track usage for dashboard.
+        
+        Args:
+            task: The task that used LLM
+            llm_response: LLMResponse object with usage information
+        """
+        if not llm_response or not llm_response.usage:
+            return  # No usage data to track
+        
+        db_task_id = self.db_task_ids.get(task.id)
+        if not db_task_id:
+            self.logger.debug(f"No database task ID found for {task.id}, skipping LLM usage tracking")
+            return
+        
         try:
-            from api.dashboard.events import get_event_manager
-            import asyncio
+            from agents.task_tracking import update_task_llm_usage_in_db, run_async
             
+<<<<<<< Updated upstream
             event_manager = get_event_manager()
             asyncio.create_task(event_manager.emit_agent_activity(
                 agent_id=self.agent_id,
@@ -472,6 +638,29 @@ class BaseAgent(ABC):
             ))
         except Exception:
             pass
+=======
+            usage = llm_response.usage
+            
+            # Track LLM usage: 1 call, tokens used, cost
+            run_async(update_task_llm_usage_in_db(
+                task_id=db_task_id,
+                llm_calls_count=1,
+                llm_tokens_used=usage.total_tokens,
+                llm_cost_usd=usage.total_cost,
+            ))
+            
+            self.logger.debug(
+                f"Tracked LLM usage for {task.id}: "
+                f"{usage.total_tokens} tokens, ${usage.total_cost:.4f}, "
+                f"{llm_response.provider}/{llm_response.model}"
+            )
+        except Exception as e:
+            self.logger.warning(f"Failed to track LLM usage for {task.id}: {e}")
+        
+        # Emit agent activity (handled by _emit_task_started, but keeping for completeness)
+        # Note: Agent activity is already emitted in _emit_task_started
+        # This is redundant but kept for backward compatibility
+>>>>>>> Stashed changes
         
         return True
 

@@ -397,8 +397,9 @@ class ResearcherAgent(BaseAgent):
     def __init__(self, agent_id: str = "researcher_main", workspace_path: str = ".",
                  project_layout: Optional[ProjectLayout] = None,
                  project_id: Optional[str] = None,
-                 tenant_id: Optional[int] = None):
-        super().__init__(agent_id, AgentType.RESEARCHER, project_layout, project_id=project_id, tenant_id=tenant_id)
+                 tenant_id: Optional[int] = None,
+                 orchestrator: Optional[Any] = None):
+        super().__init__(agent_id, AgentType.RESEARCHER, project_layout, project_id=project_id, tenant_id=tenant_id, orchestrator=orchestrator)
         self.workspace_path = workspace_path
         self.research_files: List[str] = []
         self.project_id = project_id
@@ -508,15 +509,20 @@ class ResearcherAgent(BaseAgent):
         """
         Extract research query from task.
         
+        CRITICAL FIX: Removes instructions and extracts actual research topic.
+        
         Args:
             task: The research task
             
         Returns:
-            Research query string
+            Research query string (actual topic, not instructions)
         """
         # Check if explicitly provided
         if task.metadata.get("research_query"):
-            return task.metadata["research_query"]
+            query = task.metadata["research_query"]
+            # Clean up if it contains instructions
+            query = self._clean_research_query(query)
+            return query
         
         # Extract from description
         description = task.description
@@ -526,15 +532,75 @@ class ResearcherAgent(BaseAgent):
             r'research:\s*(.+?)(?:\n|$)',
             r'find information about:\s*(.+?)(?:\n|$)',
             r'learn about:\s*(.+?)(?:\n|$)',
+            r'conduct.*research.*for:\s*(.+?)(?:\n|$)',
+            r'research.*topic:\s*(.+?)(?:\n|$)',
         ]
         
         for pattern in patterns:
             match = re.search(pattern, description, re.IGNORECASE)
             if match:
-                return match.group(1).strip()
+                query = match.group(1).strip()
+                # Clean up if it contains instructions
+                query = self._clean_research_query(query)
+                return query
         
-        # Fallback to objective or title
-        return task.metadata.get("objective", task.title)
+        # Fallback to objective or title, but clean it
+        fallback = task.metadata.get("objective", task.title)
+        return self._clean_research_query(fallback)
+    
+    def _clean_research_query(self, query: str) -> str:
+        """
+        Clean research query by removing instructions and extracting actual topic.
+        
+        Args:
+            query: Raw query that may contain instructions
+            
+        Returns:
+            Cleaned research topic
+        """
+        if not query:
+            return query
+        
+        # Remove common instruction patterns
+        instruction_patterns = [
+            r'Follow every requirement below strictly\.?\s*',
+            r'Produce outputs that are detailed, actionable.*?\.\s*',
+            r'Do not skip or summarize sections unless instructed\.\s*',
+            r'Include code, diagrams, and deployment plans\.\s*',
+            r'Be architecturally sound, multistep\.\s*',
+        ]
+        
+        cleaned = query
+        for pattern in instruction_patterns:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+        
+        # If query starts with instructions, try to find the actual topic
+        # Look for patterns like "Research: <topic>" or "Topic: <topic>"
+        topic_patterns = [
+            r'(?:research|topic|subject|about):\s*(.+?)(?:\n|$)',
+            r'research\s+(?:on|about|for)\s+(.+?)(?:\n|$)',
+        ]
+        
+        for pattern in topic_patterns:
+            match = re.search(pattern, cleaned, re.IGNORECASE)
+            if match:
+                cleaned = match.group(1).strip()
+                break
+        
+        # Remove leading/trailing whitespace and newlines
+        cleaned = cleaned.strip()
+        
+        # If cleaned query is too short or still looks like instructions, use original
+        if len(cleaned) < 10 or cleaned.lower().startswith(('follow', 'produce', 'do not', 'include')):
+            # Try to extract from context - look for the actual objective
+            # Split by common separators and take the first substantial part
+            parts = re.split(r'[.\n]', query)
+            for part in parts:
+                part = part.strip()
+                if len(part) > 20 and not part.lower().startswith(('follow', 'produce', 'do not', 'include', 'be thorough')):
+                    return part
+        
+        return cleaned if cleaned else query
     
     def _conduct_research(self, query: str, task: Task) -> Dict[str, Any]:
         """
@@ -665,6 +731,356 @@ class ResearcherAgent(BaseAgent):
         
         return research_results
     
+<<<<<<< Updated upstream
+=======
+    def _conduct_research_with_llm(self, query: str, task: Task, depth: str) -> Optional[Dict[str, Any]]:
+        """
+        Conduct research using LLM as PRIMARY method.
+        
+        This method uses LLM to provide comprehensive research in a single call,
+        including documentation URLs, code examples, best practices, and insights.
+        
+        Args:
+            query: Research query
+            task: The research task
+            depth: Research depth level
+            
+        Returns:
+            Research results dictionary or None if LLM fails
+        """
+        if not self.llm_service:
+            return None
+        
+        try:
+            # Check if we're already in async context
+            try:
+                loop = asyncio.get_running_loop()
+                # Already in async - need to handle differently
+                self.logger.warning("[LLM] Already in async context, cannot use LLM research synchronously")
+                return None
+            except RuntimeError:
+                # No running loop - safe to create new one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    llm_results = loop.run_until_complete(
+                        self._conduct_research_with_llm_async(query, task, depth)
+                    )
+                    return llm_results
+                finally:
+                    loop.close()
+        except Exception as e:
+            self.logger.error(f"[LLM] Error in LLM research: {e}", exc_info=True)
+            return None
+    
+    async def _conduct_research_with_llm_async(self, query: str, task: Task, depth: str) -> Optional[Dict[str, Any]]:
+        """
+        Async method to conduct research using LLM.
+        
+        Args:
+            query: Research query
+            task: The research task
+            depth: Research depth level
+            
+        Returns:
+            Research results dictionary or None if LLM fails
+        """
+        if not self.llm_service:
+            return None
+        
+        # Build comprehensive LLM prompt for research
+        system_prompt = """You are an expert software researcher and technical analyst.
+
+Your task: Provide comprehensive research on a given topic, including:
+1. Key findings and insights (5-10 actionable points)
+2. Official documentation URLs (prioritize official sources)
+3. Code examples (if applicable, in the requested language/framework)
+4. Best practices and recommendations
+5. Common pitfalls to avoid
+6. Implementation patterns and approaches
+7. Integration requirements (APIs, authentication, data formats)
+8. Performance and security considerations
+
+Return your research as JSON:
+{
+  "key_findings": [
+    "Finding 1: Specific, actionable insight",
+    "Finding 2: Another specific insight",
+    ...
+  ],
+  "documentation_urls": [
+    "https://official-docs.com/api",
+    "https://developer.example.com/guide",
+    ...
+  ],
+  "code_examples": [
+    {
+      "language": "python",
+      "description": "Example: API authentication",
+      "code": "import requests\\n\\ndef authenticate():\\n    ..."
+    },
+    ...
+  ],
+  "best_practices": [
+    "Practice 1: Specific recommendation",
+    "Practice 2: Another recommendation",
+    ...
+  ],
+  "common_pitfalls": [
+    "Pitfall 1: What to avoid and why",
+    "Pitfall 2: Another common mistake",
+    ...
+  ],
+  "implementation_patterns": [
+    "Pattern 1: Description of approach",
+    "Pattern 2: Alternative approach",
+    ...
+  ],
+  "integration_requirements": {
+    "authentication": "OAuth 2.0, API keys, etc.",
+    "apis_required": ["API 1", "API 2"],
+    "data_formats": ["JSON", "XML"]
+  },
+  "performance_considerations": [
+    "Consideration 1: Performance tip",
+    ...
+  ],
+  "security_considerations": [
+    "Security tip 1: What to secure",
+    ...
+  ]
+}
+
+Be specific, accurate, and actionable. Focus on what developers NEED to know."""
+        
+        # Build user prompt with FULL context: System Prompt + Project Objectives + Agent Prompts + Research Topic
+        tech_stack = task.tech_stack or []
+        tech_context = f"Tech Stack: {', '.join(tech_stack)}" if tech_stack else "No specific tech stack"
+        
+        # CRITICAL FIX: Extract clean research topic (WHAT to research)
+        # But keep full objective for context (HOW to research, WHAT format/output)
+        clean_research_topic = query
+        if not query or len(query) < 10 or query.lower().startswith(('follow', 'produce', 'do not')):
+            # Try to get actual research topic from task objective
+            actual_objective = task.metadata.get("objective", "")
+            if actual_objective and actual_objective != query:
+                # Extract first sentence or meaningful phrase from objective
+                objective_parts = re.split(r'[.\n]', actual_objective)
+                for part in objective_parts:
+                    part = part.strip()
+                    if len(part) > 20 and not part.lower().startswith(('follow', 'produce', 'do not', 'include')):
+                        clean_research_topic = part
+                        break
+                if not clean_research_topic or len(clean_research_topic) < 10:
+                    clean_research_topic = actual_objective[:200]  # Use first 200 chars of objective
+        
+        # Get FULL project objective (contains instructions on HOW to research)
+        full_objective = task.metadata.get("objective", "")
+        task_description = task.description or ""
+        
+        # Get agent-specific prompts if available
+        agent_prompt = ""
+        if LLM_INTEGRATION_AVAILABLE:
+            try:
+                config_manager = get_configuration_manager()
+                if config_manager:
+                    # Get agent-specific prompt for this project
+                    _, user_prompt_template = config_manager.get_prompt_for_task(
+                        project_id=self.project_id,
+                        agent_type=self.agent_type,
+                        task_description=task_description,
+                        tech_stack=tech_stack
+                    )
+                    if user_prompt_template and user_prompt_template != task_description:
+                        agent_prompt = user_prompt_template
+            except Exception as e:
+                self.logger.debug(f"Could not get agent prompt: {e}")
+        
+        # Build comprehensive user prompt with ALL context
+        user_prompt_parts = [
+            f"Research Topic: {clean_research_topic}",
+            "",
+            "Context:",
+            f"Tech Stack: {tech_context}",
+            f"Task Complexity: {task.metadata.get('complexity', 'medium')}",
+            f"Research Depth: {depth}",
+        ]
+        
+        # Add project objective if available (contains important instructions)
+        if full_objective and full_objective != clean_research_topic:
+            user_prompt_parts.extend([
+                "",
+                "Project Objectives and Requirements:",
+                full_objective
+            ])
+        
+        # Add task description if it contains additional context
+        if task_description and task_description != full_objective:
+            user_prompt_parts.extend([
+                "",
+                "Task Description:",
+                task_description
+            ])
+        
+        # Add agent-specific prompt if available
+        if agent_prompt:
+            user_prompt_parts.extend([
+                "",
+                "Agent-Specific Instructions:",
+                agent_prompt
+            ])
+        
+        user_prompt_parts.extend([
+            "",
+            "Please provide comprehensive research on the topic above. Include:",
+            "- Official documentation URLs (verify these are real, official sources)",
+            "- Code examples in the relevant language/framework",
+            "- Best practices specific to this technology",
+            "- Implementation patterns and approaches",
+            "- Integration requirements",
+            "- Performance and security considerations",
+            "",
+            "Be thorough and specific. This research will be used to implement the solution."
+        ])
+        
+        user_prompt = "\n".join(user_prompt_parts)
+        
+        # Generate research with LLM
+        self.logger.info(f"[LLM] Requesting comprehensive research from LLM...")
+        response = await self.llm_service.complete(
+            system_prompt,
+            user_prompt,
+            temperature=0.3,  # Lower temperature for factual research
+            max_tokens=4096  # Allow comprehensive responses
+        )
+        
+        if not response.success:
+            self.logger.warning(f"[LLM] LLM research failed: {response.error}")
+            if hasattr(response, 'attempts'):
+                self.logger.warning(f"[LLM] Attempts made: {response.attempts}")
+            return None
+        
+        # Log LLM usage
+        if response.usage:
+            self.logger.info(
+                f"[COST] LLM research cost: ${response.usage.total_cost:.4f} "
+                f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens, "
+                f"provider: {response.provider})"
+            )
+        
+        # CRITICAL FIX: Track LLM usage for dashboard
+        self.track_llm_usage(task, response)
+        
+        # Parse JSON response with robust parsing
+        try:
+            from utils.json_parser import parse_json_robust
+            
+            # Use robust JSON parser to handle malformed responses
+            result = parse_json_robust(
+                response.content,
+                required_fields=['key_findings']  # At minimum, we need findings
+            )
+            
+            if not result:
+                # Fall back to text parsing
+                self.logger.warning("[LLM] JSON parsing failed, attempting text extraction")
+                return self._parse_llm_research_from_text(response.content, query, depth)
+            
+            # Build research results structure
+            research_results = {
+                'query': query,
+                'timestamp': datetime.now().isoformat(),
+                'depth': depth,
+                'search_results': [],  # Empty for LLM research
+                'key_findings': result.get('key_findings', []),
+                'documentation_urls': result.get('documentation_urls', []),
+                'code_examples': result.get('code_examples', []),
+                'best_practices': result.get('best_practices', []),
+                'common_pitfalls': result.get('common_pitfalls', []),
+                'implementation_patterns': result.get('implementation_patterns', []),
+                'integration_requirements': result.get('integration_requirements', {}),
+                'performance_considerations': result.get('performance_considerations', []),
+                'security_considerations': result.get('security_considerations', []),
+                'confidence_score': 95,  # High confidence for LLM research
+                'sources_consulted': ['llm_research'],
+                'llm_provider': response.provider,
+                'llm_model': response.model
+            }
+            
+            self.logger.info(
+                f"[LLM] LLM research completed: {len(research_results['key_findings'])} findings, "
+                f"{len(research_results['documentation_urls'])} docs, "
+                f"{len(research_results['code_examples'])} code examples"
+            )
+            
+            return research_results
+            
+        except Exception as e:
+            self.logger.error(f"[LLM] Error processing LLM research: {e}", exc_info=True)
+            # Try to extract structured information from plain text as fallback
+            return self._parse_llm_research_from_text(response.content, query, depth)
+    
+    def _parse_llm_research_from_text(self, content: str, query: str, depth: str) -> Dict[str, Any]:
+        """
+        Parse LLM research from plain text if JSON parsing fails.
+        
+        Args:
+            content: LLM response text
+            query: Original query
+            depth: Research depth
+            
+        Returns:
+            Research results dictionary
+        """
+        research_results = {
+            'query': query,
+            'timestamp': datetime.now().isoformat(),
+            'depth': depth,
+            'search_results': [],
+            'key_findings': [],
+            'documentation_urls': [],
+            'code_examples': [],
+            'best_practices': [],
+            'confidence_score': 80,  # Lower confidence for text parsing
+            'sources_consulted': ['llm_research_text']
+        }
+        
+        # Extract URLs
+        url_pattern = r'https?://[^\s\)]+'
+        urls = re.findall(url_pattern, content)
+        research_results['documentation_urls'] = list(set(urls[:10]))  # Limit to 10 unique URLs
+        
+        # Extract findings (lines that look like insights)
+        lines = content.split('\n')
+        findings = []
+        for line in lines:
+            line = line.strip()
+            # Look for lines that are insights (not headers, not too short, not URLs)
+            if (len(line) > 30 and 
+                not line.startswith('#') and 
+                not line.startswith('http') and
+                not line.startswith('*') and
+                ':' in line):  # Usually insights have colons
+                findings.append(line)
+        
+        research_results['key_findings'] = findings[:10]  # Top 10 findings
+        
+        # Extract code blocks
+        code_pattern = r'```(\w+)?\n(.*?)```'
+        code_matches = re.findall(code_pattern, content, re.DOTALL)
+        for lang, code in code_matches:
+            if len(code.strip()) > 20:  # Meaningful code blocks
+                research_results['code_examples'].append({
+                    'language': lang or 'unknown',
+                    'description': 'Code example from LLM research',
+                    'code': code.strip()[:1000]  # Limit length
+                })
+        
+        self.logger.info(f"[LLM] Parsed text research: {len(findings)} findings, {len(urls)} URLs, {len(code_matches)} code examples")
+        
+        return research_results
+    
+>>>>>>> Stashed changes
     def _detect_platform_from_query(self, query: str) -> Optional[str]:
         """
         Detect platform name from research query.
@@ -1014,6 +1430,10 @@ Please synthesize these findings into 5-10 actionable insights."""
             self.logger.warning(f"LLM synthesis failed: {response.error}")
             return []
         
+        # CRITICAL FIX: Track LLM usage for dashboard
+        # Note: synthesis doesn't have a task, so we'll track it at project level if needed
+        # For now, we'll skip tracking synthesis calls (they're less frequent)
+        
         # Parse JSON response
         try:
             import json
@@ -1174,23 +1594,40 @@ Please synthesize these findings into 5-10 actionable insights."""
             self.logger.warning(f"Could not store in PostgreSQL, using files only: {e}")
         
         # Also save files (BACKUP storage for reference)
-        safe_query = re.sub(r'[^\w\s-]', '', query).strip().replace(' ', '_')
+        # Generate concise filename instead of using full query
+        from utils.name_generator import generate_concise_name
+        from utils.name_sanitizer import sanitize_for_filename
+        
+        # Generate a concise name from the query (max 50 chars for filename)
+        concise_name = generate_concise_name(query, agent_type="RESEARCHER", max_length=50)
+        # Sanitize for filesystem (removes invalid chars, limits length)
+        safe_filename = sanitize_for_filename(concise_name, max_length=50)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Save JSON
-        json_filename = f"{safe_query}_{timestamp}.json"
-        json_path = os.path.join(self.research_dir, json_filename)
+        # Save JSON using safe file writer (HARD GUARANTEE)
+        json_filename = f"{safe_filename}_{timestamp}.json"
+        json_relative_path = os.path.join("research", json_filename)
         
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(results, f, indent=2)
+        try:
+            self.safe_write_file(json_relative_path, json.dumps(results, indent=2))
+        except Exception as e:
+            self.logger.error(f"[ERROR] Failed to write research JSON file: {e}")
+            raise
         
-        # Save Markdown report
-        md_filename = f"{safe_query}_{timestamp}.md"
-        md_path = os.path.join(self.research_dir, md_filename)
+        # Save Markdown report using safe file writer
+        md_filename = f"{safe_filename}_{timestamp}.md"
+        md_relative_path = os.path.join("research", md_filename)
         
         markdown_content = self._generate_markdown_report(query, results, task)
-        with open(md_path, 'w', encoding='utf-8') as f:
-            f.write(markdown_content)
+        try:
+            self.safe_write_file(md_relative_path, markdown_content)
+        except Exception as e:
+            self.logger.error(f"[ERROR] Failed to write research Markdown file: {e}")
+            raise
+        
+        # Update paths for return value (use relative paths)
+        json_path = json_relative_path
+        md_path = md_relative_path
         
         self.research_files.append(json_path)
         self.research_files.append(md_path)
