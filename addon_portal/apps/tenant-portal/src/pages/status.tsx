@@ -57,12 +57,13 @@ export default function StatusPage() {
   const scrollPositionRef = useRef<number>(0);
   const shouldRestoreScrollRef = useRef<boolean>(false);
   
-  // Save scroll position continuously (before any potential re-render)
+  // QA_Engineer: Save scroll position continuously (before any potential re-render)
   useEffect(() => {
     const handleScroll = () => {
       scrollPositionRef.current = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
     };
     
+    // QA_Engineer: Store handler reference for proper cleanup matching addEventListener options
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -82,7 +83,7 @@ export default function StatusPage() {
   const [projectSearch, setProjectSearch] = useState('');
   const [loadingProjects, setLoadingProjects] = useState(true);
 
-  // Load tenant's active projects (execution_status = 'running')
+  // QA_Engineer: Load tenant's active projects (execution_status = 'running')
   useEffect(() => {
     const loadProjects = async () => {
       try {
@@ -94,7 +95,8 @@ export default function StatusPage() {
         );
         setAvailableProjects(activeProjects);
         
-        // Auto-select first project if available and none selected
+        // QA_Engineer: Auto-select first project if available and none selected
+        // Only auto-select if no project is selected AND projects are available
         if (activeProjects.length > 0 && !selectedProjectId) {
           setSelectedProjectId(activeProjects[0].id);
         }
@@ -106,7 +108,8 @@ export default function StatusPage() {
     };
     
     loadProjects();
-  }, []);
+    // QA_Engineer: Include selectedProjectId in dependencies to react to changes
+  }, [selectedProjectId]);
 
   // GraphQL Queries - ONLY project-specific data
   // Removed DASHBOARD_STATS_QUERY and SYSTEM_METRICS_QUERY (they return global stats)
@@ -131,8 +134,13 @@ export default function StatusPage() {
     return () => clearInterval(interval);
   }, [selectedProjectId, reexecuteProject]);
   
-  // GraphQL Subscriptions (filtered by selected project)
-  const [agentActivityResult] = useSubscription({ query: AGENT_ACTIVITY_SUBSCRIPTION });
+  // QA_Engineer: GraphQL Subscriptions (filtered by selected project)
+  // QA_Engineer: Filter agent activity by selected project for consistency
+  const [agentActivityResult] = useSubscription({ 
+    query: AGENT_ACTIVITY_SUBSCRIPTION,
+    variables: { projectId: selectedProjectId || null },
+    pause: !selectedProjectId, // Pause if no project selected
+  });
   const [taskUpdatesResult] = useSubscription({
     query: TASK_UPDATES_SUBSCRIPTION,
     variables: { projectId: selectedProjectId || null },
@@ -142,13 +150,38 @@ export default function StatusPage() {
     variables: { projectId: selectedProjectId || null },
   });
 
+  // QA_Engineer: Handle subscription errors for better debugging and user feedback
+  useEffect(() => {
+    if (agentActivityResult.error) {
+      console.error('QA_Engineer: Agent activity subscription error:', agentActivityResult.error);
+    }
+  }, [agentActivityResult.error]);
+
+  useEffect(() => {
+    if (taskUpdatesResult.error) {
+      console.error('QA_Engineer: Task updates subscription error:', taskUpdatesResult.error);
+    }
+  }, [taskUpdatesResult.error]);
+
+  useEffect(() => {
+    if (metricsStreamResult.error) {
+      console.error('QA_Engineer: Metrics stream subscription error:', metricsStreamResult.error);
+    }
+  }, [metricsStreamResult.error]);
+
   // Combine data from queries and subscriptions
   // Removed global dashboardStats and systemMetrics - using only project-specific data
   const systemMetrics = metricsStreamResult.data?.systemMetricsStream; // Only from subscription (if project-filtered)
   const agentActivities = agentActivityResult.data?.agentActivity ? [agentActivityResult.data.agentActivity] : [];
   
-  // Collect task updates from subscription (real-time)
+  // QA_Engineer: Collect task updates from subscription (real-time)
   const [taskUpdatesList, setTaskUpdatesList] = useState<any[]>([]);
+  
+  // QA_Engineer: Clear task updates when project changes to prevent showing wrong project's tasks
+  useEffect(() => {
+    setTaskUpdatesList([]);
+  }, [selectedProjectId]);
+  
   useEffect(() => {
     if (taskUpdatesResult.data?.taskUpdates) {
       // Mark that we should restore scroll position after this update
@@ -280,12 +313,22 @@ export default function StatusPage() {
         }
       });
       
-      // Convert to array with all needed fields for filtering/sorting/pagination
+      // QA_Engineer: Convert to array with all needed fields for filtering/sorting/pagination
+      // QA_Engineer: Normalize status consistently to handle both uppercase and lowercase inputs
+      const normalizeStatus = (status: string | undefined): 'pending' | 'in_progress' | 'completed' | 'failed' => {
+        if (!status) return 'pending';
+        const normalized = status.toLowerCase();
+        if (normalized === 'completed' || normalized === 'done') return 'completed';
+        if (normalized === 'in_progress' || normalized === 'inprogress' || normalized === 'running') return 'in_progress';
+        if (normalized === 'failed' || normalized === 'error') return 'failed';
+        return 'pending';
+      };
+      
       return Array.from(taskMap.values())
         .map((task: any) => ({
           id: task.id,
           title: task.title || 'Unknown Task',
-          status: task.status?.toLowerCase() || 'pending',
+          status: normalizeStatus(task.status),
           agent: task.agent?.name || task.agentType || undefined,
           progress: task.progress || (task.status === 'COMPLETED' || task.status === 'completed' ? 100 : 0),
           completedAt: task.completedAt || null,
@@ -448,9 +491,10 @@ export default function StatusPage() {
 
           {/* Stats Cards Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {/* QA_Engineer: Removed emoji characters for Windows compatibility */}
             <div className="bg-white rounded-2xl p-6 shadow-lg">
               <div className="flex items-center justify-between mb-4">
-                <div className="text-3xl">🤖</div>
+                <div className="text-3xl font-bold text-purple-600">Agent</div>
               </div>
               <h3 className="text-gray-600 text-sm font-medium mb-2">Active Agents</h3>
               <p className="text-3xl font-bold text-gray-900 mb-1">{activeAgents}</p>
@@ -459,7 +503,7 @@ export default function StatusPage() {
 
             <div className="bg-white rounded-2xl p-6 shadow-lg">
               <div className="flex items-center justify-between mb-4">
-                <div className="text-3xl">✅</div>
+                <div className="text-3xl font-bold text-green-600">Complete</div>
               </div>
               <h3 className="text-gray-600 text-sm font-medium mb-2">Completed Tasks</h3>
               <p className="text-3xl font-bold text-gray-900 mb-1">{metrics.completedTasks}</p>
@@ -468,7 +512,7 @@ export default function StatusPage() {
 
             <div className="bg-white rounded-2xl p-6 shadow-lg">
               <div className="flex items-center justify-between mb-4">
-                <div className="text-3xl">📊</div>
+                <div className="text-3xl font-bold text-blue-600">Chart</div>
               </div>
               <h3 className="text-gray-600 text-sm font-medium mb-2">Success Rate</h3>
               <p className="text-3xl font-bold text-gray-900 mb-1">{Math.round(metrics.successRate)}%</p>
@@ -477,7 +521,7 @@ export default function StatusPage() {
 
             <div className="bg-white rounded-2xl p-6 shadow-lg">
               <div className="flex items-center justify-between mb-4">
-                <div className="text-3xl">⚡</div>
+                <div className="text-3xl font-bold text-yellow-600">Active</div>
               </div>
               <h3 className="text-gray-600 text-sm font-medium mb-2">Active Tasks</h3>
               <p className="text-3xl font-bold text-gray-900 mb-1">{metrics.activeTasks}</p>
@@ -489,8 +533,9 @@ export default function StatusPage() {
             {/* Agent Activity Feed */}
             <div className="lg:col-span-2">
               <div className="bg-white rounded-2xl p-6 shadow-lg mb-6">
+                {/* QA_Engineer: Removed emoji characters for Windows compatibility */}
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  👥 Agent Activity
+                  Agent Activity
                   {activeAgents > 0 && (
                     <span className="text-sm font-normal text-gray-500">
                       ({activeAgents} active)
@@ -500,7 +545,7 @@ export default function StatusPage() {
                 
                 {agents.length === 0 ? (
                   <div className="text-center py-12">
-                    <div className="text-6xl mb-4">🤖</div>
+                    <div className="text-6xl mb-4 font-bold text-gray-400">No Agents</div>
                     <p className="text-gray-500">
                       {connected ? 'No agents active yet...' : 'Connecting to dashboard...'}
                     </p>
@@ -534,13 +579,13 @@ export default function StatusPage() {
                 )}
               </div>
 
-              {/* Task Timeline */}
+              {/* QA_Engineer: Task Timeline - Removed emoji characters for Windows compatibility */}
               <div className="bg-white rounded-2xl p-6 shadow-lg">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">📋 Task Timeline</h2>
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Task Timeline</h2>
                 
                 {tasks.length === 0 ? (
                   <div className="text-center py-12">
-                    <div className="text-6xl mb-4">📋</div>
+                    <div className="text-6xl mb-4 font-bold text-gray-400">No Tasks</div>
                     <p className="text-gray-500">
                       {connected ? 'No tasks yet...' : 'Waiting for tasks...'}
                     </p>
@@ -585,10 +630,10 @@ export default function StatusPage() {
               </div>
             </div>
 
-            {/* System Metrics Sidebar */}
+            {/* QA_Engineer: System Metrics Sidebar - Removed emoji characters for Windows compatibility */}
             <div className="lg:col-span-1">
               <div className="bg-white rounded-2xl p-6 shadow-lg">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">📊 System Metrics</h2>
+                <h2 className="text-xl font-bold text-gray-900 mb-4">System Metrics</h2>
                 
                 <div className="space-y-6">
                   <div>
