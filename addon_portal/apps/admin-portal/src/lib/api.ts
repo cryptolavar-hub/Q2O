@@ -180,11 +180,30 @@ export async function getCodes(
   };
 }
 
-// Get devices (database-backed)
-export async function getDevices(tenantSlug?: string): Promise<Device[]> {
-  const url = tenantSlug 
-    ? `${API_BASE}/admin/api/devices?tenant_slug=${tenantSlug}`
-    : `${API_BASE}/admin/api/devices`;
+// Device pagination interfaces
+export interface DevicePage {
+  items: Device[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface DeviceQueryParams {
+  page?: number;
+  pageSize?: number;
+  tenantSlug?: string;
+  search?: string;
+}
+
+// Get devices (database-backed) with pagination
+export async function getDevices(params: DeviceQueryParams = {}): Promise<DevicePage> {
+  const searchParams = new URLSearchParams();
+  if (params.page) searchParams.set('page', params.page.toString());
+  if (params.pageSize) searchParams.set('page_size', params.pageSize.toString());
+  if (params.tenantSlug) searchParams.set('tenant_slug', params.tenantSlug);
+  if (params.search) searchParams.set('search', params.search);
+  
+  const url = `${API_BASE}/admin/api/devices${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
   
   const response = await fetch(url);
   if (!response.ok) {
@@ -192,7 +211,12 @@ export async function getDevices(tenantSlug?: string): Promise<Device[]> {
   }
   
   const data = await response.json();
-  return data.devices || [];
+  return {
+    items: data.devices || [],
+    total: data.total || 0,
+    page: params.page || 1,
+    pageSize: params.pageSize || 25,
+  };
 }
 
 // Get tenants (database-backed)
@@ -540,6 +564,82 @@ export async function deleteTenant(slug: string): Promise<void> {
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
     throw new Error(error.detail || 'Failed to delete tenant');
+  }
+}
+
+// Project types and API functions
+export interface Project {
+  projectId: string;
+  clientName: string;
+  description: string | null;
+  providerOverride: string | null;
+  modelOverride: string | null;
+  temperatureOverride: number | null;
+  maxTokensOverride: number | null;
+  monthlyBudgetOverride: number | null;
+  customInstructions: string | null;
+  isActive: boolean;
+  priority: string;
+  createdAt: string;
+  updatedAt: string | null;
+  agentPrompts: Array<{
+    agentType: string;
+    providerOverride: string | null;
+    modelOverride: string | null;
+    temperatureOverride: number | null;
+    maxTokensOverride: number | null;
+    customPrompt: string | null;
+    customInstructions: string | null;
+    enabled: boolean;
+    updatedAt: string | null;
+  }>;
+  activationCodeId: number | null;
+  executionStatus: string | null;
+}
+
+export interface ProjectPage {
+  items: Project[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ProjectQueryParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}
+
+export async function getProjects(params: ProjectQueryParams = {}): Promise<ProjectPage> {
+  const searchParams = new URLSearchParams();
+  if (params.page) searchParams.set('page', params.page.toString());
+  if (params.pageSize) searchParams.set('page_size', params.pageSize.toString());
+  if (params.search) searchParams.set('search', params.search);
+  
+  const url = `${API_BASE}/api/llm/projects${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+  const response = await fetch(url);
+  
+  if (!response.ok) {
+    throw new Error('Failed to fetch projects');
+  }
+  
+  const data = await response.json();
+  return {
+    items: data.items || [],
+    total: data.total || 0,
+    page: data.page || 1,
+    pageSize: data.pageSize || 10,
+  };
+}
+
+export async function deleteProject(projectId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/llm/projects/${projectId}`, {
+    method: 'DELETE',
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || 'Failed to delete project');
   }
 }
 

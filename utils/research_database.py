@@ -120,7 +120,7 @@ class ResearchDatabase:
             db.commit()
             db.refresh(research)
             
-            logging.info(f"✅ Stored research in PostgreSQL: {research_id}")
+            logging.info(f"[OK] Stored research in PostgreSQL: {research_id}")
             
             return research_id
             
@@ -169,7 +169,7 @@ class ResearchDatabase:
                 exact_match.last_accessed = datetime.now()
                 db.commit()
                 
-                logging.info(f"✅ Found EXACT match for: {query}")
+                logging.info(f"[OK] Found EXACT match for: {query}")
                 return [self._result_to_dict(exact_match)]
             
             # Strategy 2: Similar queries (keyword-based)
@@ -198,9 +198,9 @@ class ResearchDatabase:
             results = [self._result_to_dict(r[1]) for r in scored_results[:limit]]
             
             if results:
-                logging.info(f"✅ Found {len(results)} similar research results for: {query}")
+                logging.info(f"[OK] Found {len(results)} similar research results for: {query}")
             else:
-                logging.info(f"ℹ️ No similar research found for: {query}")
+                logging.info(f"[INFO] No similar research found for: {query}")
             
             return results
             

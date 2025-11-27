@@ -21,9 +21,9 @@ try:
         
         # Check if quick2odoo exists
         if 'quick2odoo' in databases:
-            print('✓ Database "quick2odoo" exists')
+            print('[OK] Database "quick2odoo" exists')
         else:
-            print('✗ Database "quick2odoo" does NOT exist')
+            print('[ERROR] Database "quick2odoo" does NOT exist')
             print()
             print('Options:')
             print('  1. Create the database:')

@@ -1,0 +1,237 @@
+# Documentation Reorganization Plan
+
+**Date**: November 26, 2025  
+**Author**: Alex (Technical Documentation Specialist)  
+**Status**: In Progress
+
+---
+
+## Assessment Criteria
+
+### **Current (docs/)** - Keep in main docs folder
+- Active, current documentation
+- Implementation guides and summaries
+- Status reports and roadmaps
+- Setup and configuration guides
+- Feature documentation
+
+### **Archive (docs/archive/)** - Move to archive
+- Historical session summaries
+- Superseded implementation plans
+- Old status reports (before Nov 20, 2025)
+- Resolved issues documentation
+- Outdated guides
+
+### **md_docs (docs/md_docs/)** - Move to md_docs
+- Changed but still relevant technical guides
+- Agent system documentation
+- Development guides that have been updated
+- Testing and deployment guides
+
+---
+
+## File Categorization
+
+### **Current Documentation (Keep in docs/)**
+
+**Core Documentation:**
+- COMPREHENSIVE_PROJECT_ASSESSMENT.md
+- COMPREHENSIVE_ROLES_AND_SKILLSET_ASSESSMENT.md
+- PROJECT_STATUS_TIMELINE.md
+- TECH_STACK.md
+- ARCHITECTURE_AUDIT.md
+
+**Status Reports:**
+- status_reports/ (all current status reports)
+
+**Implementation Summaries:**
+- implementation_summaries/ (all current summaries)
+
+**Recent Improvements:**
+- RECENT_IMPROVEMENTS_SUMMARY.md
+- LLM_MULTI_MODEL_FALLBACK_IMPLEMENTATION.md
+- TENANT_DASHBOARD_DISPLAY_FIXES.md
+- ASYNC_CONVERSION_IMPLEMENTATION.md
+
+**Setup & Configuration:**
+- SERVICE_MANAGEMENT_GUIDE.md
+- POSTGRESQL_SETUP.md
+- ENVIRONMENT_CONFIGURATION_GUIDE.md
+- SEARCH_API_SETUP_GUIDE.md
+- QUICK_START_HERE.md
+- QUICK_LLM_SETUP.md
+
+**Business & Features:**
+- COMPLETE_SYSTEM_WORKFLOW.md
+- BILLING_SYSTEM_ARCHITECTURE.md
+- FULL_MIGRATION_ARCHITECTURE.md
+- QUICKBOOKS_FULL_MIGRATION_GUIDE.md
+- QUICKBOOKS_FULL_MIGRATION_SUMMARY.md
+
+**Roadmaps & Plans:**
+- COMPLETE_SOLUTION_COMPLETION_PLAN_REVISED.md
+- TENANT_PROFILE_BILLING_ROADMAP.md
+- PROJECT_EXECUTION_WORKFLOW_PLAN.md
+- NEXT_STEPS_PROFILE_BILLING.md
+
+**LLM Integration:**
+- LLM_INTEGRATION_ALL_PHASES_COMPLETE.md
+- LLM_MULTI_MODEL_FALLBACK_IMPLEMENTATION.md
+
+**Research System:**
+- RECURSIVE_RESEARCH_SYSTEM.md
+- RESEARCH_INTEGRATION_ENHANCEMENT.md
+
+**UI/UX:**
+- UI_UX_MODERNIZATION_PLAN.md
+- UI_UX_MODERNIZATION_SUMMARY.md
+
+**Python Compatibility:**
+- PYTHON_313_COMPATIBILITY_CONFIRMED.md
+- PYTHON_313_TEST_RESULTS.md
+- PYTHON_VERSION_MANAGEMENT.md
+
+**Testing:**
+- PROFILE_PAGE_TESTING_CHECKLIST.md
+- WEEK1_TEST_PLAN.md
+
+**Fixes & Issues:**
+- FIXES_APPLIED_SUMMARY.md
+- PROJECT_EXECUTION_ISSUES_AND_FIXES.md
+- PROJECT_EXECUTION_LOG_CLEARING_FIX.md
+- TASK_CREATION_DATABASE_FIX.md
+- GRAPHQL_CONNECTION_LEAK_FIX.md
+- TENANT_DASHBOARD_ISSUES_ANALYSIS.md
+
+**Specialized Folders:**
+- addon_portal_review/
+- website_content/
+- status_reports/
+- implementation_summaries/
+
+### **Archive (Move to docs/archive/)**
+
+**Historical Status Reports:**
+- All status reports before Nov 20, 2025 (already in archive/historical/)
+
+**Old Implementation Plans:**
+- COMPLETE_SOLUTION_COMPLETION_PLAN.md (superseded by REVISED version)
+- LLM_INTEGRATION_PLAN_V2_ENHANCED.md (superseded)
+- LLM_INTEGRATION_IMPLEMENTATION_PLAN.md (superseded)
+
+**Historical Session Summaries:**
+- SESSION_HANDOFF_NOV_7_2025.md
+- All session summaries (already in archive/sessions/)
+
+**Old Fix Summaries:**
+- FINAL_COMMIT_SUMMARY.md
+- FINAL_IMPLEMENTATION_SUMMARY.md
+- README_UPDATE_SUMMARY.md
+- DOCUMENTATION_REORGANIZATION_COMPLETE.md
+
+**Outdated Analysis:**
+- GITHUB_VS_LOCAL_COMPARISON.md
+- ROOT_FOLDER_ANALYSIS.md
+- ROOT_FOLDER_CLEANUP_COMPLETE.md
+- ROOT_FOLDER_CLEANUP_FINAL.md
+- ROOT_FOLDER_CLEANUP_REPORT.md
+
+**Old Test Plans:**
+- TEST_1_ANALYSIS_SUMMARY.md
+- TEST_1_CODE_QUALITY_ANALYSIS.md
+- TEST_1_ISSUES_AND_FIXES.md
+- TEST_1_ISSUE_2_FIX.md
+- TEST_2_COMPREHENSIVE_TEST_PLAN.md
+- TEST_2_MOBILE_AGENT_FIX.md
+
+**Old LLM Documentation:**
+- LLM_INTEGRATION_ASSESSMENT.md
+- LLM_INTEGRATION_PROGRESS.md
+- LLM_IMPLEMENTATION_STATUS.md
+- LLM_IMPLEMENTATION_TESTING_GUIDE.md
+- LLM_INTEGRATION_PHASE1_COMPLETE.md
+- LLM_INTEGRATION_PHASE2_COMPLETE.md
+- LLM_OBJECTIVE_CLASSIFICATION_ENHANCEMENT.md
+- LLM_OBJECTIVE_UNDERSTANDING_ENHANCEMENT.md
+- LLM_MODEL_NAME_DISPLAY_FIX.md
+- LLM_DASHBOARD_AND_PROJECT_STATUS_ISSUES.md
+- LLM_TRACKING_AND_LOGS_IMPLEMENTATION.md
+
+**Old Agent Documentation:**
+- AGENT_CAPABILITIES_ASSESSMENT.md
+- AGENT_NAME_GENERATION_PATTERN_SUMMARY.md
+- AGENT_SYSTEM_RECOMMENDATIONS.md
+- AGENTIC_SYSTEM_DEEP_ANALYSIS.md
+- AGENTIC_SYSTEM_FIXES_COMPLETED.md
+- AGENTIC_SYSTEM_IMPLEMENTATION_PLAN.md
+- AGENTIC_SYSTEM_TEST_PLAN.md
+
+**Old Fix Documentation:**
+- ACTIVE_PROJECTS_DATA_FIX.md
+- ACTIVE_PROJECTS_WIDGET_FIX.md
+- ACTIVE_PROJECTS_WIDGET_IMPACT_ANALYSIS.md
+- ADMIN_DASHBOARD_BUG_FIX.md
+- ADMIN_DASHBOARD_IMPROVEMENTS.md
+- BACKUP_AGENTS_WORKSPACE_PATH_FIX.md
+- CODE_GENERATION_NAME_PATTERN.md
+- DASHBOARD_AND_DUAL_STACK_FIXES.md
+- DASHBOARD_AND_LLM_TRACKING_FIXES.md
+- DASHBOARD_LAYOUT_REQUIREMENTS.md
+- MIGRATION_ENHANCEMENT_SUMMARY.md
+- MIGRATION_ISSUES_ANALYSIS.md
+- NAME_GENERATION_PRESERVATION_VERIFICATION.md
+- PROACTIVE_FIXES_SUMMARY.md
+- RESEARCH_FILE_NAMING_FIX.md
+- RESEARCH_QUERY_EXTRACTION_FIX.md
+- RESEARCH_CONTEXT_COMPLETE_INSTRUCTION.md
+- SYNC_TO_ASYNC_ANALYSIS.md
+- TASK_NAME_GENERATION_FIX.md
+- TENANT_DASHBOARD_ISSUES_ANALYSIS.md
+- UNICODE_ENCODING_FIX.md
+- WORKSPACE_SECURITY_GUARANTEE.md
+- WORKSPACE_SECURITY_IMPLEMENTATION_COMPLETE.md
+
+**Old Documentation:**
+- CURRENT_STATUS_AND_NEXT_STEPS.md
+- DOCUMENTATION_REVIEW.md
+- DUAL_STACK_EXPLANATION.md
+- FILE_SYSTEM_STRUCTURE.md
+- LOG_ANALYSIS_NOV25_2025.md
+- MANUAL_POSTGRESQL_STEPS.md
+- POSTGRESQL_OBJECTIVE_COMPLETE.md
+- POSTGRESQL18_SETUP_COMPLETE.md
+- QUICK_TEST_GUIDE.md
+- RESTART_FEATURE_SCOPE.md
+- CUSTOMIZABLE_DASHBOARD_ROADMAP.md
+- MOBILE_AGENT_DESIGN.md
+- MOBILE_APP_ALIGNMENT_REVIEW.md
+
+### **md_docs (Move to docs/md_docs/)**
+
+**Already in md_docs (Keep):**
+- README_AGENTS.md
+- RESEARCHER_AGENT_GUIDE.md
+- AGENT_RESEARCH_COMMUNICATION.md
+- TESTING_GUIDE.md
+- DEPLOYMENT_CHECKLIST.md
+- VCS_INTEGRATION_GUIDE.md
+- MULTI_PLATFORM_EXPANSION_GUIDE.md
+- DASHBOARD_IMPLEMENTATION.md
+- DASHBOARD_SETUP.md
+- MOBILE_APP_SUMMARY.md
+
+---
+
+## Execution Plan
+
+1. Create archive subdirectories if needed
+2. Move files to archive/historical/
+3. Update README files in all folders
+4. Re-write root README.md
+5. Update Comprehensive Project Assessment
+6. Update all documentation links
+
+---
+
+**Status**: Planning Complete - Ready for Execution
+

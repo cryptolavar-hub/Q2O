@@ -126,13 +126,20 @@ async def execute_project(
     
     # Execute in background (non-blocking)
     try:
-        # Create log files for stdout and stderr (open in append mode to allow subprocess to write)
+        # Create log files for stdout and stderr
+        # Clear existing logs for fresh start (each execution gets clean logs)
         stdout_log = output_folder / "execution_stdout.log"
         stderr_log = output_folder / "execution_stderr.log"
         
-        # Open files in append mode and keep them open for subprocess
-        stdout_file = open(stdout_log, 'a', encoding='utf-8')
-        stderr_file = open(stderr_log, 'a', encoding='utf-8')
+        # Clear old log files if they exist (start fresh for each execution)
+        if stdout_log.exists():
+            stdout_log.unlink()
+        if stderr_log.exists():
+            stderr_log.unlink()
+        
+        # Open files in write mode (fresh start) and keep them open for subprocess
+        stdout_file = open(stdout_log, 'w', encoding='utf-8')
+        stderr_file = open(stderr_log, 'w', encoding='utf-8')
         
         try:
             # Ensure .env file is found - set working directory to project root
@@ -232,7 +239,110 @@ async def _monitor_process_completion(
         check_interval = 5  # Check every 5 seconds
         waited = 0
         
+        # Track progress to detect stuck processes
+        last_log_size = 0
+        last_task_count = 0
+        no_progress_count = 0
+        stuck_threshold = 300  # 5 minutes (60 checks * 5 seconds) with no progress
+        
         while waited < max_wait_time:
+            # Check for stuck process (no progress for extended period)
+            if waited > 60 and waited % 60 == 0:  # Check every minute
+                try:
+                    # Check log file size (indicates if process is writing)
+                    stderr_log = output_folder / "execution_stderr.log"
+                    current_log_size = stderr_log.stat().st_size if stderr_log.exists() else 0
+                    
+                    # Check task count
+                    db_check = AsyncSessionLocal()
+                    try:
+                        from ..services.agent_task_service import calculate_project_progress
+                        result = await db_check.execute(
+                            select(LLMProjectConfig).where(LLMProjectConfig.project_id == project_id)
+                        )
+                        project_check = result.scalar_one_or_none()
+                        if project_check and project_check.execution_started_at:
+                            task_stats = await calculate_project_progress(
+                                db_check,
+                                project_id,
+                                execution_started_at=project_check.execution_started_at
+                            )
+                            current_task_count = task_stats.get('total_tasks', 0)
+                        else:
+                            current_task_count = 0
+                    finally:
+                        await db_check.close()
+                    
+                    # Check if making progress
+                    if current_log_size == last_log_size and current_task_count == last_task_count:
+                        no_progress_count += 1
+                        if no_progress_count >= stuck_threshold:
+                            # Process is stuck - check for error patterns in logs
+                            if stderr_log.exists():
+                                try:
+                                    import aiofiles
+                                    async with aiofiles.open(stderr_log, 'r', encoding='utf-8', errors='ignore') as f:
+                                        log_content = await f.read()
+                                except ImportError:
+                                    with open(stderr_log, 'r', encoding='utf-8', errors='ignore') as f:
+                                        log_content = f.read()
+                                
+                                # Check for stuck patterns (repeated LLM failures, event loop errors)
+                                stuck_patterns = [
+                                    'LLM task breakdown failed',
+                                    'Event loop is closed',
+                                    'All providers failed',
+                                    'Task was destroyed but it is pending'
+                                ]
+                                
+                                if any(pattern in log_content for pattern in stuck_patterns):
+                                    # Process is stuck in error loop - terminate it
+                                    LOGGER.error(
+                                        "project_execution_stuck_detected",
+                                        extra={
+                                            "project_id": project_id,
+                                            "tenant_id": tenant_id,
+                                            "process_id": process_id,
+                                            "no_progress_minutes": no_progress_count,
+                                            "task_count": current_task_count,
+                                            "log_size": current_log_size,
+                                        }
+                                    )
+                                    # Try to terminate the process
+                                    try:
+                                        import platform
+                                        if platform.system() == "Windows":
+                                            try:
+                                                import psutil
+                                                proc = psutil.Process(process_id)
+                                                proc.terminate()
+                                                await asyncio.sleep(2)
+                                                if proc.is_running():
+                                                    proc.kill()
+                                            except (ImportError, psutil.NoSuchProcess):
+                                                pass
+                                        else:
+                                            import signal
+                                            os.kill(process_id, signal.SIGTERM)
+                                            await asyncio.sleep(2)
+                                            try:
+                                                os.kill(process_id, signal.SIGKILL)
+                                            except ProcessLookupError:
+                                                pass
+                                    except Exception as term_error:
+                                        LOGGER.warning(f"Could not terminate stuck process {process_id}: {term_error}")
+                                    
+                                    # Mark as failed and exit monitoring
+                                    return_code = -1
+                                    break
+                    else:
+                        # Progress detected - reset counter
+                        no_progress_count = 0
+                        last_log_size = current_log_size
+                        last_task_count = current_task_count
+                except Exception as progress_check_error:
+                    LOGGER.debug(f"Error checking progress: {progress_check_error}")
+            
             # Check if process is still running
             try:
                 # Use os.waitpid with WNOHANG to check without blocking
@@ -322,27 +432,123 @@ async def _monitor_process_completion(
                 waited += check_interval
                 continue
         
-        # Update project status in database
+        # Before updating status, check for errors in logs and verify task creation
+        stderr_log = output_folder / "execution_stderr.log"
+        stdout_log = output_folder / "execution_stdout.log"
+        has_errors = False
+        error_message = None
+        has_tasks_completed = False
+        
+        # Check stderr log for fatal errors (syntax errors, import errors, etc.)
+        if stderr_log.exists():
+            try:
+                try:
+                    import aiofiles
+                    async with aiofiles.open(stderr_log, 'r', encoding='utf-8', errors='ignore') as f:
+                        stderr_content = await f.read()
+                except ImportError:
+                    # Fallback to sync file I/O if aiofiles not available
+                    with open(stderr_log, 'r', encoding='utf-8', errors='ignore') as f:
+                        stderr_content = f.read()
+                
+                # Check for common fatal errors
+                fatal_errors = [
+                    'SyntaxError',
+                    'IndentationError',
+                    'ImportError',
+                    'ModuleNotFoundError',
+                    'NameError',
+                    'TypeError',
+                    'AttributeError',
+                    'FileNotFoundError',
+                    'PermissionError',
+                ]
+                for error_type in fatal_errors:
+                    if error_type in stderr_content:
+                        has_errors = True
+                        # Extract error message (first occurrence)
+                        lines = stderr_content.split('\n')
+                        for i, line in enumerate(lines):
+                            if error_type in line:
+                                # Get context (current line + next few lines)
+                                error_context = '\n'.join(lines[max(0, i-2):min(len(lines), i+5)])
+                                error_message = f"{error_type} detected in execution logs:\n{error_context[:500]}"
+                                break
+                        if error_message:
+                            break
+            except Exception as log_error:
+                LOGGER.warning(
+                    "could_not_read_stderr_log",
+                    extra={
+                        "project_id": project_id,
+                        "stderr_log": str(stderr_log),
+                        "error": str(log_error),
+                    }
+                )
+        
+        # Check stdout log for successful completion message
+        if stdout_log.exists() and not has_errors:
+            try:
+                try:
+                    import aiofiles
+                    async with aiofiles.open(stdout_log, 'r', encoding='utf-8', errors='ignore') as f:
+                        stdout_content = await f.read()
+                except ImportError:
+                    # Fallback to sync file I/O if aiofiles not available
+                    with open(stdout_log, 'r', encoding='utf-8', errors='ignore') as f:
+                        stdout_content = f.read()
+                
+                # Check for successful completion indicators
+                if "All tasks completed!" in stdout_content or "completion_percentage': 100.0" in stdout_content:
+                    has_tasks_completed = True
+            except Exception as log_error:
+                LOGGER.warning(
+                    "could_not_read_stdout_log",
+                    extra={
+                        "project_id": project_id,
+                        "stdout_log": str(stdout_log),
+                        "error": str(log_error),
+                    }
+                )
+        
+        # Check if any tasks were created for this run
         db = AsyncSessionLocal()
         try:
+            from ..services.agent_task_service import calculate_project_progress
+            
             result = await db.execute(
                 select(LLMProjectConfig).where(LLMProjectConfig.project_id == project_id)
             )
             project = result.scalar_one_or_none()
             
             if project:
-                if return_code == 0:
-                    project.execution_status = 'completed'
+                # Get task count for current run (filtered by execution_started_at)
+                task_stats = await calculate_project_progress(
+                    db, 
+                    project_id, 
+                    execution_started_at=project.execution_started_at
+                )
+                task_count = task_stats.get('total_tasks', 0)
+                
+                # Determine final status
+                if has_errors:
+                    # Fatal errors detected - mark as failed
+                    project.execution_status = 'failed'
+                    project.execution_error = error_message or f"Fatal error detected in execution logs. Process exited with code {return_code}."
                     project.execution_completed_at = datetime.now(timezone.utc)
-                    LOGGER.info(
-                        "project_execution_completed",
+                    LOGGER.error(
+                        "project_execution_failed_with_errors",
                         extra={
                             "project_id": project_id,
                             "tenant_id": tenant_id,
                             "process_id": process_id,
+                            "return_code": return_code,
+                            "error_type": "fatal_error_in_logs",
+                            "task_count": task_count,
                         }
                     )
-                else:
+                elif return_code != 0:
+                    # Non-zero exit code - mark as failed
                     project.execution_status = 'failed'
                     project.execution_error = f"Process exited with code {return_code}"
                     project.execution_completed_at = datetime.now(timezone.utc)
@@ -353,6 +559,42 @@ async def _monitor_process_completion(
                             "tenant_id": tenant_id,
                             "process_id": process_id,
                             "return_code": return_code,
+                            "task_count": task_count,
+                        }
+                    )
+                elif task_count == 0 and not has_tasks_completed:
+                    # Process exited with code 0 but no tasks created and no completion message
+                    # This indicates an immediate crash (e.g., syntax error on import)
+                    project.execution_status = 'failed'
+                    project.execution_error = (
+                        "Process exited successfully but no tasks were created. "
+                        "This may indicate an immediate crash (e.g., syntax error, import error). "
+                        "Please check execution logs."
+                    )
+                    project.execution_completed_at = datetime.now(timezone.utc)
+                    LOGGER.warning(
+                        "project_execution_completed_without_tasks",
+                        extra={
+                            "project_id": project_id,
+                            "tenant_id": tenant_id,
+                            "process_id": process_id,
+                            "return_code": return_code,
+                            "task_count": task_count,
+                        }
+                    )
+                else:
+                    # Successful completion
+                    project.execution_status = 'completed'
+                    project.execution_completed_at = datetime.now(timezone.utc)
+                    LOGGER.info(
+                        "project_execution_completed",
+                        extra={
+                            "project_id": project_id,
+                            "tenant_id": tenant_id,
+                            "process_id": process_id,
+                            "return_code": return_code,
+                            "task_count": task_count,
+                            "has_completion_message": has_tasks_completed,
                         }
                     )
                 
@@ -383,6 +625,126 @@ async def _monitor_process_completion(
             },
             exc_info=True
         )
+
+
+async def check_and_update_project_completion(project_id: str) -> Optional[bool]:
+    """
+    Check if all tasks for a project are completed and update project status accordingly.
+    
+    This function should be called:
+    - When a task is completed
+    - Periodically (e.g., every minute) for running projects
+    - When querying project status
+    
+    Args:
+        project_id: Project ID to check
+        
+    Returns:
+        True if project was marked as completed
+        False if project was marked as failed
+        None if project is still running or no update needed
+    """
+    db = AsyncSessionLocal()
+    try:
+        from ..services.agent_task_service import calculate_project_progress
+        
+        # Get project
+        result = await db.execute(
+            select(LLMProjectConfig).where(LLMProjectConfig.project_id == project_id)
+        )
+        project = result.scalar_one_or_none()
+        
+        if not project:
+            return None
+        
+        # Only check projects that are currently running
+        if project.execution_status != 'running':
+            return None
+        
+        # Get task statistics for current run
+        task_stats = await calculate_project_progress(
+            db,
+            project_id,
+            execution_started_at=project.execution_started_at
+        )
+        
+        total_tasks = task_stats.get('total_tasks', 0)
+        completed_tasks = task_stats.get('completed_tasks', 0)
+        failed_tasks = task_stats.get('failed_tasks', 0)
+        in_progress_tasks = task_stats.get('in_progress_tasks', 0)
+        pending_tasks = task_stats.get('pending_tasks', 0)
+        
+        # If no tasks exist yet, don't update status
+        if total_tasks == 0:
+            return None
+        
+        # Check if all tasks are done (no pending or in_progress tasks)
+        all_tasks_done = (pending_tasks == 0 and in_progress_tasks == 0)
+        
+        if all_tasks_done:
+            # All tasks are completed or failed
+            # Determine final status based on completion rate
+            completion_rate = (completed_tasks / total_tasks) * 100.0 if total_tasks > 0 else 0.0
+            
+            # If more than 50% of tasks completed, mark as completed
+            # Otherwise, mark as failed (too many failures)
+            if completion_rate >= 50.0:
+                project.execution_status = 'completed'
+                project.execution_completed_at = datetime.now(timezone.utc)
+                project.execution_error = None
+                
+                LOGGER.info(
+                    "project_auto_completed_by_tasks",
+                    extra={
+                        "project_id": project_id,
+                        "tenant_id": project.tenant_id,
+                        "total_tasks": total_tasks,
+                        "completed_tasks": completed_tasks,
+                        "failed_tasks": failed_tasks,
+                        "completion_rate": completion_rate,
+                    }
+                )
+                await db.commit()
+                return True
+            else:
+                # Too many failures - mark as failed
+                project.execution_status = 'failed'
+                project.execution_completed_at = datetime.now(timezone.utc)
+                project.execution_error = (
+                    f"Project failed: {failed_tasks} out of {total_tasks} tasks failed "
+                    f"(completion rate: {completion_rate:.1f}%). "
+                    f"Too many task failures to consider project successful."
+                )
+                
+                LOGGER.warning(
+                    "project_auto_failed_by_tasks",
+                    extra={
+                        "project_id": project_id,
+                        "tenant_id": project.tenant_id,
+                        "total_tasks": total_tasks,
+                        "completed_tasks": completed_tasks,
+                        "failed_tasks": failed_tasks,
+                        "completion_rate": completion_rate,
+                    }
+                )
+                await db.commit()
+                return False
+        
+        return None  # Still running
+        
+    except Exception as e:
+        LOGGER.error(
+            "check_project_completion_failed",
+            extra={
+                "project_id": project_id,
+                "error": str(e),
+            },
+            exc_info=True
+        )
+        await db.rollback()
+        return None
+    finally:
+        await db.close()
 
 
 async def cleanup_stuck_projects():

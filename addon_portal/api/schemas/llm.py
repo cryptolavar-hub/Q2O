@@ -127,6 +127,8 @@ class ProjectResponse(BaseModel):
     agent_prompts: List[AgentPromptResponse]
     activation_code_id: Optional[int] = None  # ID of assigned activation code
     execution_status: Optional[str] = None  # pending, running, completed, failed, paused
+    tenant_name: Optional[str] = None  # Tenant name for display
+    tenant_slug: Optional[str] = None  # Tenant slug for display
 
 
 class ProjectCollectionResponse(BaseModel):

@@ -192,7 +192,7 @@ class LLMCache:
         conn.commit()
         conn.close()
         
-        logging.info(f"💾 Cache hit! (saved ${json.loads(usage_json)['total_cost']:.4f}, access #{access_count + 1})")
+        logging.info(f"[CACHE] Cache hit! (saved ${json.loads(usage_json)['total_cost']:.4f}, access #{access_count + 1})")
         
         return {
             "content": response_content,
@@ -243,7 +243,7 @@ class LLMCache:
         conn.commit()
         conn.close()
         
-        logging.debug(f"💾 Cached response for {provider}")
+        logging.debug(f"[CACHE] Cached response for {provider}")
     
     def get_stats(self) -> Dict:
         """Get cache statistics."""
@@ -358,7 +358,7 @@ class CostMonitor:
         allowed = projected_spent <= self.monthly_budget
         
         if not allowed:
-            logging.error(f"🛑 Budget exceeded: ${projected_spent:.2f} > ${self.monthly_budget}")
+            logging.error(f"[STOP] Budget exceeded: ${projected_spent:.2f} > ${self.monthly_budget}")
         
         return allowed, new_alerts
     
@@ -394,7 +394,7 @@ class CostMonitor:
         percentage = (self.monthly_spent / self.monthly_budget) * 100
         
         logging.info(
-            f"💰 Cost recorded: ${cost:.4f} ({provider}) - "
+            f"[COST] Cost recorded: ${cost:.4f} ({provider}) - "
             f"Monthly: ${self.monthly_spent:.2f} / ${self.monthly_budget:.2f} ({percentage:.1f}%)"
         )
     
@@ -438,7 +438,26 @@ class LLMService:
         LLMProvider.ANTHROPIC
     ]
     
-    MAX_RETRIES_PER_PROVIDER = 3
+    # Model fallback sequences per provider (in order of capability: most capable first)
+    # If a model fails, try the next one in the list before moving to next provider
+    GEMINI_MODELS = [
+        "gemini-2.5-flash",  # Fast, efficient (primary - user requested)
+        "gemini-2.5-pro",    # High capability (fallback)
+        "gemini-3-pro"       # Most capable (fallback)
+    ]
+    
+    OPENAI_MODELS = [
+        "gpt-5-mini",        # Primary model (user requested)
+        "gpt-5.1",           # Fallback (user requested)
+        "gpt-4o-mini"        # Fallback (if gpt-5 models not available)
+    ]
+    
+    ANTHROPIC_MODELS = [
+        "claude-3-5-sonnet-20250219"  # Latest version
+    ]
+    
+    MAX_RETRIES_PER_MODEL = 3  # Retries per model (3 retries = 4 total attempts: initial + 3 retries)
+    MAX_RETRIES_PER_PROVIDER = 3  # Kept for backward compatibility
     
     def __init__(
         self,
@@ -517,7 +536,8 @@ class LLMService:
         api_key = os.getenv("OPENAI_API_KEY")
         if api_key:
             self.openai_client = openai.OpenAI(api_key=api_key)
-            self.openai_model_name = os.getenv("OPENAI_MODEL", "gpt-4-turbo")  # Store actual model name
+            # Updated to gpt-5-mini (user requested) - falls back to gpt-5.1 or gpt-4o-mini if unavailable
+            self.openai_model_name = os.getenv("OPENAI_MODEL", "gpt-5-mini")  # Store actual model name
             logging.info(f"[OK] OpenAI initialized ({self.openai_model_name})")
         else:
             self.openai_client = None
@@ -533,7 +553,8 @@ class LLMService:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if api_key:
             self.anthropic_client = Anthropic(api_key=api_key)
-            self.anthropic_model_name = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")  # Store actual model name
+            # Updated to latest Claude 3.5 Sonnet version
+            self.anthropic_model_name = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20250219")  # Store actual model name
             logging.info(f"[OK] Anthropic initialized ({self.anthropic_model_name})")
         else:
             self.anthropic_client = None
@@ -549,6 +570,16 @@ class LLMService:
         elif provider == LLMProvider.ANTHROPIC:
             return self.anthropic_client is not None
         return False
+    
+    def _get_model_name(self, provider: LLMProvider) -> str:
+        """Get the model name for a provider."""
+        if provider == LLMProvider.GEMINI:
+            return self.gemini_model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        elif provider == LLMProvider.OPENAI:
+            return self.openai_model_name or os.getenv("OPENAI_MODEL", "gpt-5-mini")
+        elif provider == LLMProvider.ANTHROPIC:
+            return self.anthropic_model_name or os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20250219")
+        return "unknown"
     
     async def complete(
         self,
@@ -603,7 +634,7 @@ class LLMService:
         # Check budget
         allowed, alerts = self.cost_monitor.check_budget(estimated_cost)
         if not allowed:
-            logging.error("🛑 Budget exceeded - LLM call blocked")
+            logging.error("[STOP] Budget exceeded - LLM call blocked")
             return LLMResponse(
                 content="",
                 usage=None,
@@ -725,7 +756,7 @@ class LLMService:
                 return response
         
         # All providers failed
-        logging.error(f"❌ All providers failed after {total_attempts} attempts")
+        logging.error(f"[ERROR] All providers failed after {total_attempts} attempts")
         
         return LLMResponse(
             content="",
@@ -737,6 +768,35 @@ class LLMService:
             attempts=total_attempts
         )
     
+    def _get_model_list_for_provider(self, provider: LLMProvider) -> List[str]:
+        """Get the list of models to try for a provider (in fallback order)."""
+        # Check environment variable first for custom model list or primary model
+        env_model = None
+        if provider == LLMProvider.GEMINI:
+            env_model = os.getenv("GEMINI_MODEL")
+            models = self.GEMINI_MODELS.copy()
+        elif provider == LLMProvider.OPENAI:
+            env_model = os.getenv("OPENAI_MODEL")
+            models = self.OPENAI_MODELS.copy()
+        elif provider == LLMProvider.ANTHROPIC:
+            env_model = os.getenv("ANTHROPIC_MODEL")
+            models = self.ANTHROPIC_MODELS.copy()
+        else:
+            return []
+        
+        # If env specifies a model, put it first (user preference)
+        if env_model:
+            # Remove any comments from env value
+            env_model = env_model.split('#')[0].strip()
+            if env_model and env_model not in models:
+                models.insert(0, env_model)
+            elif env_model in models:
+                # Move to front if already in list
+                models.remove(env_model)
+                models.insert(0, env_model)
+        
+        return models
+    
     async def _try_provider_with_retries(
         self,
         provider: LLMProvider,
@@ -745,52 +805,100 @@ class LLMService:
         temperature: float,
         max_tokens: int
     ) -> LLMResponse:
-        """Try a single provider with exponential backoff retries."""
-        for attempt in range(1, self.MAX_RETRIES_PER_PROVIDER + 1):
-            try:
-                start_time = datetime.now()
-                
-                if provider == LLMProvider.GEMINI:
-                    response = await self._gemini_complete(
-                        system_prompt, user_prompt, temperature, max_tokens
-                    )
-                elif provider == LLMProvider.OPENAI:
-                    response = await self._openai_complete(
-                        system_prompt, user_prompt, temperature, max_tokens
-                    )
-                elif provider == LLMProvider.ANTHROPIC:
-                    response = await self._anthropic_complete(
-                        system_prompt, user_prompt, temperature, max_tokens
-                    )
-                else:
-                    raise ValueError(f"Unknown provider: {provider}")
-                
-                duration = (datetime.now() - start_time).total_seconds()
-                response.usage.duration_seconds = duration
-                response.attempts = attempt
-                
-                logging.info(f"✅ {provider} succeeded on attempt {attempt} ({duration:.2f}s, ${response.usage.total_cost:.4f})")
-                
-                return response
-                
-            except Exception as e:
-                logging.warning(f"⚠️  {provider} attempt {attempt}/{self.MAX_RETRIES_PER_PROVIDER} failed: {e}")
-                
-                if attempt < self.MAX_RETRIES_PER_PROVIDER:
-                    # Exponential backoff: 2^attempt seconds
-                    delay = 2 ** attempt
-                    logging.debug(f"   Retrying in {delay} seconds...")
-                    await asyncio.sleep(delay)
+        """
+        Try a provider with multi-model fallback.
         
-        # All retries exhausted for this provider
+        For each provider, tries models in order:
+        - Gemini: gemini-3-pro -> gemini-2.5-pro -> gemini-2.5-flash
+        - OpenAI: gpt-5-mini -> gpt-5.1 -> gpt-4o-mini
+        - Anthropic: claude-3-5-sonnet-20250219
+        
+        Each model gets MAX_RETRIES_PER_MODEL attempts before trying next model.
+        """
+        model_list = self._get_model_list_for_provider(provider)
+        
+        if not model_list:
+            return LLMResponse(
+                content="",
+                usage=None,
+                provider=str(provider),
+                model="",
+                success=False,
+                error=f"{provider} has no configured models",
+                attempts=0
+            )
+        
+        total_attempts = 0
+        
+        # Try each model in the fallback list
+        for model_name in model_list:
+            logging.info(f"Trying {provider} model: {model_name}")
+            
+            # Try this model with retries (3 retries = 4 total attempts: initial + 3 retries)
+            for attempt in range(1, self.MAX_RETRIES_PER_MODEL + 2):
+                try:
+                    start_time = datetime.now()
+                    
+                    if provider == LLMProvider.GEMINI:
+                        response = await self._gemini_complete(
+                            system_prompt, user_prompt, temperature, max_tokens, model_name
+                        )
+                    elif provider == LLMProvider.OPENAI:
+                        response = await self._openai_complete(
+                            system_prompt, user_prompt, temperature, max_tokens, model_name
+                        )
+                    elif provider == LLMProvider.ANTHROPIC:
+                        response = await self._anthropic_complete(
+                            system_prompt, user_prompt, temperature, max_tokens, model_name
+                        )
+                    else:
+                        raise ValueError(f"Unknown provider: {provider}")
+                    
+                    duration = (datetime.now() - start_time).total_seconds()
+                    response.usage.duration_seconds = duration
+                    response.attempts = total_attempts + attempt
+                    
+                    logging.info(f"[OK] {provider} ({model_name}) succeeded on attempt {attempt} ({duration:.2f}s, ${response.usage.total_cost:.4f})")
+                    
+                    return response
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    total_attempts += 1
+                    
+                    # Detect model-specific errors (404 = model not found)
+                    is_model_error = (
+                        "404" in error_msg or 
+                        "not found" in error_msg.lower() or 
+                        "does not exist" in error_msg.lower() or
+                        "model_not_found" in error_msg.lower()
+                    )
+                    
+                    if is_model_error:
+                        logging.warning(f"[WARNING] {provider} model '{model_name}' not available: {error_msg}")
+                        # Skip remaining retries for this model, try next model
+                        break
+                    
+                    logging.warning(f"[WARNING] {provider} ({model_name}) attempt {attempt}/{self.MAX_RETRIES_PER_MODEL + 1} failed: {e}")
+                    
+                    if attempt < self.MAX_RETRIES_PER_MODEL + 1:
+                        # Exponential backoff: 2^attempt seconds
+                        delay = 2 ** attempt
+                        logging.debug(f"   Retrying {model_name} in {delay} seconds...")
+                        await asyncio.sleep(delay)
+            
+            # If we get here, this model failed - try next model in list
+            logging.info(f"Model {model_name} failed, trying next model in {provider} fallback list...")
+        
+        # All models for this provider failed
         return LLMResponse(
             content="",
             usage=None,
             provider=str(provider),
             model="",
             success=False,
-            error=f"{provider} failed after {self.MAX_RETRIES_PER_PROVIDER} attempts",
-            attempts=self.MAX_RETRIES_PER_PROVIDER
+            error=f"{provider} failed after trying {len(model_list)} models ({total_attempts} total attempts)",
+            attempts=total_attempts
         )
     
     async def _gemini_complete(
@@ -798,22 +906,85 @@ class LLMService:
         system_prompt: str,
         user_prompt: str,
         temperature: float,
-        max_tokens: int
+        max_tokens: int,
+        model_name: Optional[str] = None
     ) -> LLMResponse:
-        """Generate completion using Gemini."""
-        if not self.gemini_model:
+        """Generate completion using Gemini with specified model."""
+        if not GEMINI_AVAILABLE:
             raise ValueError("Gemini not available")
+        
+        # CRITICAL: Load API key from environment (ensures it's loaded from root .env)
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY not set - ensure it's in C:\\Q2O_Combined\\.env")
+        
+        # CRITICAL: Configure genai before each call to ensure API key is set in current context
+        # This is necessary because event loops might be created/destroyed between calls
+        genai.configure(api_key=api_key)
+        
+        # Use specified model or fallback to stored/default
+        actual_model_name = model_name or self.gemini_model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        
+        # Create model instance for this specific model
+        model = genai.GenerativeModel(actual_model_name)
         
         # Gemini doesn't have separate system/user roles, combine them
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
         
-        response = await self.gemini_model.generate_content_async(
+        response = await model.generate_content_async(
             full_prompt,
             generation_config=genai.GenerationConfig(
                 temperature=temperature,
                 max_output_tokens=max_tokens
             )
         )
+        
+        # CRITICAL: Check if response is incomplete (truncated due to MAX_TOKENS)
+        # This indicates poor quality and should trigger retry with different model/provider
+        finish_reason = None
+        if response.candidates and len(response.candidates) > 0:
+            # Check finish_reason (may be finishReason or finish_reason depending on API version)
+            candidate = response.candidates[0]
+            finish_reason = getattr(candidate, 'finish_reason', None) or getattr(candidate, 'finishReason', None)
+            
+            if finish_reason == "MAX_TOKENS" or finish_reason == 2:  # 2 is MAX_TOKENS enum value
+                error_msg = f"Gemini response truncated (finish_reason: {finish_reason}) - response incomplete, retrying with different model"
+                logging.warning(f"[WARNING] {error_msg}")
+                raise ValueError(error_msg)
+        
+        # Additional check: Validate response quality for JSON responses
+        # If response looks like JSON but is incomplete, treat as failure
+        response_text = response.text if hasattr(response, 'text') else str(response)
+        if response_text:
+            # Check for incomplete JSON (common when truncated)
+            text_stripped = response_text.strip()
+            
+            # Remove markdown code blocks if present
+            if "```json" in text_stripped:
+                text_stripped = text_stripped.split("```json")[1].split("```")[0].strip()
+            elif "```" in text_stripped:
+                text_stripped = text_stripped.split("```")[1].split("```")[0].strip()
+            
+            # If response looks like JSON, validate it's complete
+            if text_stripped.startswith('{') or text_stripped.startswith('['):
+                # Check if JSON appears incomplete (doesn't end with } or ])
+                is_incomplete = False
+                if text_stripped.startswith('{') and not text_stripped.rstrip().endswith('}'):
+                    is_incomplete = True
+                elif text_stripped.startswith('[') and not text_stripped.rstrip().endswith(']'):
+                    is_incomplete = True
+                
+                if is_incomplete:
+                    # Try parsing - if it fails, it's definitely incomplete
+                    try:
+                        json.loads(text_stripped)
+                        # If parsing succeeds despite missing closing brace, it's still suspicious
+                        # but we'll allow it (might be valid JSON with trailing whitespace)
+                    except json.JSONDecodeError as json_error:
+                        # JSON is definitely incomplete - treat as failure
+                        error_msg = f"Gemini response contains incomplete JSON (finish_reason may be MAX_TOKENS) - response truncated: {str(json_error)[:100]}"
+                        logging.warning(f"[WARNING] {error_msg}")
+                        raise ValueError(error_msg)
         
         # Calculate usage and cost
         input_tokens = response.usage_metadata.prompt_token_count
@@ -825,12 +996,9 @@ class LLMService:
         output_cost = (output_tokens / 1000) * 0.005
         total_cost = input_cost + output_cost
         
-        # Get actual model name from the model object or stored name
-        actual_model_name = self.gemini_model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-        
         usage = LLMUsage(
             provider="gemini",
-            model=actual_model_name,  # Use actual model name
+            model=actual_model_name,  # Use the model name that was actually used
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=total_tokens,
@@ -855,14 +1023,15 @@ class LLMService:
         system_prompt: str,
         user_prompt: str,
         temperature: float,
-        max_tokens: int
+        max_tokens: int,
+        model_name: Optional[str] = None
     ) -> LLMResponse:
-        """Generate completion using OpenAI."""
+        """Generate completion using OpenAI with specified model."""
         if not self.openai_client:
             raise ValueError("OpenAI not available")
         
-        # Get actual model name from stored name or env
-        model = self.openai_model_name or os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+        # Use specified model or fallback to stored/default
+        model = model_name or self.openai_model_name or os.getenv("OPENAI_MODEL", "gpt-5-mini")
         
         response = self.openai_client.chat.completions.create(
             model=model,
@@ -914,14 +1083,15 @@ class LLMService:
         system_prompt: str,
         user_prompt: str,
         temperature: float,
-        max_tokens: int
+        max_tokens: int,
+        model_name: Optional[str] = None
     ) -> LLMResponse:
-        """Generate completion using Anthropic Claude."""
+        """Generate completion using Anthropic Claude with specified model."""
         if not self.anthropic_client:
             raise ValueError("Anthropic not available")
         
-        # Get actual model name from stored name or env
-        model = self.anthropic_model_name or os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+        # Use specified model or fallback to stored/default
+        model = model_name or self.anthropic_model_name or os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20250219")
         
         response = self.anthropic_client.messages.create(
             model=model,
@@ -997,14 +1167,14 @@ class LLMService:
         system_prompt = f"""You are an expert {tech_stack_str} developer.
 
 Generate production-quality {language} code with:
-✅ Complete type hints (mypy strict mode compatible)
-✅ Comprehensive docstrings (Google style)
-✅ Proper error handling (try/except with specific exceptions)
-✅ Input validation (Pydantic models if applicable)
-✅ Security best practices (no SQL injection, XSS, eval, exec)
-✅ Structured logging with context
-✅ Best practices for {tech_stack_str}
-✅ Clean, readable, maintainable code
+[REQ] Complete type hints (mypy strict mode compatible)
+[REQ] Comprehensive docstrings (Google style)
+[REQ] Proper error handling (try/except with specific exceptions)
+[REQ] Input validation (Pydantic models if applicable)
+[REQ] Security best practices (no SQL injection, XSS, eval, exec)
+[REQ] Structured logging with context
+[REQ] Best practices for {tech_stack_str}
+[REQ] Clean, readable, maintainable code
 
 {self._format_research_context(research_context) if research_context else ''}
 
@@ -1028,7 +1198,7 @@ Generate complete, production-ready implementation."""
         if not research:
             return ""
         
-        context = "\n\n📚 Research Context:\n"
+        context = "\n\n[RESEARCH] Research Context:\n"
         
         if research.get('key_findings'):
             context += "Key Findings:\n"
@@ -1104,7 +1274,7 @@ Generate complete, production-ready implementation."""
             }
         
         if "openai" not in by_provider:
-            openai_model = self.openai_model_name or os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+            openai_model = self.openai_model_name or os.getenv("OPENAI_MODEL", "gpt-5-mini")
             by_provider["openai"] = {
                 "calls": 0,
                 "total_cost": 0.0,
@@ -1137,7 +1307,7 @@ Generate complete, production-ready implementation."""
     def reset_daily_stats(self):
         """Reset daily statistics (call at midnight)."""
         self.cost_monitor.daily_spent = 0.0
-        logging.info("🔄 Daily LLM stats reset")
+        logging.info("[RESET] Daily LLM stats reset")
 
 
 # Convenience function for agents

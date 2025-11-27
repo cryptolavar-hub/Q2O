@@ -9,15 +9,19 @@ Write-Host 'Q2O LLM Configuration Migration' -ForegroundColor Cyan
 Write-Host '========================================' -ForegroundColor Cyan
 Write-Host ''
 
-# Load .env if exists
-$envPath = Join-Path $PSScriptRoot 'addon_portal' '.env'
+# Load .env from ROOT (not addon_portal subfolder)
+# .env file is ALWAYS at project root
+$envPath = Join-Path $PSScriptRoot '.env'
 if (Test-Path $envPath) {
-    Write-Host 'Loading database connection from .env...' -ForegroundColor Yellow
+    Write-Host 'Loading database connection from root .env...' -ForegroundColor Yellow
     Get-Content $envPath | ForEach-Object {
         if ($_ -match '^DB_DSN=(.+)$') {
             $env:DB_DSN = $matches[1]
         }
     }
+} else {
+    Write-Host "[WARNING] .env file not found at root: $envPath" -ForegroundColor Yellow
+    Write-Host "[INFO] Expected location: $envPath" -ForegroundColor Cyan
 }
 
 # Parse connection string
@@ -65,7 +69,7 @@ if ($env:DB_DSN -match 'postgresql\+psycopg://(.+):(.+)@(.+):(\d+)/(.+)') {
     Write-Host 'ERROR: DB_DSN not found or invalid format' -ForegroundColor Red
     Write-Host 'Expected format: postgresql+psycopg://user:password@host:port/database' -ForegroundColor Yellow
     Write-Host ''
-    Write-Host 'Please set DB_DSN in addon_portal/.env' -ForegroundColor Yellow
+    Write-Host 'Please set DB_DSN in root .env file' -ForegroundColor Yellow
     exit 1
 }
 

@@ -326,10 +326,11 @@ ALLOWED_ORIGINS=http://localhost:3000,https://quick2odoo.com
 SESSION_SECRET=CHANGE_ME_SESSION_SECRET
 "@
 
-$EnvPath = Join-Path (Get-Location) "addon_portal\.env"
+# .env file MUST be at ROOT, not in addon_portal subfolder
+$EnvPath = Join-Path (Get-Location) ".env"
 $EnvContent | Out-File -FilePath $EnvPath -Encoding UTF8
 
-Write-Host "  [OK] Created: addon_portal\.env" -ForegroundColor Green
+Write-Host "  [OK] Created: .env (at project root)" -ForegroundColor Green
 Write-Host "  [INFO] Connection string: postgresql+psycopg2://q2o_user:***@localhost:5432/q2o" -ForegroundColor Gray
 Write-Host ""
 
@@ -363,7 +364,7 @@ Write-Host ""
 Write-Host "CONNECTION INFO:" -ForegroundColor White
 Write-Host "  Database: q2o" -ForegroundColor Gray
 Write-Host "  User:     q2o_user" -ForegroundColor Gray
-Write-Host "  Password: [saved in addon_portal\.env]" -ForegroundColor Gray
+  Write-Host "  Password: [saved in root .env file]" -ForegroundColor Gray
 Write-Host "  Port:     5432" -ForegroundColor Gray
 Write-Host ""
 Write-Host "==========================================================================" -ForegroundColor Green

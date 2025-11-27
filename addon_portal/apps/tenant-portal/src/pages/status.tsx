@@ -6,14 +6,12 @@
  * This is the same interface as the Multi-Agent Dashboard mockup
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useQuery, useSubscription } from 'urql';
 import { SessionGuard } from '../components/SessionGuard';
 import { Navigation } from '../components/Navigation';
 import { Breadcrumb } from '../components/Breadcrumb';
 import {
-  DASHBOARD_STATS_QUERY,
-  SYSTEM_METRICS_QUERY,
   AGENT_ACTIVITY_SUBSCRIPTION,
   TASK_UPDATES_SUBSCRIPTION,
   SYSTEM_METRICS_STREAM_SUBSCRIPTION,
@@ -55,6 +53,29 @@ interface DashboardState {
 }
 
 export default function StatusPage() {
+  // Scroll position preservation (prevents scroll-to-top on re-renders)
+  const scrollPositionRef = useRef<number>(0);
+  const shouldRestoreScrollRef = useRef<boolean>(false);
+  
+  // Save scroll position continuously (before any potential re-render)
+  useEffect(() => {
+    const handleScroll = () => {
+      scrollPositionRef.current = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+    };
+    
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+  
+  // Restore scroll position after re-renders (only if user was scrolled down)
+  useLayoutEffect(() => {
+    if (shouldRestoreScrollRef.current && scrollPositionRef.current > 0) {
+      // Use scrollTo with instant behavior to avoid smooth scroll animation
+      window.scrollTo(0, scrollPositionRef.current);
+      shouldRestoreScrollRef.current = false;
+    }
+  });
+  
   // Project selection state
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
@@ -87,9 +108,8 @@ export default function StatusPage() {
     loadProjects();
   }, []);
 
-  // GraphQL Queries
-  const [dashboardStatsResult] = useQuery({ query: DASHBOARD_STATS_QUERY });
-  const [systemMetricsResult] = useQuery({ query: SYSTEM_METRICS_QUERY });
+  // GraphQL Queries - ONLY project-specific data
+  // Removed DASHBOARD_STATS_QUERY and SYSTEM_METRICS_QUERY (they return global stats)
   const [projectResult, reexecuteProject] = useQuery({
     query: PROJECT_QUERY,
     variables: { id: selectedProjectId || '' },
@@ -102,6 +122,9 @@ export default function StatusPage() {
     if (!selectedProjectId) return;
     
     const interval = setInterval(() => {
+      // Mark that we should restore scroll position after this update
+      shouldRestoreScrollRef.current = true;
+      // Re-execute query (scroll will be restored by useLayoutEffect)
       reexecuteProject({ requestPolicy: 'network-only' });
     }, 2000); // Poll every 2 seconds
     
@@ -120,14 +143,17 @@ export default function StatusPage() {
   });
 
   // Combine data from queries and subscriptions
-  const dashboardStats = dashboardStatsResult.data?.dashboardStats;
-  const systemMetrics = metricsStreamResult.data?.systemMetricsStream || systemMetricsResult.data?.systemMetrics;
+  // Removed global dashboardStats and systemMetrics - using only project-specific data
+  const systemMetrics = metricsStreamResult.data?.systemMetricsStream; // Only from subscription (if project-filtered)
   const agentActivities = agentActivityResult.data?.agentActivity ? [agentActivityResult.data.agentActivity] : [];
   
   // Collect task updates from subscription (real-time)
   const [taskUpdatesList, setTaskUpdatesList] = useState<any[]>([]);
   useEffect(() => {
     if (taskUpdatesResult.data?.taskUpdates) {
+      // Mark that we should restore scroll position after this update
+      shouldRestoreScrollRef.current = true;
+      
       const update = taskUpdatesResult.data.taskUpdates;
       setTaskUpdatesList(prev => {
         // Update existing task or add new one
@@ -142,10 +168,19 @@ export default function StatusPage() {
     }
   }, [taskUpdatesResult.data]);
 
+  // Task Timeline pagination, search, and sort state
+  const [taskTimelinePage, setTaskTimelinePage] = useState(1);
+  const [taskTimelinePageSize, setTaskTimelinePageSize] = useState(25);
+  const [taskTimelineSearch, setTaskTimelineSearch] = useState('');
+  const [taskTimelineSortField, setTaskTimelineSortField] = useState<'created_at' | 'completed_at'>('completed_at');
+  const [taskTimelineSortDirection, setTaskTimelineSortDirection] = useState<'asc' | 'desc'>('asc'); // Oldest first for timeline
+
   // Collect metrics updates from subscription (real-time)
   const [currentMetrics, setCurrentMetrics] = useState(systemMetrics);
   useEffect(() => {
     if (metricsStreamResult.data?.systemMetricsStream) {
+      // Mark that we should restore scroll position after this update
+      shouldRestoreScrollRef.current = true;
       setCurrentMetrics(metricsStreamResult.data.systemMetricsStream);
     }
   }, [metricsStreamResult.data]);
@@ -158,29 +193,36 @@ export default function StatusPage() {
   const [currentProject, setCurrentProject] = useState(selectedProject);
   useEffect(() => {
     if (projectResult.data?.project) {
+      // Mark that we should restore scroll position after this update
+      shouldRestoreScrollRef.current = true;
       setCurrentProject(projectResult.data.project);
     }
   }, [projectResult.data]);
 
-  // Calculate real-time progress from task updates
+  // Calculate real-time progress from project data
+  // Always returns whole numbers (0-100)
+  // CRITICAL: Use project-specific completionPercentage from GraphQL query
+  // Both "Overall Progress" and "Completion Rate" must use the SAME calculation
   const calculateProgress = (): number => {
-    if (currentProject) {
-      return Math.round(currentProject.completionPercentage || 0);
+    // Priority 1: Use selectedProject.completionPercentage (from GraphQL query - project-specific, filtered by execution_started_at)
+    if (selectedProject?.completionPercentage !== undefined) {
+      return Math.round(Math.min(100, Math.max(0, selectedProject.completionPercentage)));
     }
-    if (taskUpdatesList.length > 0) {
-      const completed = taskUpdatesList.filter(t => t.status === 'COMPLETED').length;
-      const total = taskUpdatesList.length;
-      return total > 0 ? Math.round((completed / total) * 100) : 0;
+    
+    // Priority 2: Calculate from selectedProject task counts (if completionPercentage not available)
+    if (selectedProject && selectedProject.totalTasks > 0) {
+      const percentage = ((selectedProject.completedTasks || 0) / selectedProject.totalTasks) * 100;
+      return Math.round(Math.min(100, Math.max(0, percentage)));
     }
-    return dashboardStats?.totalTasks 
-      ? Math.round((dashboardStats.completedTasksToday / dashboardStats.totalTasks) * 100)
-      : 0;
+    
+    // Priority 3: Fallback to 0 if no project data available
+    return 0;
   };
 
   const realTimeProgress = calculateProgress();
 
-  const loading = dashboardStatsResult.fetching || systemMetricsResult.fetching;
-  const connected = !dashboardStatsResult.error && !systemMetricsResult.error;
+  const loading = projectResult.fetching;
+  const connected = !projectResult.error;
 
   // Filter projects by search
   const filteredProjects = availableProjects.filter(p =>
@@ -210,50 +252,66 @@ export default function StatusPage() {
       estimatedTimeRemaining: selectedProject?.estimatedTimeRemainingSeconds || systemMetrics?.averageTaskDurationSeconds || 0,
     },
     agents: projectAgents.length > 0
-      ? projectAgents.map((agent: any) => ({
-          name: agent.name || agent.agentType || 'Unknown Agent',
-          status: (agent.status === 'active' ? 'active' : agent.status === 'idle' ? 'idle' : 'busy') as const,
-          currentTask: agent.currentTaskId || undefined,
-          tasksCompleted: agent.tasksCompleted || 0,
-        }))
+      ? projectAgents.map((agent: any) => {
+          const statusValue = agent.status === 'active' ? 'active' : agent.status === 'idle' ? 'idle' : 'busy';
+          return {
+            name: agent.name || agent.agentType || 'Unknown Agent',
+            status: statusValue as 'active' | 'idle' | 'busy',
+            currentTask: agent.currentTaskId || undefined,
+            tasksCompleted: agent.tasksCompleted || 0,
+          };
+        })
       : agentActivities.map((activity: any) => ({
           name: activity.agentId || 'Unknown Agent',
           status: 'active' as const,
           currentTask: activity.taskId || undefined,
           tasksCompleted: 0,
         })),
-    tasks: taskUpdatesList.map((task: any) => ({
-      id: task.id,
-      title: task.title || 'Unknown Task',
-      status: task.status?.toLowerCase() || 'pending',
-      agent: task.agent?.name || task.agentType || undefined,
-      progress: task.progress || 0,
-    })),
+    tasks: (() => {
+      // Combine completed tasks from query with real-time updates from subscription
+      const completedTasksList = selectedProject?.completedTasksList || [];
+      const allTasks = [...completedTasksList, ...taskUpdatesList];
+      
+      // Remove duplicates (prefer subscription updates over query results)
+      const taskMap = new Map();
+      allTasks.forEach((task: any) => {
+        if (!taskMap.has(task.id) || task.status === 'COMPLETED' || task.status === 'completed') {
+          taskMap.set(task.id, task);
+        }
+      });
+      
+      // Convert to array with all needed fields for filtering/sorting/pagination
+      return Array.from(taskMap.values())
+        .map((task: any) => ({
+          id: task.id,
+          title: task.title || 'Unknown Task',
+          status: task.status?.toLowerCase() || 'pending',
+          agent: task.agent?.name || task.agentType || undefined,
+          progress: task.progress || (task.status === 'COMPLETED' || task.status === 'completed' ? 100 : 0),
+          completedAt: task.completedAt || null,
+          createdAt: task.createdAt || null,
+          // For sorting, use completedAt if available, otherwise createdAt
+          sortTime: task.completedAt ? new Date(task.completedAt).getTime() : (task.createdAt ? new Date(task.createdAt).getTime() : 0),
+        }));
+    })(),
     metrics: {
+      // CPU and Memory are SYSTEM-WIDE (not project-specific) - clearly labeled
       cpu: currentMetrics?.cpuUsagePercent || systemMetrics?.cpuUsagePercent || 0,
       memory: currentMetrics?.memoryUsagePercent || systemMetrics?.memoryUsagePercent || 0,
-      // Prioritize project-specific data, then metrics stream, then dashboard stats
+      // ALL task metrics are PROJECT-SPECIFIC (from selectedProject only)
       activeTasks: currentProject?.totalTasks 
-        ? (currentProject.totalTasks - currentProject.completedTasks - currentProject.failedTasks)
-        : (currentMetrics?.activeTasks || systemMetrics?.activeTasks || dashboardStats?.activeTasks || 0),
-      completedTasks: currentProject?.completedTasks !== undefined
-        ? currentProject.completedTasks
-        : (currentMetrics?.tasksCompletedToday || systemMetrics?.tasksCompletedToday || dashboardStats?.completedTasksToday || 0),
-      failedTasks: currentProject?.failedTasks !== undefined
-        ? currentProject.failedTasks
-        : (currentMetrics?.tasksFailedToday || systemMetrics?.tasksFailedToday || 0),
-      totalTasks: currentProject?.totalTasks !== undefined
-        ? currentProject.totalTasks
-        : (dashboardStats?.totalTasks || 0),
-      successRate: currentProject?.successRate !== undefined
-        ? currentProject.successRate
-        : (dashboardStats?.averageSuccessRate || currentMetrics?.systemHealthScore || systemMetrics?.systemHealthScore || 0),
-      averageTaskTime: currentMetrics?.averageTaskDurationSeconds || systemMetrics?.averageTaskDurationSeconds || 0,
+        ? Math.max(0, (currentProject.totalTasks - (currentProject.completedTasks || 0) - (currentProject.failedTasks || 0)))
+        : 0,
+      completedTasks: currentProject?.completedTasks ?? 0,
+      failedTasks: currentProject?.failedTasks ?? 0,
+      totalTasks: currentProject?.totalTasks ?? 0,
+      successRate: currentProject?.successRate ?? 0,
+      averageTaskTime: currentProject?.estimatedTimeRemainingSeconds || 0,
     },
   };
 
   // Show loading state only on initial load
-  if (loading && !dashboardStats && !systemMetrics) {
+  if (loading && !selectedProject) {
     return (
       <SessionGuard>
         <div className="min-h-screen bg-gradient-to-br from-pink-500 via-purple-500 to-indigo-600">
@@ -368,18 +426,18 @@ export default function StatusPage() {
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-medium text-gray-700">Overall Progress</span>
                 <span className="text-lg font-bold bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent">
-                  {project.progress}%
+                  {Math.round(project.progress)}%
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden shadow-inner">
                 <div
                   className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 shadow-md transition-all duration-500 ease-out"
-                  style={{ width: `${project.progress}%` }}
+                  style={{ width: `${Math.round(project.progress)}%` }}
                 >
                   {project.progress > 10 && (
                     <div className="h-full flex items-center justify-end pr-2">
                       <span className="text-xs font-bold text-white drop-shadow">
-                        {project.progress}%
+                        {Math.round(project.progress)}%
                       </span>
                     </div>
                   )}
@@ -413,8 +471,8 @@ export default function StatusPage() {
                 <div className="text-3xl">📊</div>
               </div>
               <h3 className="text-gray-600 text-sm font-medium mb-2">Success Rate</h3>
-              <p className="text-3xl font-bold text-gray-900 mb-1">{metrics.successRate}%</p>
-              <p className="text-sm text-gray-500">All time</p>
+              <p className="text-3xl font-bold text-gray-900 mb-1">{Math.round(metrics.successRate)}%</p>
+              <p className="text-sm text-gray-500">Project</p>
             </div>
 
             <div className="bg-white rounded-2xl p-6 shadow-lg">
@@ -537,25 +595,14 @@ export default function StatusPage() {
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-medium text-gray-700">Completion Rate</span>
                       <span className="text-sm font-bold text-green-600">
-                        {(() => {
-                          // Use project completion percentage if available, otherwise calculate from metrics
-                          const completion = selectedProject?.completionPercentage !== undefined
-                            ? selectedProject.completionPercentage
-                            : (metrics.totalTasks > 0 ? Math.min(100, Math.round((metrics.completedTasks / metrics.totalTasks) * 100)) : 0);
-                          return `${Math.min(100, Math.max(0, completion))}%`;
-                        })()}
+                        {realTimeProgress}%
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-green-500 h-2 rounded-full transition-all duration-500 ease-out"
                         style={{ 
-                          width: `${(() => {
-                            const completion = selectedProject?.completionPercentage !== undefined
-                              ? selectedProject.completionPercentage
-                              : (metrics.totalTasks > 0 ? Math.min(100, (metrics.completedTasks / metrics.totalTasks) * 100) : 0);
-                            return Math.min(100, Math.max(0, completion));
-                          })()}%` 
+                          width: `${realTimeProgress}%` 
                         }}
                       />
                     </div>
@@ -564,19 +611,19 @@ export default function StatusPage() {
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-medium text-gray-700">Success Rate</span>
-                      <span className="text-sm font-bold text-blue-600">{metrics.successRate.toFixed(1)}%</span>
+                      <span className="text-sm font-bold text-blue-600">{Math.round(metrics.successRate)}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-blue-500 h-2 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${metrics.successRate}%` }}
+                        style={{ width: `${Math.round(metrics.successRate)}%` }}
                       />
                     </div>
                   </div>
 
                   <div>
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-gray-700">CPU Usage</span>
+                      <span className="text-sm font-medium text-gray-700">System CPU Usage</span>
                       <span className="text-sm font-bold text-purple-600">{metrics.cpu.toFixed(1)}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
@@ -585,11 +632,12 @@ export default function StatusPage() {
                         style={{ width: `${metrics.cpu}%` }}
                       />
                     </div>
+                    <p className="text-xs text-gray-500 mt-1">System-wide resource usage</p>
                   </div>
 
                   <div>
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-gray-700">Memory Usage</span>
+                      <span className="text-sm font-medium text-gray-700">System Memory Usage</span>
                       <span className="text-sm font-bold text-orange-600">{metrics.memory.toFixed(1)}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
@@ -598,6 +646,7 @@ export default function StatusPage() {
                         style={{ width: `${metrics.memory}%` }}
                       />
                     </div>
+                    <p className="text-xs text-gray-500 mt-1">System-wide resource usage</p>
                   </div>
 
                   <div className="pt-4 border-t border-gray-200">

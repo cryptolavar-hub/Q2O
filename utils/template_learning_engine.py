@@ -87,9 +87,9 @@ class TemplateLearningEngine:
         
         if self.enabled:
             self._init_database()
-            logging.info(f"✅ Template Learning Engine initialized (min quality: {self.min_quality}%)")
+            logging.info(f"[OK] Template Learning Engine initialized (min quality: {self.min_quality}%)")
         else:
-            logging.info("ℹ️  Template Learning disabled by configuration")
+            logging.info("[INFO] Template Learning disabled by configuration")
     
     def _init_database(self):
         """Initialize learned templates database."""
@@ -255,7 +255,7 @@ class TemplateLearningEngine:
         
         template = self._row_to_template(row)
         
-        logging.info(f"📚 Found learned template: {template.name} (used {template.usage_count} times)")
+        logging.info(f"[TEMPLATE] Found learned template: {template.name} (used {template.usage_count} times)")
         
         return template
     
@@ -331,7 +331,7 @@ class TemplateLearningEngine:
             
             # If new code is better quality, update the template
             if quality_score > existing_quality:
-                logging.info(f"✨ Updating template {existing_id} with higher quality code ({existing_quality} → {quality_score})")
+                logging.info(f"[UPDATE] Updating template {existing_id} with higher quality code ({existing_quality} -> {quality_score})")
                 
                 cursor.execute("""
                     UPDATE learned_templates
@@ -384,7 +384,7 @@ class TemplateLearningEngine:
         conn.commit()
         conn.close()
         
-        logging.info(f"✨ Learned new template: {template_id} '{name}' (from {source_llm}, quality: {quality_score}/100)")
+        logging.info(f"[LEARNED] Learned new template: {template_id} '{name}' (from {source_llm}, quality: {quality_score}/100)")
         
         return template_id
     
@@ -520,7 +520,7 @@ Analyze and return JSON array of parameterization suggestions."""
                     reasoning=s.get('reasoning', '')
                 ))
             
-            logging.info(f"💡 Generated {len(suggestions)} parameterization suggestions")
+            logging.info(f"[SUGGESTIONS] Generated {len(suggestions)} parameterization suggestions")
             return suggestions
             
         except Exception as e:
@@ -573,7 +573,7 @@ Analyze and return JSON array of parameterization suggestions."""
         conn.commit()
         conn.close()
         
-        logging.debug(f"📊 Template usage incremented: {template_id}")
+        logging.debug(f"[STATS] Template usage incremented: {template_id}")
     
     def get_learning_stats(self) -> Dict:
         """
@@ -716,7 +716,7 @@ Analyze and return JSON array of parameterization suggestions."""
         conn.close()
         
         if deleted:
-            logging.info(f"🗑️  Deleted learned template: {template_id}")
+            logging.info(f"[DELETE] Deleted learned template: {template_id}")
         
         return deleted
 

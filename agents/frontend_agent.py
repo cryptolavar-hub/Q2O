@@ -19,9 +19,16 @@ class FrontendAgent(BaseAgent):
                  project_id: Optional[str] = None,
                  tenant_id: Optional[int] = None,
                  orchestrator: Optional[Any] = None):
-        super().__init__(agent_id, AgentType.FRONTEND, project_layout,
-                        project_id=project_id, tenant_id=tenant_id, orchestrator=orchestrator)
-        self.workspace_path = workspace_path
+        # CRITICAL: Pass workspace_path to super() to ensure BaseAgent validates it
+        super().__init__(
+            agent_id, 
+            AgentType.FRONTEND, 
+            project_layout,
+            workspace_path=workspace_path,
+            project_id=project_id, 
+            tenant_id=tenant_id, 
+            orchestrator=orchestrator
+        )
         self.frontend_files: List[str] = []
         self.template_renderer = get_renderer()
 
@@ -208,7 +215,7 @@ const OnboardingPage: NextPage = () => {
             </button>
             {qboConnected && (
               <div className="mt-4 text-green-600">
-                ✓ QuickBooks connected successfully
+                [OK] QuickBooks connected successfully
               </div>
             )}
           </div>
@@ -283,7 +290,7 @@ const OnboardingPage: NextPage = () => {
 
             {odooConnected && (
               <div className="mt-4 text-green-600">
-                ✓ Odoo connected successfully
+                [OK] Odoo connected successfully
               </div>
             )}
           </div>
@@ -857,7 +864,7 @@ const ThemeToggle: React.FC = () => {
       className="p-2 rounded-md bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
       aria-label="Toggle theme"
     >
-      {theme === "light" ? "🌙" : "☀️"}
+      {theme === "light" ? "[DARK]" : "[LIGHT]"}
     </button>
   );
 };

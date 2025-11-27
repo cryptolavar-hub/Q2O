@@ -200,7 +200,8 @@ Write-Host ""
 Write-Host "[10/10] Checking licensing database..." -ForegroundColor White
 
 # Check if .env exists and determine database type
-$envPath = "addon_portal\.env"
+# .env file is at ROOT: C:\Q2O_Combined\.env (not in addon_portal subfolder)
+$envPath = ".\.env"
 $usingPostgreSQL = $false
 $usingSQLite = $false
 
@@ -283,7 +284,9 @@ if (Test-Path $envPath) {
         }
     }
 } else {
-    Write-Host "  [WARNING] .env file not found, checking default SQLite" -ForegroundColor Yellow
+    Write-Host "  [WARNING] .env file not found at root, checking default SQLite" -ForegroundColor Yellow
+    Write-Host "  [INFO] .env file MUST be at project ROOT only" -ForegroundColor Cyan
+    Write-Host "  [INFO] Copy from: addon_portal\env.example.txt to ROOT" -ForegroundColor Cyan
     $usingSQLite = $true
     
     if (Test-Path "addon_portal\q2o_licensing.db") {
@@ -886,6 +889,9 @@ function Show-ServiceMenu {
         }
     }
 }
+
+# Show the menu
+Show-ServiceMenu
 
 # Show the menu
 Show-ServiceMenu

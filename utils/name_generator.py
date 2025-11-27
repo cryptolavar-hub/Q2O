@@ -42,6 +42,18 @@ def generate_concise_name(objective: str, agent_type: Optional[str] = None, max_
     # Remove common prefixes/suffixes that add noise
     objective = objective.strip()
     
+    # For very long queries (likely concatenated lists), take only the first meaningful part
+    # This prevents extracting too many terms from extremely long queries
+    if len(objective) > 200:
+        # Take first 200 chars and look for natural break points (periods, newlines, etc.)
+        truncated = objective[:200]
+        # Try to find a natural break point
+        for separator in ['. ', '\n', '; ', ', ']:
+            if separator in truncated:
+                truncated = truncated.rsplit(separator, 1)[0]
+                break
+        objective = truncated
+    
     # Remove common action prefixes
     prefixes_to_remove = [
         r'^(do|create|build|implement|develop|make|add|setup|configure|perform|execute|run)\s+',
@@ -65,16 +77,21 @@ def generate_concise_name(objective: str, agent_type: Optional[str] = None, max_
         'webhook', 'websocket', 'redis', 'celery', 'temporal'
     }
     
-    # Extract important terms
+    # Extract important terms (limit to prevent too many terms from long queries)
+    max_capitalized_words = 8  # Limit capitalized words to prevent excessive extraction
+    capitalized_count = 0
+    
     for word in words:
         word_lower = word.lower().rstrip('.,;:!?')
         
-        # Preserve technology keywords
+        # Preserve technology keywords (always prioritize these)
         if word_lower in tech_keywords:
             key_terms.append(word_lower.title() if word_lower.islower() else word)
-        # Preserve proper nouns (capitalized words)
+        # Preserve proper nouns (capitalized words) - but limit count
         elif word and word[0].isupper() and len(word) > 2:
-            key_terms.append(word.rstrip('.,;:!?'))
+            if capitalized_count < max_capitalized_words:
+                key_terms.append(word.rstrip('.,;:!?'))
+                capitalized_count += 1
         # Preserve important action verbs
         elif word_lower in ['connect', 'integrate', 'migrate', 'sync', 'validate', 'authenticate', 'authorize']:
             key_terms.append(word_lower.title())
@@ -97,16 +114,34 @@ def generate_concise_name(objective: str, agent_type: Optional[str] = None, max_
     # Build the concise name
     if key_terms:
         # Remove duplicates while preserving order
+        # Also check if a term is already part of a longer phrase
         seen = set()
         unique_terms = []
         for term in key_terms:
             term_lower = term.lower()
-            if term_lower not in seen:
+            # Check if this term is already covered by a longer phrase
+            is_covered = False
+            for existing_term in unique_terms:
+                existing_lower = existing_term.lower()
+                # If this term is part of an existing phrase, skip it
+                if term_lower in existing_lower and term_lower != existing_lower:
+                    is_covered = True
+                    break
+                # If an existing term is part of this term, replace it
+                if existing_lower in term_lower and term_lower != existing_lower:
+                    # Remove the shorter term and add the longer one
+                    if existing_term in unique_terms:
+                        unique_terms.remove(existing_term)
+                        seen.discard(existing_lower)
+            
+            if not is_covered and term_lower not in seen:
                 seen.add(term_lower)
                 unique_terms.append(term)
         
-        # Join terms
-        concise_name = ' '.join(unique_terms[:5])  # Max 5 terms
+        # Join terms - limit to 3-4 terms for better conciseness, especially for long queries
+        # If we have many terms, prioritize the first few (most important)
+        max_terms = 4 if len(unique_terms) > 6 else 5  # Use fewer terms if query was very long
+        concise_name = ' '.join(unique_terms[:max_terms])
         
         # Truncate if too long (at word boundary)
         if len(concise_name) > max_length:

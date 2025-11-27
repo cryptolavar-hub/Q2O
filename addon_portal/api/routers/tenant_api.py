@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import io
+import zipfile
 from datetime import datetime, timezone
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException, Header, status, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -753,9 +757,39 @@ async def create_tenant_project(
         )
     
     # Generate project_id from name (slugify)
-    project_id = re.sub(r'[^a-z0-9]+', '-', payload.name.lower()).strip('-')[:100]
-    if not project_id:
-        project_id = f"project-{tenant_info['tenant_id']}-{int(datetime.now().timestamp())}"
+    base_project_id = re.sub(r'[^a-z0-9]+', '-', payload.name.lower()).strip('-')[:100]
+    if not base_project_id:
+        base_project_id = f"project-{tenant_info['tenant_id']}-{int(datetime.now().timestamp())}"
+    
+    # Ensure project_id is unique by appending _001, _002, etc. if needed
+    project_id = base_project_id
+    counter = 0
+    max_attempts = 999  # Limit to _001 through _999
+    
+    while counter <= max_attempts:
+        # Check if this project_id already exists
+        result = await db.execute(
+            select(LLMProjectConfig).where(LLMProjectConfig.project_id == project_id)
+        )
+        existing = result.scalar_one_or_none()
+        
+        if existing is None:
+            # Project ID is unique, use it
+            break
+        
+        # Project ID exists, try next number
+        counter += 1
+        if counter > max_attempts:
+            # Fallback to timestamp-based ID if we've exhausted all attempts
+            project_id = f"{base_project_id}-{int(datetime.now().timestamp())}"
+            break
+        
+        # Append _001, _002, etc. (zero-padded to 3 digits)
+        suffix = f"_{counter:03d}"
+        # Ensure total length doesn't exceed reasonable limits (keep base + suffix within 100 chars)
+        max_base_length = 100 - len(suffix)
+        truncated_base = base_project_id[:max_base_length]
+        project_id = f"{truncated_base}{suffix}"
     
     # Map frontend payload to backend ProjectCreatePayload
     backend_payload = ProjectCreatePayload(
@@ -776,7 +810,7 @@ async def create_tenant_project(
         await db.commit()
         return project
     except (InvalidOperationError, ConfigurationError) as e:
-        db.rollback()
+        await db.rollback()
         error_msg = str(e)
         LOGGER.error(
             "create_project_error",
@@ -807,6 +841,131 @@ async def create_tenant_project(
         )
 
 
+@router.get("/projects/{project_id}/download")
+async def download_project(
+    project_id: str,
+    tenant_info: dict = Depends(get_tenant_from_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """Download completed project as zip file.
+    
+    Requirements:
+    - Project must belong to the authenticated tenant
+    - Project must be completed (execution_status='completed')
+    - Project must have an output_folder_path
+    
+    Returns:
+    - ZIP file containing all project files from output folder
+    - Created in memory to avoid file system locks
+    """
+    # Get project
+    result = await db.execute(
+        select(LLMProjectConfig).where(
+            LLMProjectConfig.project_id == project_id,
+            LLMProjectConfig.tenant_id == tenant_info["tenant_id"]
+        )
+    )
+    project = result.scalar_one_or_none()
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    # Verify project is completed
+    if project.execution_status != 'completed':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Project is not completed. Current status: {project.execution_status}"
+        )
+    
+    # Verify project has output folder path
+    if not project.output_folder_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project output folder not found. Project may not have been executed yet."
+        )
+    
+    output_folder = Path(project.output_folder_path)
+    
+    # Verify output folder exists
+    if not output_folder.exists() or not output_folder.is_dir():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project output folder does not exist: {output_folder}"
+        )
+    
+    try:
+        # Create zip file in memory to avoid file system locks
+        zip_buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Walk through the output folder and add all files
+            for file_path in output_folder.rglob('*'):
+                if file_path.is_file():
+                    # Get relative path from output folder root
+                    arcname = file_path.relative_to(output_folder)
+                    
+                    # Read file content and add to zip
+                    try:
+                        zip_file.write(file_path, arcname)
+                    except (PermissionError, OSError) as e:
+                        # Skip files that can't be read (locked files, etc.)
+                        LOGGER.warning(
+                            "download_skip_file",
+                            extra={
+                                "project_id": project_id,
+                                "file_path": str(file_path),
+                                "error": str(e),
+                            }
+                        )
+                        continue
+        
+        # Get zip file size and reset buffer position
+        zip_size = zip_buffer.tell()
+        zip_buffer.seek(0)
+        
+        # Generate filename
+        safe_project_name = "".join(c for c in (project.client_name or project.project_id) if c.isalnum() or c in (' ', '-', '_')).strip()
+        filename = f"{safe_project_name}-{project.project_id}.zip"
+        
+        LOGGER.info(
+            "project_download_initiated",
+            extra={
+                "project_id": project_id,
+                "tenant_id": tenant_info["tenant_id"],
+                "output_folder": str(output_folder),
+                "zip_filename": filename,
+                "zip_size_bytes": zip_size,
+            }
+        )
+        
+        # Return streaming response with zip file
+        return StreamingResponse(
+            zip_buffer,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(zip_size),
+            }
+        )
+        
+    except Exception as e:
+        LOGGER.error(
+            "project_download_failed",
+            extra={
+                "project_id": project_id,
+                "tenant_id": tenant_info["tenant_id"],
+                "error": str(e),
+            }
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create download archive: {str(e)}"
+        )
+
+
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
 async def get_tenant_project(
     project_id: str,
@@ -820,14 +979,36 @@ async def get_tenant_project(
     try:
         project = await get_project(session=db, project_id=project_id, tenant_id=tenant_info["tenant_id"])
         return project
-    except Exception as e:
-        LOGGER.error(
-            "get_project_error",
-            extra={"error": str(e), "tenant_id": tenant_info["tenant_id"], "project_id": project_id},
+    except ConfigurationError as e:
+        # Project not found or doesn't belong to tenant
+        LOGGER.warning(
+            "get_project_not_found",
+            extra={
+                "error": str(e),
+                "tenant_id": tenant_info["tenant_id"],
+                "project_id": project_id,
+                "detail": e.detail if hasattr(e, 'detail') else None,
+            },
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
+        )
+    except Exception as e:
+        # Unexpected error - log with full details
+        LOGGER.error(
+            "get_project_error",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "tenant_id": tenant_info["tenant_id"],
+                "project_id": project_id,
+            },
+            exc_info=True,  # Include full traceback
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while fetching the project",
         )
 
 

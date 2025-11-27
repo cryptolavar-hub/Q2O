@@ -47,8 +47,16 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
                  project_id: Optional[str] = None,
                  tenant_id: Optional[int] = None,
                  orchestrator: Optional[Any] = None):
-        super().__init__(agent_id, AgentType.CODER, project_layout, project_id=project_id, tenant_id=tenant_id, orchestrator=orchestrator)
-        self.workspace_path = workspace_path
+        # CRITICAL: Pass workspace_path to super() to ensure BaseAgent validates it
+        super().__init__(
+            agent_id, 
+            AgentType.CODER, 
+            project_layout, 
+            workspace_path=workspace_path,
+            project_id=project_id, 
+            tenant_id=tenant_id, 
+            orchestrator=orchestrator
+        )
         self.implemented_files: List[str] = []
         self.template_renderer = get_renderer()
         self.project_id = project_id
@@ -61,16 +69,16 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             self.template_learning = get_template_learning_engine()
             self.config_manager = get_configuration_manager()
             self.llm_enabled = True
-            logging.info("✅ CoderAgent: LLM integration enabled (hybrid mode)")
+            logging.info("[OK] CoderAgent: LLM integration enabled (hybrid mode)")
         else:
             self.llm_service = None
             self.template_learning = None
             self.config_manager = None
             self.llm_enabled = False
             if self.use_llm:
-                logging.warning("⚠️  CoderAgent: LLM requested but not available, template-only mode")
+                logging.warning("[WARNING] CoderAgent: LLM requested but not available, template-only mode")
             else:
-                logging.info("ℹ️  CoderAgent: LLM disabled, template-only mode")
+                logging.info("[INFO] CoderAgent: LLM disabled, template-only mode")
 
     def process_task(self, task: Task) -> Task:
         """
@@ -125,8 +133,22 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
                         implemented_files = loop.run_until_complete(
                             self._implement_code_async(code_structure, task)
                         )
+                        # CRITICAL: Wait for all pending tasks to complete before closing loop
+                        pending = asyncio.all_tasks(loop)
+                        if pending:
+                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                     finally:
-                        loop.close()
+                        # Only close loop after all tasks are complete
+                        try:
+                            pending = asyncio.all_tasks(loop)
+                            for task in pending:
+                                task.cancel()
+                            if pending:
+                                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                        except Exception:
+                            pass
+                        finally:
+                            loop.close()
             else:
                 # Traditional synchronous implementation
                 implemented_files = self._implement_code(code_structure, task)
@@ -324,14 +346,6 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
                 file_type, file_info, objective, task, tech_stack
             )
             
-<<<<<<< Updated upstream
-            # Write file
-            with open(full_path, 'w', encoding='utf-8') as f:
-                f.write(code_content)
-            
-            implemented_files.append(file_path)
-            self.logger.info(f"✅ Created file: {file_path}")
-=======
             # Write file using safe file writer (HARD GUARANTEE)
             try:
                 self.safe_write_file(file_path, code_content)
@@ -340,7 +354,6 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             except Exception as e:
                 self.logger.error(f"[ERROR] Failed to write file {file_path}: {e}")
                 raise
->>>>>>> Stashed changes
 
         return implemented_files
     
@@ -379,14 +392,14 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
                 task_desc, tech_stack
             )
             if learned_template:
-                self.logger.info(f"📚 Using learned template: {learned_template.name} (saved ${0.52:.2f}!)")
+                self.logger.info(f"[TEMPLATE] Using learned template: {learned_template.name} (saved ${0.52:.2f}!)")
                 self.template_learning.increment_usage(learned_template.template_id)
                 return learned_template.template_content
         
         # STEP 2: Try traditional template (FAST)
         try:
             code_content = self._generate_code_content(file_type, file_info, objective, task)
-            self.logger.info(f"📄 Used traditional template for {file_type}")
+            self.logger.info(f"[TEMPLATE] Used traditional template for {file_type}")
             return code_content
         except Exception as template_error:
             self.logger.debug(f"Traditional template not available: {template_error}")
@@ -396,7 +409,7 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             # No LLM available and no template - fail
             raise ValueError(f"No template for {file_type} and LLM not available")
         
-        self.logger.info(f"🤖 Generating with LLM for {file_type} (no template available)")
+        self.logger.info(f"[LLM] Generating with LLM for {file_type} (no template available)")
         
         # Get configuration for this task
         system_prompt, user_prompt = self.config_manager.get_prompt_for_task(
@@ -421,10 +434,13 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
         # Log usage
         if response.usage:
             self.logger.info(
-                f"💰 LLM cost: ${response.usage.total_cost:.4f} "
+                f"[COST] LLM cost: ${response.usage.total_cost:.4f} "
                 f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens, "
                 f"{response.usage.duration_seconds:.2f}s)"
             )
+        
+        # CRITICAL: Track LLM usage for dashboard
+        self.track_llm_usage(task, response)
         
         # STEP 4: Learn from successful generation (for future cost savings)
         if self.template_learning and response.success:
@@ -445,7 +461,7 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             )
             
             if template_id:
-                self.logger.info(f"✨ Learned new template: {template_id} (future similar tasks will be FREE!)")
+                self.logger.info(f"[LEARNED] Learned new template: {template_id} (future similar tasks will be FREE!)")
         
         return code_content
     

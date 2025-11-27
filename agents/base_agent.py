@@ -109,6 +109,15 @@ class BaseAgent(ABC):
         self.orchestrator = orchestrator  # Reference to orchestrator for dependency access
         
         # CRITICAL: Validate and set workspace_path with hard security guarantees
+        # workspace_path is REQUIRED when project_id is set (tenant portal execution)
+        if project_id and not workspace_path:
+            raise ValueError(
+                f"CRITICAL: Agent {agent_id} requires workspace_path when project_id is set. "
+                f"workspace_path must be set to Tenant_Projects/{{project_id}}/ to ensure all generated files "
+                f"are placed in the correct location for client download. "
+                f"NO FILES SHOULD BE GENERATED OUTSIDE Tenant_Projects/{{project_id}}/"
+            )
+        
         if workspace_path:
             from utils.safe_file_writer import validate_workspace_path
             try:
@@ -117,13 +126,18 @@ class BaseAgent(ABC):
                 self.logger.error(f"CRITICAL: Invalid workspace_path '{workspace_path}': {e}")
                 raise
         else:
-            # Default to current directory (for backward compatibility, but warn)
+            # Default to current directory (only allowed when project_id is None - local/testing mode)
             self.workspace_path = "."
-            self.logger.warning(
-                f"Agent {agent_id} initialized without workspace_path! "
-                f"This may cause files to be written to the wrong location. "
-                f"Set workspace_path to Tenant_Projects/{{project_id}}/"
-            )
+            if project_id is None:
+                self.logger.debug(
+                    f"Agent {agent_id} initialized without workspace_path (project_id=None, local/testing mode)"
+                )
+            else:
+                # This should never happen due to the check above, but keep as safety net
+                raise ValueError(
+                    f"CRITICAL: Agent {agent_id} initialized without workspace_path but project_id is set. "
+                    f"This is a programming error. workspace_path must be provided."
+                )
         
         # Initialize messaging if enabled
         if enable_messaging:
@@ -502,7 +516,6 @@ class BaseAgent(ABC):
             import threading
             
             event_manager = get_event_manager()
-<<<<<<< Updated upstream
             def emit_in_background():
                 """Emit events in background thread with its own event loop."""
                 try:
@@ -627,18 +640,6 @@ class BaseAgent(ABC):
         try:
             from agents.task_tracking import update_task_llm_usage_in_db, run_async
             
-<<<<<<< Updated upstream
-            event_manager = get_event_manager()
-            asyncio.create_task(event_manager.emit_agent_activity(
-                agent_id=self.agent_id,
-                agent_type=self.agent_type.value,
-                activity="task_started",
-                task_id=task.id,
-                status="active"
-            ))
-        except Exception:
-            pass
-=======
             usage = llm_response.usage
             
             # Track LLM usage: 1 call, tokens used, cost
@@ -656,11 +657,6 @@ class BaseAgent(ABC):
             )
         except Exception as e:
             self.logger.warning(f"Failed to track LLM usage for {task.id}: {e}")
-        
-        # Emit agent activity (handled by _emit_task_started, but keeping for completeness)
-        # Note: Agent activity is already emitted in _emit_task_started
-        # This is redundant but kept for backward compatibility
->>>>>>> Stashed changes
         
         return True
 

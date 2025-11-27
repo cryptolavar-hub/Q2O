@@ -99,7 +99,7 @@ class ConfigDatabase:
             config.updated_at = datetime.now()
             db.commit()
             
-            logging.info("✅ System config updated in PostgreSQL")
+            logging.info("[OK] System config updated in PostgreSQL")
             return True
             
         except Exception as e:
@@ -193,7 +193,7 @@ class ConfigDatabase:
             db.add(project)
             db.commit()
             
-            logging.info(f"✅ Created project config: {project_id} ({client_name})")
+            logging.info(f"[OK] Created project config: {project_id} ({client_name})")
             return True
             
         except Exception as e:
@@ -223,7 +223,7 @@ class ConfigDatabase:
             project.updated_at = datetime.now()
             db.commit()
             
-            logging.info(f"✅ Updated project config: {project_id}")
+            logging.info(f"[OK] Updated project config: {project_id}")
             return True
             
         except Exception as e:
@@ -300,7 +300,7 @@ class ConfigDatabase:
             
             db.commit()
             
-            logging.info(f"✅ Saved agent config: {project_id}/{agent_type}")
+            logging.info(f"[OK] Saved agent config: {project_id}/{agent_type}")
             return True
             
         except Exception as e:

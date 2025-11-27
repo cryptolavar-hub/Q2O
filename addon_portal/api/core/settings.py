@@ -2,10 +2,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import AnyHttpUrl
 from typing import Optional, List
 from pathlib import Path
+import sys
 
-# .env file is located at project root: C:\Q2O_Combined\.env
-# Using explicit path to ensure it's always found
-ENV_FILE_PATH = Path(r'C:\Q2O_Combined\.env')
+# Add utils to path for project_root import
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'utils'))
+from project_root import get_env_file_path
+
+# .env file is located at project root (detected dynamically)
+# This works on any hardware - root is auto-detected
+ENV_FILE_PATH = get_env_file_path()
 
 class Settings(BaseSettings):
     APP_NAME: str = "Q2O"
@@ -89,8 +94,9 @@ class Settings(BaseSettings):
     SMS_API_SECRET: Optional[str] = None
     SMS_FROM_NUMBER: Optional[str] = None
 
-    # .env file is located at: C:\Q2O_Combined\.env
-    # Using explicit path to ensure it's always found
+    # .env file is located at project root (detected dynamically)
+    # Root path is configurable via Q2O_ROOT environment variable
+    # If not set, auto-detected from file structure
     model_config = SettingsConfigDict(env_file=str(ENV_FILE_PATH), extra="ignore")
 
 settings = Settings()

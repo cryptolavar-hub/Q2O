@@ -11,7 +11,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: '🏠' },
   { href: '/codes', label: 'Activation Codes', icon: '🔑' },
-  { href: '/devices', label: 'Projects & Devices', icon: '📱' },
+  { href: '/devices', label: 'Projects & Devices', icon: '📋' },
   { href: '/tenants', label: 'Tenants', icon: '👥' },
   { href: '/analytics', label: 'Analytics', icon: '📊' },
   { href: '/llm', label: 'LLM Management', icon: '🤖' },

@@ -21,9 +21,16 @@ class TestingAgent(BaseAgent):
                  project_id: Optional[str] = None,
                  tenant_id: Optional[int] = None,
                  orchestrator: Optional[Any] = None):
-        super().__init__(agent_id, AgentType.TESTING, project_layout, 
-                        project_id=project_id, tenant_id=tenant_id, orchestrator=orchestrator)
-        self.workspace_path = workspace_path
+        # CRITICAL: Pass workspace_path to super() to ensure BaseAgent validates it
+        super().__init__(
+            agent_id, 
+            AgentType.TESTING, 
+            project_layout,
+            workspace_path=workspace_path,
+            project_id=project_id, 
+            tenant_id=tenant_id, 
+            orchestrator=orchestrator
+        )
         self.test_files: List[str] = []
         self.test_results: Dict[str, Dict[str, Any]] = {}
         self.template_renderer = get_renderer()

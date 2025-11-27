@@ -8,7 +8,16 @@ import os
 
 # Load environment variables FIRST (before anything else)
 from dotenv import load_dotenv
-load_dotenv()  # This loads .env file into environment
+from pathlib import Path
+
+# CRITICAL: Load .env from root directory (C:\Q2O_Combined\.env)
+# This ensures GOOGLE_API_KEY and other keys are found
+env_path = Path(__file__).parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path, override=True)
+else:
+    # Fallback to default behavior (current directory)
+    load_dotenv()
 
 # Check Python version FIRST (before any imports)
 if sys.version_info < (3, 10):
@@ -176,8 +185,12 @@ class AgentSystem:
         # Initialize load balancer for high availability
         self.load_balancer = get_load_balancer()
         
-        # Initialize orchestrator
-        self.orchestrator = OrchestratorAgent()
+        # Initialize orchestrator - CRITICAL: Must pass workspace_path to ensure all files are saved correctly
+        self.orchestrator = OrchestratorAgent(
+            workspace_path=str(self.workspace_path),
+            project_id=self.project_id,
+            tenant_id=self.tenant_id
+        )
         
         # Initialize specialized agents with project layout and load balancer
         # Multiple instances per type for redundancy and uptime

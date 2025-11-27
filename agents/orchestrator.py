@@ -36,8 +36,27 @@ class OrchestratorAgent(BaseAgent):
     - Determines proper agent assignments
     """
 
-    def __init__(self, agent_id: str = "orchestrator_main", project_id: Optional[str] = None):
-        super().__init__(agent_id, AgentType.ORCHESTRATOR)
+    def __init__(
+        self, 
+        agent_id: str = "orchestrator_main", 
+        project_id: Optional[str] = None,
+        workspace_path: Optional[str] = None,
+        tenant_id: Optional[int] = None
+    ):
+        # CRITICAL: workspace_path is REQUIRED when project_id is set
+        if project_id and not workspace_path:
+            raise ValueError(
+                f"CRITICAL: OrchestratorAgent requires workspace_path when project_id is set. "
+                f"workspace_path must be set to Tenant_Projects/{{project_id}}/ to ensure all files are saved correctly."
+            )
+        
+        super().__init__(
+            agent_id, 
+            AgentType.ORCHESTRATOR,
+            workspace_path=workspace_path,
+            project_id=project_id,
+            tenant_id=tenant_id
+        )
         self.project_tasks: Dict[str, Task] = {}
         self.agents: Dict[AgentType, List[BaseAgent]] = {}
         self.task_queue: List[Task] = []
@@ -51,15 +70,15 @@ class OrchestratorAgent(BaseAgent):
             self.llm_service = get_llm_service()
             self.config_manager = get_configuration_manager()
             self.llm_enabled = True
-            logging.info("✅ OrchestratorAgent: LLM task breakdown enabled")
+            logging.info("[OK] OrchestratorAgent: LLM task breakdown enabled")
         else:
             self.llm_service = None
             self.config_manager = None
             self.llm_enabled = False
             if self.use_llm:
-                logging.warning("⚠️  OrchestratorAgent: LLM requested but not available, using rules only")
+                logging.warning("[WARNING] OrchestratorAgent: LLM requested but not available, using rules only")
             else:
-                logging.info("ℹ️  OrchestratorAgent: LLM disabled, using rules only")
+                logging.info("[INFO] OrchestratorAgent: LLM disabled, using rules only")
 
     def register_agent(self, agent: BaseAgent):
         """
@@ -142,11 +161,32 @@ class OrchestratorAgent(BaseAgent):
                         llm_tasks = loop.run_until_complete(
                             self._analyze_objective_with_llm(objective, context, start_counter)
                         )
+                        # CRITICAL: Wait for all pending tasks to complete before closing loop
+                        # This ensures async operations (like Gemini API calls) finish properly
+                        pending = asyncio.all_tasks(loop)
+                        if pending:
+                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                        
                         if llm_tasks:
-                            self.logger.info(f"🤖 LLM breakdown: {len(llm_tasks)} tasks created for '{objective}'")
+                            self.logger.info(f"[LLM] LLM breakdown: {len(llm_tasks)} tasks created for '{objective}'")
                             return llm_tasks
+                        else:
+                            # LLM returned empty list - fall back to rules
+                            self.logger.warning(f"[LLM] LLM breakdown returned empty list for '{objective}', falling back to rules-based breakdown")
                     finally:
-                        loop.close()
+                        # Only close loop after all tasks are complete
+                        try:
+                            # Cancel any remaining tasks
+                            pending = asyncio.all_tasks(loop)
+                            for task in pending:
+                                task.cancel()
+                            # Wait for cancellations
+                            if pending:
+                                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                        except Exception:
+                            pass
+                        finally:
+                            loop.close()
             except Exception as e:
                 self.logger.warning(f"LLM breakdown failed, using rules: {e}")
         
@@ -259,11 +299,12 @@ Project Context: {context}
 **THEN**: Break this objective into a sequence of tasks with proper agent assignments and dependencies based on your understanding."""
         
         # Generate breakdown with LLM
+        # Increased max_tokens to 4096 to prevent truncation (task breakdown can be large)
         response = await self.llm_service.complete(
             system_prompt,
             user_prompt,
             temperature=0.4,  # Moderate creativity for task planning
-            max_tokens=2048
+            max_tokens=4096  # Increased from 2048 to prevent MAX_TOKENS truncation
         )
         
         # CRITICAL FIX: Track LLM usage for task breakdown
@@ -366,7 +407,7 @@ Project Context: {context}
             # Log LLM usage
             if response.usage:
                 self.logger.info(
-                    f"💰 LLM breakdown cost: ${response.usage.total_cost:.4f} "
+                    f"[COST] LLM breakdown cost: ${response.usage.total_cost:.4f} "
                     f"({response.usage.input_tokens}+{response.usage.output_tokens} tokens)"
                 )
             
@@ -547,10 +588,6 @@ Project Context: {context}
             tasks.append(frontend_task)
             start_counter += 1
         
-<<<<<<< Updated upstream
-        # Create backend/coder tasks (if needed - for non-specialized code)
-        if objective_type in ["api", "backend", "service", "model"] or not tasks:
-=======
         # Create backend/coder tasks
         # CRITICAL FIX: Always create a coder task when code generation is needed
         # Integration, workflow, and frontend objectives ALWAYS need backend support
@@ -565,14 +602,13 @@ Project Context: {context}
             
             from utils.name_generator import generate_task_title
             coder_title = generate_task_title(objective, "CODER", max_length=70)
->>>>>>> Stashed changes
             coder_task = Task(
                 id=f"task_{start_counter:04d}_coder",
                 title=coder_title,
                 description=f"Implement backend functionality for: {objective}\n\nContext: {context}",
                 agent_type=AgentType.CODER,
                 tech_stack=tech_stack,
-                dependencies=[t.id for t in tasks if t.agent_type in [AgentType.INFRASTRUCTURE, AgentType.INTEGRATION]],
+                dependencies=coder_dependencies,
                 metadata={
                     "objective": objective,
                     "complexity": self._estimate_complexity(objective),

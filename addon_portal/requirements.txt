@@ -34,3 +34,7 @@ strawberry-graphql[fastapi]>=0.220.0,<1.0.0
 aiodataloader>=0.4.0
 graphql-core>=3.2.0
 sse-starlette>=1.8.2
+
+# Async HTTP and File I/O
+httpx>=0.25.0,<1.0.0  # Async HTTP client
+aiofiles>=23.0.0,<24.0.0  # Async file I/O

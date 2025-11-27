@@ -29,9 +29,13 @@ class LLMSystemConfig(Base):
     tertiary_provider = Column(String(50), default="anthropic")
     
     # Model selection per provider
-    gemini_model = Column(String(100), default="gemini-1.5-pro")
-    openai_model = Column(String(100), default="gpt-4-turbo-preview")
-    anthropic_model = Column(String(100), default="claude-3-5-sonnet-20241022")
+    # Updated to current models (Nov 2025):
+    # - Gemini: gemini-2.5-flash (fast) or gemini-3-pro (advanced)
+    # - OpenAI: gpt-4o (latest) or gpt-4-turbo (fallback)
+    # - Anthropic: claude-3-5-sonnet-20250219 (latest) or claude-3-5-sonnet-20241022 (fallback)
+    gemini_model = Column(String(100), default="gemini-2.5-flash")
+    openai_model = Column(String(100), default="gpt-4o")
+    anthropic_model = Column(String(100), default="claude-3-5-sonnet-20250219")
     
     # Generation parameters
     temperature = Column(Float, default=0.7)

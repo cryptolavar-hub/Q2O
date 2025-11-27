@@ -244,7 +244,7 @@ def generate_report(project_files: List[Tuple[Path, Optional[str], str]], dry_ru
     ]
     
     if not project_files:
-        report_lines.append("✓ No project files found in root folder.")
+        report_lines.append("[OK] No project files found in root folder.")
         report_lines.append("Root folder appears clean.")
         return "\n".join(report_lines)
     

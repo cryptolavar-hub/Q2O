@@ -27,9 +27,14 @@ from ..schemas.llm import (
 from ..utils.env_manager import read_env_value, write_env_value
 
 LOGGER = get_logger(__name__)
-# Path to .env file in project root: C:\Q2O_Combined\.env
-# Using explicit path to ensure it's always found
-ENV_PATH = Path(r'C:\Q2O_Combined\.env')
+import sys
+# Add utils to path for project_root import
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'utils'))
+from project_root import get_env_file_path
+
+# Path to .env file at project root (detected dynamically)
+# Root path is configurable via Q2O_ROOT environment variable
+ENV_PATH = get_env_file_path()
 SYSTEM_PROMPT_KEY = 'LLM_SYSTEM_PROMPT'
 
 
@@ -135,6 +140,13 @@ def _serialize_agent(agent: LLMAgentConfig) -> AgentPromptResponse:
 
 
 def _serialize_project(project: LLMProjectConfig) -> ProjectResponse:
+    # Get tenant info if available
+    tenant_name = None
+    tenant_slug = None
+    if project.tenant:
+        tenant_name = project.tenant.name
+        tenant_slug = project.tenant.slug
+    
     return ProjectResponse(
         project_id=project.project_id,
         client_name=project.client_name,
@@ -152,6 +164,8 @@ def _serialize_project(project: LLMProjectConfig) -> ProjectResponse:
         agent_prompts=[_serialize_agent(agent) for agent in project.agent_configs],
         activation_code_id=project.activation_code_id,  # Include activation code ID
         execution_status=project.execution_status,  # Include execution status
+        tenant_name=tenant_name,  # Include tenant name
+        tenant_slug=tenant_slug,  # Include tenant slug
     )
 
 
@@ -165,7 +179,10 @@ async def list_projects(
 ) -> ProjectCollectionResponse:
     """Return paginated project configurations with optional search filter and tenant scoping."""
 
-    stmt = select(LLMProjectConfig).options(selectinload(LLMProjectConfig.agent_configs))
+    stmt = select(LLMProjectConfig).options(
+        selectinload(LLMProjectConfig.agent_configs),
+        selectinload(LLMProjectConfig.tenant)  # Load tenant relationship
+    )
     
     # Tenant scoping: filter by tenant_id if provided
     if tenant_id is not None:
@@ -201,7 +218,10 @@ async def get_project(
 ) -> ProjectResponse:
     stmt = (
         select(LLMProjectConfig)
-        .options(selectinload(LLMProjectConfig.agent_configs))
+        .options(
+            selectinload(LLMProjectConfig.agent_configs),
+            selectinload(LLMProjectConfig.tenant)  # Load tenant relationship for serialization
+        )
         .where(LLMProjectConfig.project_id == project_id)
     )
     
@@ -281,6 +301,7 @@ async def update_project(
     stmt = (
         select(LLMProjectConfig)
         .options(selectinload(LLMProjectConfig.agent_configs))
+        .options(selectinload(LLMProjectConfig.tenant))  # Eagerly load tenant for serialization
         .where(LLMProjectConfig.project_id == project_id)
     )
     

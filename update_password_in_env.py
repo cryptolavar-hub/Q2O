@@ -2,11 +2,16 @@
 """Update password in .env file from Q2OPostgres2025! to Q2OPostgres2025("""
 
 from pathlib import Path
+import sys
 
-ENV_PATH = Path(r'C:\Q2O_Combined\.env')
+# Add utils to path
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'utils'))
+from project_root import get_env_file_path
+
+ENV_PATH = get_env_file_path()
 
 if not ENV_PATH.exists():
-    print(f'✗ .env file not found at {ENV_PATH}')
+    print(f'[ERROR] .env file not found at {ENV_PATH}')
     exit(1)
 
 content = ENV_PATH.read_text(encoding='utf-8')
@@ -25,7 +30,7 @@ for line in lines:
 
 if updated:
     ENV_PATH.write_text('\n'.join(new_lines), encoding='utf-8')
-    print('✓ .env file updated with new password')
+    print('[OK] .env file updated with new password')
 else:
-    print('✓ .env file already has correct password or no password found')
+    print('[OK] .env file already has correct password or no password found')
 

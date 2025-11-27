@@ -31,20 +31,56 @@ except ImportError as e:
 
 logger.info("Starting Q2O Licensing API...")
 
-# Background task for periodic cleanup of stuck projects
+# Background task for periodic cleanup of stuck projects and completion checks
 async def periodic_cleanup_task():
-    """Background task that runs cleanup every hour."""
-    from .services.project_execution_service import cleanup_stuck_projects
+    """Background task that runs cleanup every hour and completion checks every 5 minutes."""
+    from .services.project_execution_service import cleanup_stuck_projects, check_and_update_project_completion
+    from sqlalchemy import select
+    from .models.llm_config import LLMProjectConfig
+    from .core.db import AsyncSessionLocal
+    
+    # Run completion checks more frequently (every 5 minutes)
+    completion_check_interval = 300  # 5 minutes
+    cleanup_interval = 3600  # 1 hour
+    last_cleanup = 0
     
     while True:
         try:
-            await asyncio.sleep(3600)  # Wait 1 hour
-            logger.info("Running periodic cleanup of stuck projects...")
-            await cleanup_stuck_projects()
+            await asyncio.sleep(completion_check_interval)
+            
+            # Check for running projects and update completion status
+            db = AsyncSessionLocal()
+            try:
+                result = await db.execute(
+                    select(LLMProjectConfig).where(
+                        LLMProjectConfig.execution_status == 'running'
+                    )
+                )
+                running_projects = result.scalars().all()
+                
+                if running_projects:
+                    logger.debug(f"Checking completion status for {len(running_projects)} running projects...")
+                    for project in running_projects:
+                        try:
+                            await check_and_update_project_completion(project.project_id)
+                        except Exception as e:
+                            logger.warning(f"Failed to check completion for project {project.project_id}: {e}")
+            except Exception as e:
+                logger.error(f"Error checking project completion: {e}", exc_info=True)
+            finally:
+                await db.close()
+            
+            # Run full cleanup every hour
+            import time
+            current_time = time.time()
+            if current_time - last_cleanup >= cleanup_interval:
+                logger.info("Running periodic cleanup of stuck projects...")
+                await cleanup_stuck_projects()
+                last_cleanup = current_time
+                
         except Exception as e:
             logger.error(f"Error in periodic cleanup task: {e}", exc_info=True)
             # Continue running even if cleanup fails
-            await asyncio.sleep(3600)
 
 
 @asynccontextmanager
@@ -55,7 +91,7 @@ async def lifespan(app: FastAPI):
     
     # Start periodic cleanup task (runs every hour, NOT on startup)
     cleanup_task = asyncio.create_task(periodic_cleanup_task())
-    logger.info("✓ Periodic cleanup task scheduled (runs every hour)")
+    logger.info("[OK] Periodic cleanup task scheduled (runs every hour)")
     
     yield
     
@@ -66,7 +102,7 @@ async def lifespan(app: FastAPI):
         await cleanup_task
     except asyncio.CancelledError:
         pass
-    logger.info("✓ Background tasks cancelled")
+    logger.info("[OK] Background tasks cancelled")
 
 
 # Create base FastAPI app with lifespan
@@ -107,16 +143,16 @@ base_app.include_router(tenant_api.router)  # Tenant API (Authentication & Proje
 # GraphQL API (only if strawberry is installed)
 if GRAPHQL_AVAILABLE and graphql_router:
     base_app.include_router(graphql_router)  # GraphQL API for Multi-Agent Dashboard & Status Page
-    logger.info("✓ GraphQL API enabled at /graphql")
+    logger.info("[OK] GraphQL API enabled at /graphql")
 else:
-    logger.warning("⚠ GraphQL API disabled - install strawberry-graphql to enable")
+    logger.warning("[WARNING] GraphQL API disabled - install strawberry-graphql to enable")
 
 # Mount static files directory if it exists
 import os
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
     base_app.mount("/static", StaticFiles(directory=static_dir), name="static")
-    logger.info(f"✓ Static files mounted at /static from {static_dir}")
+    logger.info(f"[OK] Static files mounted at /static from {static_dir}")
 else:
     logger.debug(f"Static directory not found at {static_dir}, skipping static file mounting")
 
