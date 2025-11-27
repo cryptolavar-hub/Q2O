@@ -1,7 +1,7 @@
 # Q2O Platform Documentation
 
-**Last Updated**: November 26, 2025  
-**Status**: Active Documentation Repository  
+**Last Updated**: November 27, 2025  
+**Status**: Active Documentation Repository (Reorganized)  
 **Maintained By**: Alex (Technical Documentation Specialist)
 
 ---
@@ -210,9 +210,10 @@ This directory contains all current, relevant documentation for the Q2O Platform
 ### **Historical Archive**
 
 - **[Archive](archive/)** - Historical and outdated documentation
-  - Resolved issues
-  - Historical sessions
-  - Outdated guides
+  - **Historical Documentation** (`archive/historical/`) - Superseded docs, old roadmaps, historical implementations
+  - **Resolved Issues** (`archive/resolved_issues/`) - Fixed bugs and resolved problems
+  - **Outdated Guides** (`archive/outdated_2025/`) - Pre-November 2025 guides
+  - **Sessions** (`archive/sessions/`) - Historical development session notes
 
 ---
 

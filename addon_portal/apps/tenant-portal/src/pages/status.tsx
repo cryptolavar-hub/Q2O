@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useRouter } from 'next/router';
 import { useQuery, useSubscription } from 'urql';
 import { SessionGuard } from '../components/SessionGuard';
 import { Navigation } from '../components/Navigation';
@@ -53,6 +54,8 @@ interface DashboardState {
 }
 
 export default function StatusPage() {
+  const router = useRouter();
+  
   // Scroll position preservation (prevents scroll-to-top on re-renders)
   const scrollPositionRef = useRef<number>(0);
   const shouldRestoreScrollRef = useRef<boolean>(false);
@@ -82,6 +85,20 @@ export default function StatusPage() {
   const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
   const [projectSearch, setProjectSearch] = useState('');
   const [loadingProjects, setLoadingProjects] = useState(true);
+  
+  // QA_Engineer: Read projectId from URL query parameters on page load
+  useEffect(() => {
+    const projectIdFromQuery = router.query.projectId;
+    if (projectIdFromQuery && typeof projectIdFromQuery === 'string') {
+      // Set the project ID from URL query parameter
+      setSelectedProjectId(projectIdFromQuery);
+      // Clear the query parameter from URL (clean URL after setting state)
+      // Use setTimeout to ensure state is set before clearing URL
+      setTimeout(() => {
+        router.replace('/status', undefined, { shallow: true });
+      }, 100);
+    }
+  }, [router.query.projectId, router]);
 
   // QA_Engineer: Load tenant's active projects (execution_status = 'running')
   useEffect(() => {
@@ -97,7 +114,9 @@ export default function StatusPage() {
         
         // QA_Engineer: Auto-select first project if available and none selected
         // Only auto-select if no project is selected AND projects are available
-        if (activeProjects.length > 0 && !selectedProjectId) {
+        // AND no projectId was provided in URL query parameters
+        const projectIdFromQuery = router.query.projectId;
+        if (activeProjects.length > 0 && !selectedProjectId && !projectIdFromQuery) {
           setSelectedProjectId(activeProjects[0].id);
         }
       } catch (err) {
@@ -108,8 +127,8 @@ export default function StatusPage() {
     };
     
     loadProjects();
-    // QA_Engineer: Include selectedProjectId in dependencies to react to changes
-  }, [selectedProjectId]);
+    // QA_Engineer: Include selectedProjectId and router.query in dependencies to react to changes
+  }, [selectedProjectId, router.query]);
 
   // GraphQL Queries - ONLY project-specific data
   // Removed DASHBOARD_STATS_QUERY and SYSTEM_METRICS_QUERY (they return global stats)

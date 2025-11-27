@@ -10,6 +10,7 @@ from enum import Enum
 from datetime import datetime
 import logging
 import os
+from utils.event_loop_utils import create_compatible_event_loop
 
 if TYPE_CHECKING:
     from utils.project_layout import ProjectLayout
@@ -326,8 +327,8 @@ class BaseAgent(ABC):
                 """Emit events in background thread with its own event loop."""
                 try:
                     # Create new event loop for this thread
-                    # This prevents event loop conflicts
-                    loop = asyncio.new_event_loop()
+                    # Windows compatibility: Use SelectorEventLoop for psycopg async
+                    loop = create_compatible_event_loop()
                     asyncio.set_event_loop(loop)
                     
                     try:
@@ -381,8 +382,8 @@ class BaseAgent(ABC):
                 """Emit events in background thread with its own event loop."""
                 try:
                     # Create new event loop for this thread
-                    # This prevents event loop conflicts
-                    loop = asyncio.new_event_loop()
+                    # Windows compatibility: Use SelectorEventLoop for psycopg async
+                    loop = create_compatible_event_loop()
                     asyncio.set_event_loop(loop)
                     
                     try:
@@ -520,8 +521,8 @@ class BaseAgent(ABC):
                 """Emit events in background thread with its own event loop."""
                 try:
                     # Create new event loop for this thread
-                    # This prevents event loop conflicts
-                    loop = asyncio.new_event_loop()
+                    # Windows compatibility: Use SelectorEventLoop for psycopg async
+                    loop = create_compatible_event_loop()
                     asyncio.set_event_loop(loop)
                     
                     try:

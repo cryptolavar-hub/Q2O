@@ -367,11 +367,8 @@ def run_async(coro):
     except RuntimeError:
         # No running loop - create a new one
         # Windows compatibility: Use SelectorEventLoop for psycopg async
-        if platform.system() == "Windows":
-            loop = asyncio.SelectorEventLoop(selectors.SelectSelector())
-        else:
-            loop = asyncio.new_event_loop()
-        
+        from utils.event_loop_utils import create_compatible_event_loop
+        loop = create_compatible_event_loop()
         asyncio.set_event_loop(loop)
         
         try:

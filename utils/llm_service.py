@@ -433,8 +433,8 @@ class LLMService:
     """
     
     PROVIDER_CHAIN = [
-        LLMProvider.GEMINI,
         LLMProvider.OPENAI,
+        LLMProvider.GEMINI,
         LLMProvider.ANTHROPIC
     ]
     
@@ -939,8 +939,46 @@ class LLMService:
             )
         )
         
+        # Get response text first to check content quality
+        # Handle cases where response.text might be empty even if response exists
+        # This is critical for detecting empty responses with MAX_TOKENS finish reason
+        response_text = None
+        candidate_has_text = False
+        
+        if response.candidates and len(response.candidates) > 0:
+            candidate = response.candidates[0]
+            
+            # Check candidate.content.parts directly - this is the most reliable way
+            # In some cases, content exists but parts array is empty or missing
+            if hasattr(candidate, 'content') and candidate.content:
+                if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                    # Check if any part has actual text content
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'text') and part.text and len(part.text.strip()) > 0:
+                            candidate_has_text = True
+                            response_text = part.text
+                            break
+            
+            # Fallback: Try response.text property (may raise error if content is empty)
+            if not response_text:
+                if hasattr(response, 'text'):
+                    try:
+                        response_text = response.text
+                        if response_text and len(response_text.strip()) > 0:
+                            candidate_has_text = True
+                    except (AttributeError, ValueError):
+                        # response.text raises error if content.parts is empty
+                        # This happens when finishReason is MAX_TOKENS but no text was generated
+                        response_text = None
+                        candidate_has_text = False
+        
+        # Final fallback - but this should rarely be used
+        if not response_text:
+            response_text = ""
+        
         # CRITICAL: Check if response is incomplete (truncated due to MAX_TOKENS)
-        # This indicates poor quality and should trigger retry with different model/provider
+        # MAX_TOKENS doesn't mean failure - it means response hit token limit
+        # Only treat as failure if response is empty or insignificant
         finish_reason = None
         if response.candidates and len(response.candidates) > 0:
             # Check finish_reason (may be finishReason or finish_reason depending on API version)
@@ -948,13 +986,31 @@ class LLMService:
             finish_reason = getattr(candidate, 'finish_reason', None) or getattr(candidate, 'finishReason', None)
             
             if finish_reason == "MAX_TOKENS" or finish_reason == 2:  # 2 is MAX_TOKENS enum value
-                error_msg = f"Gemini response truncated (finish_reason: {finish_reason}) - response incomplete, retrying with different model"
-                logging.warning(f"[WARNING] {error_msg}")
-                raise ValueError(error_msg)
+                # Check if response has substantial content
+                # First check if candidate has any text parts at all
+                if not candidate_has_text or not response_text:
+                    # No text content at all - definitely a failure
+                    error_msg = f"Gemini response has MAX_TOKENS finish reason but contains no text content - response empty, retrying with different model"
+                    logging.warning(f"[WARNING] {error_msg}")
+                    raise ValueError(error_msg)
+                
+                # Check response length
+                response_length = len(response_text.strip()) if response_text else 0
+                
+                # Define thresholds for "insignificant" response
+                MIN_SIGNIFICANT_LENGTH = 50  # Minimum characters to consider response meaningful
+                
+                # If response is empty or very short, treat as failure
+                if response_length < MIN_SIGNIFICANT_LENGTH:
+                    error_msg = f"Gemini response truncated with insufficient content (finish_reason: {finish_reason}, length: {response_length}) - response incomplete, retrying with different model"
+                    logging.warning(f"[WARNING] {error_msg}")
+                    raise ValueError(error_msg)
+                else:
+                    # Response has substantial content despite MAX_TOKENS - treat as success
+                    logging.info(f"[INFO] Gemini response hit MAX_TOKENS but contains substantial content ({response_length} chars) - treating as success")
         
         # Additional check: Validate response quality for JSON responses
         # If response looks like JSON but is incomplete, treat as failure
-        response_text = response.text if hasattr(response, 'text') else str(response)
         if response_text:
             # Check for incomplete JSON (common when truncated)
             text_stripped = response_text.strip()
@@ -966,6 +1022,7 @@ class LLMService:
                 text_stripped = text_stripped.split("```")[1].split("```")[0].strip()
             
             # If response looks like JSON, validate it's complete
+            # Only fail if JSON is incomplete AND response is short (indicating truncation)
             if text_stripped.startswith('{') or text_stripped.startswith('['):
                 # Check if JSON appears incomplete (doesn't end with } or ])
                 is_incomplete = False
@@ -975,16 +1032,25 @@ class LLMService:
                     is_incomplete = True
                 
                 if is_incomplete:
-                    # Try parsing - if it fails, it's definitely incomplete
+                    # Try parsing - if it fails, check if response is substantial
                     try:
                         json.loads(text_stripped)
-                        # If parsing succeeds despite missing closing brace, it's still suspicious
-                        # but we'll allow it (might be valid JSON with trailing whitespace)
+                        # If parsing succeeds despite missing closing brace, it's valid JSON
+                        # (might be valid JSON with trailing whitespace or formatting)
                     except json.JSONDecodeError as json_error:
-                        # JSON is definitely incomplete - treat as failure
-                        error_msg = f"Gemini response contains incomplete JSON (finish_reason may be MAX_TOKENS) - response truncated: {str(json_error)[:100]}"
-                        logging.warning(f"[WARNING] {error_msg}")
-                        raise ValueError(error_msg)
+                        # JSON parsing failed - check if response is substantial
+                        # If response is long enough, it might still be useful despite incomplete JSON
+                        response_length = len(text_stripped)
+                        MIN_SIGNIFICANT_LENGTH = 100  # Higher threshold for JSON (needs more content)
+                        
+                        if response_length < MIN_SIGNIFICANT_LENGTH:
+                            # JSON is incomplete AND response is too short - treat as failure
+                            error_msg = f"Gemini response contains incomplete JSON with insufficient content (finish_reason may be MAX_TOKENS, length: {response_length}) - response truncated: {str(json_error)[:100]}"
+                            logging.warning(f"[WARNING] {error_msg}")
+                            raise ValueError(error_msg)
+                        else:
+                            # JSON is incomplete but response is substantial - log warning but allow it
+                            logging.warning(f"[WARNING] Gemini response contains incomplete JSON but has substantial content ({response_length} chars) - allowing response but may need manual review")
         
         # Calculate usage and cost
         input_tokens = response.usage_metadata.prompt_token_count
@@ -1010,8 +1076,12 @@ class LLMService:
         
         self.usage_log.append(usage)
         
+        # Use extracted response_text instead of response.text to handle empty content cases
+        # response.text might raise error if content is empty (like MAX_TOKENS with no text)
+        final_content = response_text if response_text else ""
+        
         return LLMResponse(
-            content=response.text,
+            content=final_content,
             usage=usage,
             provider="gemini",
             model=usage.model,

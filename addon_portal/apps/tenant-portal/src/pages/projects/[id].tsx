@@ -119,8 +119,8 @@ export default function ProjectDetailPage() {
     try {
       const result = await runProject(id);
       if (result.success) {
-        // Redirect to status page
-        router.push('/status');
+        // Redirect to status page with project ID
+        router.push(`/status?projectId=${encodeURIComponent(id)}`);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to run project';
@@ -157,8 +157,8 @@ export default function ProjectDetailPage() {
       if (result.success) {
         // Refresh project data to show updated status
         await fetchProject(id);
-        // Redirect to status page
-        router.push('/status');
+        // Redirect to status page with project ID
+        router.push(`/status?projectId=${encodeURIComponent(id)}`);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to restart project';
