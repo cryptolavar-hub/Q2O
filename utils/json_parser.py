@@ -90,6 +90,7 @@ def repair_json(json_str: str) -> Optional[str]:
     - Missing commas
     - Unescaped quotes
     - Trailing commas
+    - Invalid escape sequences (e.g., \escape -> \\escape)
     
     Args:
         json_str: JSON string that may have errors
@@ -110,20 +111,47 @@ def repair_json(json_str: str) -> Optional[str]:
     # Repair strategies
     repaired = json_str
     
-    # Strategy 1: Fix unterminated strings
-    # Find strings that start with " but don't end properly
-    # This is complex, so we'll use a simpler approach
+    # Strategy 1: Fix invalid escape sequences
+    # Replace invalid escape sequences with properly escaped versions
+    # Common issues: \escape -> \\escape, \n without quotes -> \\n
+    # This is a simplified approach - we'll fix common patterns
+    invalid_escapes = [
+        (r'\\([^"\\/bfnrtu])', r'\\\\\1'),  # Fix unescaped backslashes
+    ]
+    for pattern, replacement in invalid_escapes:
+        repaired = re.sub(pattern, replacement, repaired)
     
     # Strategy 2: Remove trailing commas before } or ]
     repaired = re.sub(r',\s*}', '}', repaired)
     repaired = re.sub(r',\s*]', ']', repaired)
     
     # Strategy 3: Fix missing commas between object properties
-    # This is also complex, so we'll focus on simpler fixes
+    # Look for } or ] followed by { or [ without comma
+    repaired = re.sub(r'}\s*{', '},{', repaired)
+    repaired = re.sub(r']\s*\[', '],[', repaired)
     
     # Strategy 4: Try to close unterminated strings
     # Count quotes - if odd, try to close
-    quote_count = repaired.count('"') - repaired.count('\\"')
+    # Improved quote counting that handles escaped quotes better
+    quote_count = 0
+    i = 0
+    while i < len(repaired):
+        if repaired[i] == '"':
+            # Check if this is an escaped quote
+            if i > 0 and repaired[i-1] == '\\':
+                # Check if the backslash itself is escaped
+                backslash_count = 0
+                j = i - 1
+                while j >= 0 and repaired[j] == '\\':
+                    backslash_count += 1
+                    j -= 1
+                # If even number of backslashes, the quote is escaped
+                if backslash_count % 2 == 0:
+                    quote_count += 1
+            else:
+                quote_count += 1
+        i += 1
+    
     if quote_count % 2 != 0:
         # Try to find the last unclosed string and close it
         # This is heuristic-based

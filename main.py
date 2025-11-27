@@ -384,11 +384,34 @@ class AgentSystem:
             import asyncio
             
             event_manager = get_event_manager()
-            asyncio.create_task(event_manager.emit_project_start(
-                project_description, 
-                objectives, 
-                platforms or []
-            ))
+            # Check if we're in an async context
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an async context - schedule the task
+                asyncio.create_task(event_manager.emit_project_start(
+                    project_description, 
+                    objectives, 
+                    platforms or []
+                ))
+            except RuntimeError:
+                # No running loop - emit synchronously in background thread
+                import threading
+                def emit_in_background():
+                    from utils.event_loop_utils import create_compatible_event_loop
+                    loop = create_compatible_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(event_manager.emit_project_start(
+                            project_description, 
+                            objectives, 
+                            platforms or []
+                        ))
+                    finally:
+                        loop.close()
+                        asyncio.set_event_loop(None)
+                
+                thread = threading.Thread(target=emit_in_background, daemon=True)
+                thread.start()
         except Exception:
             pass  # Dashboard optional
         

@@ -165,15 +165,29 @@ useEffect(() => {
 
 ## BUG-004: Agent Activity Subscription Not Filtered by Project
 **Severity**: High  
-**Location**: Line 135  
+**Location**: Line 139-143 (status.tsx), Line 176-188 (graphql.ts)  
 **Role**: QA_Engineer
 
 **Issue**:
 ```typescript
+// In status.tsx:
 const [agentActivityResult] = useSubscription({ query: AGENT_ACTIVITY_SUBSCRIPTION });
+
+// In graphql.ts:
+export const AGENT_ACTIVITY_SUBSCRIPTION = `
+  subscription AgentActivity {  // Missing projectId parameter!
+    agentActivity {
+      ...
+    }
+  }
+`;
 ```
 
-**Problem**: The `AGENT_ACTIVITY_SUBSCRIPTION` doesn't filter by `projectId`, meaning it will show agent activity for ALL projects, not just the selected one. This contradicts the project-specific filtering used in other subscriptions.
+**Problem**: The `AGENT_ACTIVITY_SUBSCRIPTION` doesn't filter by `projectId` in two places:
+1. The GraphQL subscription definition doesn't accept a `projectId` parameter
+2. The `useSubscription` call doesn't pass `projectId` variable
+
+This means it will show agent activity for ALL projects, not just the selected one. This contradicts the project-specific filtering used in other subscriptions.
 
 **Impact**:
 - Shows agent activity from all projects, not just selected project
@@ -182,6 +196,25 @@ const [agentActivityResult] = useSubscription({ query: AGENT_ACTIVITY_SUBSCRIPTI
 - Data confusion and potential security concern (showing other projects' data)
 
 **Solution**:
+**Part 1**: Update GraphQL subscription definition in `graphql.ts`:
+```typescript
+// QA_Engineer: Added projectId parameter to filter agent activity by project
+export const AGENT_ACTIVITY_SUBSCRIPTION = `
+  subscription AgentActivity($projectId: String) {
+    agentActivity(projectId: $projectId) {
+      id
+      agentType
+      agentId
+      eventType
+      message
+      timestamp
+      taskId
+    }
+  }
+`;
+```
+
+**Part 2**: Update useSubscription call in `status.tsx`:
 ```typescript
 // QA_Engineer: Filter agent activity by selected project
 const [agentActivityResult] = useSubscription({ 
@@ -196,12 +229,15 @@ const [agentActivityResult] = useSubscription({
 - Shows only relevant agent activity
 - Better data isolation
 - Improved user experience
+- GraphQL schema now matches usage
 
 **Cons**:
-- Requires backend support for projectId filtering in AGENT_ACTIVITY_SUBSCRIPTION
-- May need to update GraphQL schema
+- Requires backend support for projectId filtering in AGENT_ACTIVITY_SUBSCRIPTION resolver
+- Both frontend GraphQL definition and backend resolver need to support projectId
 
 **Recommendation**: Fix - High priority for data consistency
+
+**Status**: ✅ **FIXED** - Both GraphQL definition and useSubscription call updated
 
 ---
 
@@ -520,14 +556,18 @@ useEffect(() => {
 1. **BUG-001**: Event Listener Cleanup - Fixed with proper handler reference
 2. **BUG-002**: Missing State Declaration - Verified: projectSearch IS declared on line 82 (false positive)
 3. **BUG-003**: useEffect Dependency Array - Fixed: Added selectedProjectId to dependency array
-4. **BUG-004**: Agent Activity Subscription Not Filtered - Fixed: Added projectId filter and pause logic
+4. **BUG-004**: Agent Activity Subscription Not Filtered - Fixed: 
+   - Updated GraphQL subscription definition to accept projectId parameter
+   - Added projectId filter and pause logic to useSubscription call
 5. **BUG-005**: Inconsistent Status Casing - Fixed: Added normalizeStatus helper function
 6. **BUG-006**: Emoji Characters in JSX - Fixed: Replaced all 9 emoji instances with text alternatives
 7. **BUG-007**: Task Updates List Not Cleared - Fixed: Added useEffect to clear on project change
 8. **BUG-008**: Missing Error Handling - Fixed: Added error handling for all 3 subscriptions
 
 **Total Bugs Fixed**: 7 (1 was false positive)  
-**Files Modified**: 1 (`addon_portal/apps/tenant-portal/src/pages/status.tsx`)  
-**Lines Changed**: ~50 lines modified  
+**Files Modified**: 2 
+   - `addon_portal/apps/tenant-portal/src/pages/status.tsx`
+   - `addon_portal/apps/tenant-portal/src/lib/graphql.ts`
+**Lines Changed**: ~55 lines modified  
 **Linter Errors**: 0
 

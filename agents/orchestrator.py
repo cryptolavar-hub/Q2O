@@ -155,7 +155,9 @@ class OrchestratorAgent(BaseAgent):
                     return self._analyze_objective_basic(objective, context, start_counter)
                 except RuntimeError:
                     # No running loop - safe to create new one
-                    loop = asyncio.new_event_loop()
+                    # Windows compatibility: Use SelectorEventLoop for psycopg async
+                    from utils.event_loop_utils import create_compatible_event_loop
+                    loop = create_compatible_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
                         llm_tasks = loop.run_until_complete(

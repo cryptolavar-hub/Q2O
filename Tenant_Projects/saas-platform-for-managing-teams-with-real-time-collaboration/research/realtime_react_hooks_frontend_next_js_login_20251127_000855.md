@@ -1,0 +1,43 @@
+# Research Report: Frontend: Next.js pages for: Login, Register, Dashboard, Team management, Projects, Tasks, Chat, Video call module (WebRTC), Realtime React Hooks, Reusable component library (Sidebar, Tables, Cards, Modals) DevOps, Docker files, Docker compose template, GitHub Actions CI/CD pipeline, Environment variable blueprint, Production deployment (AWS ECS / Vercel).
+**Date**: 2025-11-25T08:25:04.802863
+**Task**: task_0264_researcher - Research: WebRTC & Real-time Communication Patterns
+**Depth**: adaptive
+**Confidence Score**: 45/100
+**Cached**: Yes
+
+---
+
+## Summary
+
+### Key Findings
+
+- "https://next-auth.js.org/getting-started/example",
+- "https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API",
+- "https://docs.github.com/en/actions",
+- "https://docs.aws.amazon.com/ecs/",
+- "description": "Next.js Login Page (using NextAuth.js)",
+- "code": "import { signIn } from 'next-auth/react';\nimport { useState } from 'react';\n\nexport default function LoginPage() {\n  const [email, setEmail] = useState('');\n  const [password, setPassword] = useState('');\n  const [error, setError] = useState(null);\n\n  const handleSubmit = async (e) => {\n    e.preventDefault();\n    setError(null);\n    const result = await signIn('credentials', {\n      redirect: false,\n      email,\n      password,\n    });\n\n    if (result.error) {\n      setError(result.error);\n    } else {\n      window.location.href = '/dashboard'; // Redirect on success\n    }\n  };\n\n  return (\n    <form onSubmit={handleSubmit} className=\"max-w-md mx-auto p-4 shadow-md rounded-lg\">\n      <h1 className=\"text-2xl font-bold mb-4\">Login</h1>\n      {error && <p className=\"text-red-500 mb-4\">{error}</p>}\n      <div className=\"mb-4\">\n        <label htmlFor=\"email\" className=\"block text-sm font-medium text-gray-700\">Email</label>\n        <input\n          type=\"email\"\n          id=\"email\"\n          value={email}\n          onChange={(e) => setEmail(e.target.value)}\n          className=\"mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500\"\n          required\n        />\n      </div>\n      <div className=\"mb-6\">\n        <label htmlFor=\"password\" className=\"block text-sm font-medium text-gray-700\">Password</label>\n        <input\n          type=\"password\"\n          id=\"password\"\n          value={password}\n          onChange={(e) => setPassword(e.target.value)}\n          className=\"mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500\"\n          required\n        />\n      </div>\n      <button\n        type=\"submit\"\n        className=\"w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500\"\n      >\n        Sign In\n      </button>\n    </form>\n  );\n}"
+- "description": "Next.js API Route for NextAuth.js (pages/api/auth/[...nextauth].js)",
+- "code": "import NextAuth from 'next-auth';\nimport CredentialsProvider from 'next-auth/providers/credentials';\n\nexport default NextAuth({\n  providers: [\n    CredentialsProvider({\n      name: 'Credentials',\n      credentials: {\n        email: { label: 'Email', type: 'text' },\n        password: { label: 'Password', type: 'password' }\n      },\n      async authorize(credentials, req) {\n        // Add logic here to look up the user from the credentials supplied\n        // For production, replace with actual database lookup and password verification\n        const user = { id: '1', name: 'J Smith', email: 'jsmith@example.com' }; // Mock user\n\n        if (credentials.email === user.email && credentials.password === 'password') { // Mock password check\n          return user;\n        } else {\n          return null; // If you return null then an error will be displayed advising the user they could not be signed in.\n        }\n      }\n    })\n  ],\n  pages: {\n    signIn: '/login',\n    error: '/login', // Error code passed in query string as ?error=...\n  },\n  session: {\n    strategy: 'jwt',\n  },\n  callbacks: {\n    async jwt({ token, user }) {\n      if (user) {\n        token.id = user.id;\n      }\n      return token;\n    },\n    async session({ session, token }) {\n      session.user.id = token.id;\n      return session;\n    }\n  },\n  secret: process.env.NEXTAUTH_SECRET,\n});"
+- "description": "Dockerfile for Next.js Production Build (Multi-stage)",
+- "code": "# Stage 1: Install dependencies and build the project\nFROM node:18-alpine AS builder\nWORKDIR /app\nCOPY package.json yarn.lock* package-lock.json* .npmrc* ./\nRUN yarn install --frozen-lockfile\nCOPY . .\nRUN yarn build\n\n# Stage 2: Run the Next.js application\nFROM node:18-alpine AS runner\nWORKDIR /app\nENV NODE_ENV production\n# Copy built assets from the builder stage\nCOPY --from=builder /app/.next ./.next\nCOPY --from=builder /app/node_modules ./node_modules\nCOPY --from=builder /app/public ./public\nCOPY --from=builder /app/package.json ./\n\nEXPOSE 3000\nCMD [\"yarn\", \"start\"]"
+
+### Official Documentation
+
+- https://vercel.com/docs",
+- https://nextjs.org/docs",
+- https://tailwindcss.com/docs"
+- https://react.dev/docs",
+- https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API",
+- https://socket.io/docs/",
+- https://docs.docker.com/",
+- https://next-auth.js.org/getting-started/example",
+- https://docs.github.com/en/actions",
+- https://docs.aws.amazon.com/ecs/",
+
+### Search Results
+
+---
+
+*Research conducted by ResearcherAgent (researcher_backup)*
+*Sources consulted: llm_research_text, llm_research*

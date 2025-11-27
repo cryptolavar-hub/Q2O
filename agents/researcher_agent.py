@@ -24,6 +24,7 @@ ensuring maximum success rate before falling back to search.
 from typing import Dict, Any, List, Optional, Set
 from agents.base_agent import BaseAgent, AgentType, Task, TaskStatus
 from utils.project_layout import ProjectLayout, get_default_layout
+from utils.event_loop_utils import create_compatible_event_loop
 import os
 import json
 import logging
@@ -839,7 +840,8 @@ class ResearcherAgent(BaseAgent):
                 return None
             except RuntimeError:
                 # No running loop - safe to create new one
-                loop = asyncio.new_event_loop()
+                # Windows compatibility: Use SelectorEventLoop for psycopg async
+                loop = create_compatible_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
                     llm_results = loop.run_until_complete(
@@ -1426,7 +1428,7 @@ Be specific, accurate, and actionable. Focus on what developers NEED to know."""
         
         return code_examples[:10]  # Top 10 examples
     
-    def _synthesize_findings(self, research_results: Dict, query: str) -> List[str]:
+    def _synthesize_findings(self, research_results: Dict, query: str, task: Optional[Task] = None) -> List[str]:
         """
         Synthesize key findings from research (ENHANCED with LLM).
         
@@ -1436,6 +1438,7 @@ Be specific, accurate, and actionable. Focus on what developers NEED to know."""
         Args:
             research_results: Research results
             query: Original query
+            task: Optional task object for LLM usage tracking
             
         Returns:
             List of key findings
@@ -1451,11 +1454,12 @@ Be specific, accurate, and actionable. Focus on what developers NEED to know."""
                     return self._synthesize_findings_basic(research_results, query)
                 except RuntimeError:
                     # No running loop - safe to create new one
-                    loop = asyncio.new_event_loop()
+                    # Windows compatibility: Use SelectorEventLoop for psycopg async
+                    loop = create_compatible_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
                         llm_findings = loop.run_until_complete(
-                            self._synthesize_findings_with_llm(research_results, query)
+                            self._synthesize_findings_with_llm(research_results, query, task)
                         )
                         # CRITICAL: Wait for all pending tasks to complete before closing loop
                         pending = asyncio.all_tasks(loop)

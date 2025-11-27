@@ -30,7 +30,7 @@ def instance():
 
 class TestSupportCrud:
     """
-    Test cases for Support CRUD operations for customers, orders, and products
+    Test cases for Include authentication, validation, and error handling
     """
     
     @pytest.mark.skipif(not MODULE_AVAILABLE, reason="Module not available")

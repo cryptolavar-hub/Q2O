@@ -173,9 +173,10 @@ export const PROJECT_QUERY = `
 `;
 
 // GraphQL Subscriptions
+// QA_Engineer: Added projectId parameter to filter agent activity by project
 export const AGENT_ACTIVITY_SUBSCRIPTION = `
-  subscription AgentActivity {
-    agentActivity {
+  subscription AgentActivity($projectId: String) {
+    agentActivity(projectId: $projectId) {
       id
       agentType
       agentId

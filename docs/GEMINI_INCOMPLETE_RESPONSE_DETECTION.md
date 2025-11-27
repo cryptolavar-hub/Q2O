@@ -18,21 +18,34 @@ Implemented comprehensive detection for incomplete responses with automatic retr
 
 **Detection Logic:**
 - Checks `response.candidates[0].finish_reason` (or `finishReason`)
-- If `finish_reason == "MAX_TOKENS"` or `finish_reason == 2`, treats as failure
-- Raises `ValueError` to trigger retry logic
+- If `finish_reason == "MAX_TOKENS"` or `finish_reason == 2`:
+  - Check response content length
+  - If length < 50 characters: treat as failure (insufficient content)
+  - If length >= 50 characters: treat as success (substantial content)
+- Only raises `ValueError` if response is truly empty/insignificant
 
 **Code:**
 ```python
 # CRITICAL: Check if response is incomplete (truncated due to MAX_TOKENS)
+# MAX_TOKENS doesn't mean failure - only fail if response is empty/insignificant
 finish_reason = None
 if response.candidates and len(response.candidates) > 0:
     candidate = response.candidates[0]
     finish_reason = getattr(candidate, 'finish_reason', None) or getattr(candidate, 'finishReason', None)
     
     if finish_reason == "MAX_TOKENS" or finish_reason == 2:  # 2 is MAX_TOKENS enum value
-        error_msg = f"Gemini response truncated (finish_reason: {finish_reason}) - response incomplete, retrying with different model"
-        logging.warning(f"[WARNING] {error_msg}")
-        raise ValueError(error_msg)
+        # Check if response has substantial content
+        response_length = len(response_text.strip()) if response_text else 0
+        MIN_SIGNIFICANT_LENGTH = 50  # Minimum characters to consider response meaningful
+        
+        if response_length < MIN_SIGNIFICANT_LENGTH:
+            # Empty or insignificant response - treat as failure
+            error_msg = f"Gemini response truncated with insufficient content (finish_reason: {finish_reason}, length: {response_length}) - response incomplete, retrying with different model"
+            logging.warning(f"[WARNING] {error_msg}")
+            raise ValueError(error_msg)
+        else:
+            # Response has substantial content despite MAX_TOKENS - treat as success
+            logging.info(f"[INFO] Gemini response hit MAX_TOKENS but contains substantial content ({response_length} chars) - treating as success")
 ```
 
 ### 2. JSON Completeness Validation (`utils/llm_service.py`)
