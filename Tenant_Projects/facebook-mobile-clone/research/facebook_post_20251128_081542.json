@@ -1,0 +1,85 @@
+{
+  "query": "Build a cloned Facebook mobile app. Post content such as profile status",
+  "timestamp": "2025-11-28T08:15:38.521018",
+  "depth": "deep",
+  "search_results": [],
+  "key_findings": [
+    "Leverage the Facebook Graph API for user authentication and profile data retrieval. Ensure you implement OAuth 2.0 for secure access.",
+    "Utilize Firebase for real-time database capabilities to manage user-generated content, such as status updates, efficiently.",
+    "Follow platform-specific guidelines for Android and iOS to ensure a native look and feel. Use Material Design for Android and Human Interface Guidelines for iOS.",
+    "Implement pagination for content feeds to enhance performance and user experience. Load content in chunks rather than all at once to reduce initial load time.",
+    "Ensure compliance with OWASP Top Ten security practices, particularly focusing on securing user data and preventing common vulnerabilities like XSS and SQL Injection.",
+    "Use JSON as the primary data format for API interactions, ensuring that all data sent and received is properly validated and sanitized.",
+    "Incorporate push notifications for user engagement, using Firebase Cloud Messaging (FCM) for Android and Apple Push Notification service (APNs) for iOS.",
+    "Implement a robust error handling mechanism to provide meaningful feedback to users and log errors for debugging purposes.",
+    "Design a modular architecture using MVVM or MVP patterns to separate concerns, making the app easier to maintain and test.",
+    "Optimize images and other media content before uploading to reduce bandwidth usage and improve load times, using tools like ImageMagick or similar libraries."
+  ],
+  "documentation_urls": [
+    "https://developers.facebook.com/docs/",
+    "https://developer.android.com/docs",
+    "https://developer.apple.com/documentation/",
+    "https://firebase.google.com/docs",
+    "https://www.owasp.org/index.php/OWASP_Top_Ten_Cheat_Sheet"
+  ],
+  "code_examples": [
+    {
+      "language": "javascript",
+      "description": "Example: Posting a status update using React Native",
+      "code": "import React, { useState } from 'react';\nimport { View, TextInput, Button } from 'react-native';\n\nconst PostStatus = () => {\n    const [status, setStatus] = useState('');\n\n    const handlePost = () => {\n        // API call to post status\n        fetch('https://yourapi.com/post', {\n            method: 'POST',\n            headers: {\n                'Content-Type': 'application/json',\n            },\n            body: JSON.stringify({ status }),\n        });\n    };\n\n    return (\n        <View>\n            <TextInput\n                placeholder='What\u2019s on your mind?'\n                value={status}\n                onChangeText={setStatus}\n            />\n            <Button title='Post' onPress={handlePost} />\n        </View>\n    );\n};\n\nexport default PostStatus;"
+    },
+    {
+      "language": "python",
+      "description": "Example: Flask API for posting status updates",
+      "code": "from flask import Flask, request, jsonify\n\napp = Flask(__name__)\n\n@app.route('/post', methods=['POST'])\ndef post_status():\n    data = request.get_json()\n    # Logic to save status to database\n    return jsonify({'message': 'Status posted successfully!'}), 201\n\nif __name__ == '__main__':\n    app.run(debug=True)"
+    }
+  ],
+  "best_practices": [
+    "Utilize a modular architecture to separate concerns (UI, business logic, data management).",
+    "Implement user feedback mechanisms to gather insights and improve the app.",
+    "Use analytics tools to track user engagement and optimize features accordingly.",
+    "Ensure all user data is encrypted in transit and at rest.",
+    "Regularly conduct security audits and vulnerability assessments."
+  ],
+  "confidence_score": 60,
+  "sources_consulted": [
+    "llm_research_primary",
+    "llm_research"
+  ],
+  "common_pitfalls": [
+    "Neglecting user privacy can lead to legal issues and loss of trust.",
+    "Overloading the app with features can lead to a poor user experience.",
+    "Ignoring performance optimization can result in slow load times and user frustration.",
+    "Failing to implement proper error handling can lead to app crashes and poor user experience."
+  ],
+  "implementation_patterns": [
+    "Model-View-Controller (MVC) pattern for organizing code and separating concerns.",
+    "Use of RESTful APIs for communication between the client and server.",
+    "Implementing a microservices architecture for scalability and maintainability."
+  ],
+  "integration_requirements": {
+    "authentication": "OAuth 2.0 for secure user authentication.",
+    "apis_required": [
+      "User Management API",
+      "Post Management API",
+      "Notification API"
+    ],
+    "data_formats": [
+      "JSON for API requests and responses"
+    ]
+  },
+  "performance_considerations": [
+    "Optimize images and media files to reduce load times.",
+    "Implement lazy loading for content to improve initial load performance.",
+    "Use caching strategies to minimize server load and improve response times."
+  ],
+  "security_considerations": [
+    "Implement rate limiting on APIs to prevent abuse and DDoS attacks.",
+    "Use HTTPS for all communications to protect data in transit.",
+    "Regularly update dependencies to mitigate vulnerabilities."
+  ],
+  "llm_provider": "openai",
+  "llm_model": "gpt-4o-mini-2024-07-18",
+  "cached": true,
+  "research_id": "ba5a87c9-751d-4133-8d53-1c2b32ca2b47"
+}

@@ -550,13 +550,23 @@ class ResearcherAgent(BaseAgent):
             # Broadcast research completion via message broker
             self._broadcast_research_complete(query, research_results, task)
             
-            self.complete_task(task.id, task.result)
+            # QA_Engineer: Pass task object to complete_task for status synchronization (Solution 3)
+            completed_task = self.complete_task(task.id, task.result, task=task)
+            # Ensure task status is synchronized
+            if completed_task:
+                task.status = completed_task.status
+                task.result = completed_task.result
             self.logger.info(f"Completed research task {task.id}")
             
         except Exception as e:
             error_msg = f"Error processing research task: {str(e)}"
             self.logger.error(error_msg, exc_info=True)
-            self.fail_task(task.id, error_msg)
+            # QA_Engineer: Pass task object to fail_task for status synchronization (Solution 3)
+            failed_task = self.fail_task(task.id, error_msg, task=task)
+            # Ensure task status is synchronized
+            if failed_task:
+                task.status = failed_task.status
+                task.error = failed_task.error
         
         return task
     
@@ -1823,10 +1833,19 @@ Please synthesize these findings into 5-10 actionable insights."""
             lines.append("")
             for i, example in enumerate(results['code_examples'][:5], 1):
                 lines.append(f"#### Example {i}")
-                lines.append(f"**Source**: {example['source_title']}")
-                lines.append(f"**URL**: {example['source_url']}")
-                lines.append("```")
-                lines.append(example['code'])
+                # Handle optional fields - LLM responses may not have source_title/source_url
+                source_title = example.get('source_title') or example.get('description', 'Code Example')
+                source_url = example.get('source_url', 'N/A')
+                language = example.get('language', '')
+                
+                if source_title:
+                    lines.append(f"**Source**: {source_title}")
+                if source_url and source_url != 'N/A':
+                    lines.append(f"**URL**: {source_url}")
+                if language:
+                    lines.append(f"**Language**: {language}")
+                lines.append(f"```{language}")
+                lines.append(example.get('code', ''))
                 lines.append("```")
                 lines.append("")
         

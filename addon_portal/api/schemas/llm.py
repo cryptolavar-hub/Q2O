@@ -129,6 +129,7 @@ class ProjectResponse(BaseModel):
     execution_status: Optional[str] = None  # pending, running, completed, failed, paused
     tenant_name: Optional[str] = None  # Tenant name for display
     tenant_slug: Optional[str] = None  # Tenant slug for display
+    show_completion_modal: Optional[bool] = True  # Whether to show completion modal (default: True/On)
 
 
 class ProjectCollectionResponse(BaseModel):

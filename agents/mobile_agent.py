@@ -108,6 +108,21 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
             metadata = task.metadata
             platforms = metadata.get("platforms", ["ios", "android"])
             features = metadata.get("features", [])
+            
+            # QA_Engineer: Extract feature name from task title if features list is empty
+            # Task titles like "Mobile: Media Sharing Feature" should extract "Media Sharing" as a feature
+            if not features and task.title:
+                # Extract feature name from title (e.g., "Mobile: Media Sharing Feature" -> "Media Sharing")
+                title_parts = task.title.split(":")
+                if len(title_parts) > 1:
+                    feature_name = title_parts[-1].strip()
+                    # Remove "Feature" suffix if present
+                    if feature_name.endswith(" Feature"):
+                        feature_name = feature_name[:-9].strip()
+                    if feature_name:
+                        features = [feature_name]
+                        self.logger.info(f"Extracted feature '{feature_name}' from task title: {task.title}")
+            
             tech_stack = task.tech_stack or ["React Native", "TypeScript"]
             
             # Setup project structure
@@ -160,13 +175,23 @@ class MobileAgent(BaseAgent, ResearchAwareMixin):
                 "status": "completed"
             }
 
-            self.complete_task(task.id, task.result)
+            # QA_Engineer: Pass task object to complete_task for status synchronization (Solution 3)
+            completed_task = self.complete_task(task.id, task.result, task=task)
+            # Ensure task status is synchronized
+            if completed_task:
+                task.status = completed_task.status
+                task.result = completed_task.result
             self.logger.info(f"Completed mobile task {task.id}")
             
         except Exception as e:
             error_msg = f"Error processing mobile task: {str(e)}"
             self.logger.error(error_msg, exc_info=True)
-            self.fail_task(task.id, error_msg)
+            # QA_Engineer: Pass task object to fail_task for status synchronization (Solution 3)
+            failed_task = self.fail_task(task.id, error_msg, task=task)
+            # Ensure task status is synchronized
+            if failed_task:
+                task.status = failed_task.status
+                task.error = failed_task.error
             
         return task
     
@@ -644,11 +669,46 @@ const styles = StyleSheet.create({{
     def _write_file(self, relative_path: str, content: str) -> str:
         """Write a file and return its path (uses safe file writer for HARD GUARANTEE)."""
         try:
+            # QA_Engineer: Enhanced File Verification - Add post-write verification with retry mechanism
             # Use safe file writer (HARD GUARANTEE - prevents corruption of platform code)
             written_path = self.safe_write_file(relative_path, content)
-            self.logger.info(f"Created file: {relative_path}")
-            self.generated_files.append(relative_path)
-            return relative_path
+            
+            # Enhanced verification: Check file exists after write with retry mechanism
+            from pathlib import Path
+            import time
+            
+            max_retries = 3
+            retry_delay = 0.1  # 100ms delay
+            
+            for attempt in range(max_retries):
+                if Path(written_path).exists():
+                    # Verify file is not empty if content was expected
+                    file_size = Path(written_path).stat().st_size
+                    if len(content) > 0 and file_size == 0:
+                        if attempt < max_retries - 1:
+                            time.sleep(retry_delay)
+                            continue
+                        else:
+                            error_msg = f"CRITICAL: File '{relative_path}' was written but is empty (expected {len(content)} bytes)"
+                            self.logger.error(error_msg)
+                            raise OSError(error_msg)
+                    
+                    # File exists and has content - verification successful
+                    self.logger.info(f"Created file: {relative_path} ({file_size} bytes verified)")
+                    self.generated_files.append(relative_path)
+                    return relative_path
+                else:
+                    # File doesn't exist - retry after delay
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                    else:
+                        error_msg = f"CRITICAL: File write reported success but file does not exist: {written_path}"
+                        self.logger.error(error_msg)
+                        raise OSError(error_msg)
+            
+            # Should never reach here, but just in case
+            raise OSError(f"Failed to verify file existence after {max_retries} attempts: {relative_path}")
+            
         except Exception as e:
             self.logger.error(f"[ERROR] Failed to write file {relative_path}: {e}")
             raise

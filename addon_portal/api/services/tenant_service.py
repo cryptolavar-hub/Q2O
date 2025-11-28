@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Iterable, Optional, Sequence
 
-from sqlalchemy import asc, delete, desc, func, select, update
+from sqlalchemy import asc, delete, desc, extract, func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
@@ -53,17 +53,60 @@ async def _load_subscription_details(session: AsyncSession, tenant: Tenant) -> T
     subscription_plan = subscription.plan.name if subscription and subscription.plan else None
     subscription_state = subscription.state.value if subscription and subscription.state else None
 
-    # Calculate activation code usage
-    from sqlalchemy import func, case
-    codes_result = await session.execute(
-        select(
-            func.count(ActivationCode.id).label('total'),
-            func.sum(case((ActivationCode.use_count > 0, 1), else_=0)).label('used')
-        ).where(ActivationCode.tenant_id == tenant.id)
+    # QA_Engineer: Calculate actual current month usage from MonthlyUsageRollup (not static tenant.usage_current)
+    from ..utils.timezone_utils import now_in_server_tz
+    from ..models.licensing import MonthlyUsageRollup
+    from ..models.llm_config import LLMProjectConfig
+    from sqlalchemy import func, extract
+    
+    today = now_in_server_tz()
+    usage_result = await session.execute(
+        select(MonthlyUsageRollup).where(
+            MonthlyUsageRollup.tenant_id == tenant.id,
+            MonthlyUsageRollup.year == today.year,
+            MonthlyUsageRollup.month == today.month
+        )
     )
-    codes_stats = codes_result.first()
-    activation_codes_total = codes_stats.total or 0 if codes_stats else 0
-    activation_codes_used = int(codes_stats.used or 0) if codes_stats else 0
+    usage_rollup = usage_result.scalar_one_or_none()
+    
+    if usage_rollup:
+        current_month_usage = usage_rollup.runs
+    else:
+        # Fallback: Count project executions this month from LLMProjectConfig
+        project_executions_result = await session.execute(
+            select(func.count(LLMProjectConfig.id)).where(
+                LLMProjectConfig.tenant_id == tenant.id,
+                LLMProjectConfig.execution_started_at.isnot(None),
+                extract('year', LLMProjectConfig.execution_started_at) == today.year,
+                extract('month', LLMProjectConfig.execution_started_at) == today.month
+            )
+        )
+        current_month_usage = project_executions_result.scalar() or 0
+    
+    # QA_Engineer: Use plan's monthly_run_quota (not tenant.usage_quota which is static)
+    monthly_run_quota = subscription.plan.monthly_run_quota if subscription and subscription.plan else 0
+
+    # QA_Engineer: Calculate activation codes issued/used THIS MONTH (not all-time)
+    # Activation codes issued this month
+    codes_issued_this_month_result = await session.execute(
+        select(func.count(ActivationCode.id)).where(
+            ActivationCode.tenant_id == tenant.id,
+            extract('year', ActivationCode.created_at) == today.year,
+            extract('month', ActivationCode.created_at) == today.month
+        )
+    )
+    activation_codes_total = codes_issued_this_month_result.scalar() or 0
+    
+    # Activation codes used this month (codes created this month that have use_count > 0)
+    codes_used_this_month_result = await session.execute(
+        select(func.count(ActivationCode.id)).where(
+            ActivationCode.tenant_id == tenant.id,
+            ActivationCode.use_count > 0,
+            extract('year', ActivationCode.created_at) == today.year,
+            extract('month', ActivationCode.created_at) == today.month
+        )
+    )
+    activation_codes_used = codes_used_this_month_result.scalar() or 0
 
     return TenantResponse(
         id=tenant.id,
@@ -74,10 +117,10 @@ async def _load_subscription_details(session: AsyncSession, tenant: Tenant) -> T
         domain=tenant.domain,
         email=tenant.email,
         phone_number=tenant.phone_number,
-        usage_quota=tenant.usage_quota,
-        usage_current=tenant.usage_current,
-        activation_codes_total=activation_codes_total,
-        activation_codes_used=activation_codes_used,
+        usage_quota=monthly_run_quota,  # QA_Engineer: Use plan's quota, not static tenant.usage_quota
+        usage_current=current_month_usage,  # QA_Engineer: Use actual current month usage
+        activation_codes_total=activation_codes_total,  # QA_Engineer: Monthly issued codes
+        activation_codes_used=activation_codes_used,  # QA_Engineer: Monthly used codes
         created_at=tenant.created_at.isoformat(),
         updated_at=tenant.updated_at.isoformat() if tenant.updated_at else tenant.created_at.isoformat(),
         subscription=TenantSubscriptionInfo(

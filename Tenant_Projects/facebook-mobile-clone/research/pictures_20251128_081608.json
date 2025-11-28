@@ -1,0 +1,81 @@
+{
+  "query": "pictures",
+  "timestamp": "2025-11-28T08:16:02.303059",
+  "depth": "deep",
+  "search_results": [],
+  "key_findings": [
+    "Utilize AWS S3 for scalable image storage; leverage its built-in versioning and lifecycle policies to manage image retention effectively.",
+    "For Google Cloud Storage, implement resumable uploads to enhance user experience during large image uploads, ensuring reliability even in unstable network conditions.",
+    "When uploading images, always set the appropriate Content-Encoding header to optimize delivery and reduce bandwidth usage, especially for compressed images.",
+    "Consider using Cloudinary for advanced image management features such as automatic format selection and responsive image delivery based on device capabilities.",
+    "Integrate image optimization tools like Smush to automatically compress images upon upload, reducing load times and improving overall site performance.",
+    "Be cautious of image formats; prefer modern formats like WebP for web applications to achieve better compression without sacrificing quality.",
+    "Implement proper authentication mechanisms for image upload APIs to ensure that only authorized users can upload or modify images.",
+    "Use consistent data formats (e.g., JSON) for API responses when dealing with image metadata to simplify integration and parsing on the client side.",
+    "Monitor performance metrics related to image loading times and optimize CDN configurations to ensure fast delivery across different geographic locations.",
+    "Regularly audit your image storage for unused or outdated images to save costs and improve management efficiency."
+  ],
+  "documentation_urls": [
+    "https://aws.amazon.com/s3/getting-started/",
+    "https://cloud.google.com/storage/docs/uploading-objects",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding",
+    "https://cloudinary.com/documentation/image_upload_api_reference",
+    "https://www.smush.it/"
+  ],
+  "code_examples": [
+    {
+      "language": "python",
+      "description": "Example: Uploading an image to AWS S3",
+      "code": "import boto3\n\ns3 = boto3.client('s3')\n\ndef upload_image(file_name, bucket):\n    s3.upload_file(file_name, bucket, file_name)\n    print('Upload Successful')"
+    },
+    {
+      "language": "javascript",
+      "description": "Example: Image optimization using sharp library",
+      "code": "const sharp = require('sharp');\n\nsharp('input.jpg')\n  .resize(800)\n  .toFile('output.jpg', (err, info) => {\n    if (err) throw err;\n    console.log(info);\n  });"
+    }
+  ],
+  "best_practices": [
+    "Always validate and sanitize user-uploaded images to prevent security vulnerabilities.",
+    "Use appropriate file types (e.g., JPEG, PNG) based on the use case and optimize for web.",
+    "Implement rate limiting on image upload endpoints to prevent abuse.",
+    "Store images in a structured manner (e.g., by user ID or category) to facilitate easy retrieval.",
+    "Consider using image formats like WebP for better compression without losing quality."
+  ],
+  "confidence_score": 60,
+  "sources_consulted": [
+    "llm_research_primary",
+    "llm_research"
+  ],
+  "common_pitfalls": [],
+  "implementation_patterns": [
+    "Use a microservices architecture where the image upload service is separate from the main application to improve scalability.",
+    "Implement a queue system (e.g., RabbitMQ, AWS SQS) for processing images asynchronously after upload.",
+    "Utilize serverless functions (e.g., AWS Lambda) for image processing tasks like resizing and optimization."
+  ],
+  "integration_requirements": {
+    "authentication": "OAuth 2.0 for user authentication, API keys for service access.",
+    "apis_required": [
+      "AWS S3 API",
+      "Cloudinary API",
+      "ImageMagick API"
+    ],
+    "data_formats": [
+      "JSON for API responses",
+      "Multipart/form-data for image uploads"
+    ]
+  },
+  "performance_considerations": [
+    "Optimize images before upload to minimize the size and improve upload speed.",
+    "Use lazy loading techniques for images on the front end to improve initial page load times.",
+    "Cache images on the client-side and use versioning to manage updates without breaking links."
+  ],
+  "security_considerations": [
+    "Implement HTTPS to secure data in transit during image uploads.",
+    "Limit the maximum file size and dimensions of uploaded images to prevent denial-of-service attacks.",
+    "Regularly audit and monitor access logs for suspicious activity related to image uploads."
+  ],
+  "llm_provider": "openai",
+  "llm_model": "gpt-4o-mini-2024-07-18",
+  "cached": false,
+  "research_id": "7a116252-f9a4-4bc4-86b3-3745e66b2e41"
+}

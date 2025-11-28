@@ -468,7 +468,11 @@ class BaseAgent(ABC):
             raise
     
     def _auto_commit_task(self, task: Task):
-        """Automatically commit files created by completed task."""
+        """
+        Automatically commit files created by completed task.
+        
+        QA_Engineer: Solution 2 - Batch Commits - Uses batch commit queue instead of immediate commits.
+        """
         try:
             from utils.git_manager import get_git_manager
             
@@ -496,6 +500,7 @@ class BaseAgent(ABC):
                     files_created = task.result.get("node_files", [])
             
             if files_created:
+                # QA_Engineer: Solution 2 - Batch Commits - Queue commit instead of committing immediately
                 git_manager.auto_commit_task_completion(
                     task_id=task.id,
                     task_title=task.title,
@@ -626,6 +631,9 @@ class BaseAgent(ABC):
         
         CRITICAL FIX: Agents must call this after each LLM call to track usage for dashboard.
         
+        QA_Engineer: Solution 2 - Async Tracking - Move LLM usage tracking to background task
+        to prevent blocking task completion on tracking failures.
+        
         Args:
             task: The task that used LLM
             llm_response: LLMResponse object with usage information
@@ -638,45 +646,82 @@ class BaseAgent(ABC):
             self.logger.debug(f"No database task ID found for {task.id}, skipping LLM usage tracking")
             return
         
-        try:
-            from agents.task_tracking import update_task_llm_usage_in_db, run_async
-            
-            usage = llm_response.usage
-            
-            # Track LLM usage: 1 call, tokens used, cost
-            run_async(update_task_llm_usage_in_db(
-                task_id=db_task_id,
-                llm_calls_count=1,
-                llm_tokens_used=usage.total_tokens,
-                llm_cost_usd=usage.total_cost,
-            ))
-            
-            self.logger.debug(
-                f"Tracked LLM usage for {task.id}: "
-                f"{usage.total_tokens} tokens, ${usage.total_cost:.4f}, "
-                f"{llm_response.provider}/{llm_response.model}"
-            )
-        except Exception as e:
-            self.logger.warning(f"Failed to track LLM usage for {task.id}: {e}")
+        # QA_Engineer: Solution 2 - Async Tracking - Queue tracking request in background thread
+        # This prevents tracking failures from blocking task completion
+        def track_in_background():
+            """Background function to track LLM usage without blocking."""
+            try:
+                from agents.task_tracking import update_task_llm_usage_in_db, run_async
+                
+                usage = llm_response.usage
+                
+                # Track LLM usage: 1 call, tokens used, cost
+                run_async(update_task_llm_usage_in_db(
+                    task_id=db_task_id,
+                    llm_calls_count=1,
+                    llm_tokens_used=usage.total_tokens,
+                    llm_cost_usd=usage.total_cost,
+                ))
+                
+                self.logger.debug(
+                    f"Tracked LLM usage for {task.id}: "
+                    f"{usage.total_tokens} tokens, ${usage.total_cost:.4f}, "
+                    f"{llm_response.provider}/{llm_response.model}"
+                )
+            except Exception as e:
+                # Log full exception details for debugging
+                import traceback
+                self.logger.warning(
+                    f"Failed to track LLM usage for {task.id}: {e}\n"
+                    f"Traceback: {traceback.format_exc()}"
+                )
+        
+        # Run tracking in background thread (fire-and-forget)
+        # Daemon thread ensures it doesn't block process shutdown
+        import threading
+        thread = threading.Thread(target=track_in_background, daemon=True)
+        thread.start()
         
         return True
 
-    def complete_task(self, task_id: str, result: Any = None):
+    def complete_task(self, task_id: str, result: Any = None, task: Optional[Task] = None):
         """
         Mark a task as completed.
         
         Args:
             task_id: The ID of the task to complete
             result: Optional result from task execution
+            task: Optional task object to update (QA_Engineer: ensures status synchronization)
+        
+        Returns:
+            The completed task object
         """
-        if task_id not in self.active_tasks:
+        task_obj = None
+        
+        # Get task from active_tasks if not provided
+        if task_id in self.active_tasks:
+            task_obj = self.active_tasks.pop(task_id)
+        elif task:
+            # Task provided but not in active_tasks (may have been removed already)
+            task_obj = task
+            self.logger.debug(f"Task {task_id} not in active_tasks, using provided task object")
+        else:
             self.logger.warning(f"Task {task_id} not found in active tasks")
-            return
+            return None
 
-        task = self.active_tasks.pop(task_id)
-        task.complete(result)
-        self.completed_tasks.append(task)
-        self.logger.info(f"Completed task {task_id}: {task.title}")
+        # Update task status
+        task_obj.complete(result)
+        # QA_Engineer: Explicitly ensure status is set (redundant but ensures consistency)
+        task_obj.status = TaskStatus.COMPLETED
+        
+        # If task parameter provided and different from task_obj, update it too
+        if task and task.id == task_id and task is not task_obj:
+            task.status = TaskStatus.COMPLETED
+            task.result = result
+            task.completed_at = task_obj.completed_at
+        
+        self.completed_tasks.append(task_obj)
+        self.logger.info(f"Completed task {task_id}: {task_obj.title}")
         
         # Update task in database
         db_task_id = self.db_task_ids.get(task_id)
@@ -704,27 +749,52 @@ class BaseAgent(ABC):
                 self.logger.warning(f"Failed to update task in database: {e}")
         
         # Auto-commit if VCS integration enabled
-        self._auto_commit_task(task)
+        self._auto_commit_task(task_obj)
         
         # Emit dashboard event
-        self._emit_task_complete(task_id, task)
+        self._emit_task_complete(task_id, task_obj)
+        
+        # QA_Engineer: Return task object for status synchronization (Solution 3)
+        return task_obj
 
-    def fail_task(self, task_id: str, error: str):
+    def fail_task(self, task_id: str, error: str, task: Optional[Task] = None):
         """
         Mark a task as failed.
         
         Args:
             task_id: The ID of the task to fail
             error: Error message describing the failure
+            task: Optional task object to update (QA_Engineer: ensures status synchronization)
+        
+        Returns:
+            The failed task object
         """
-        if task_id not in self.active_tasks:
+        task_obj = None
+        
+        # Get task from active_tasks if not provided
+        if task_id in self.active_tasks:
+            task_obj = self.active_tasks.pop(task_id)
+        elif task:
+            # Task provided but not in active_tasks (may have been removed already)
+            task_obj = task
+            self.logger.debug(f"Task {task_id} not in active_tasks, using provided task object")
+        else:
             self.logger.warning(f"Task {task_id} not found in active tasks")
-            return
+            return None
 
-        task = self.active_tasks.pop(task_id)
-        task.fail(error)
-        self.failed_tasks.append(task)
-        self.logger.error(f"Failed task {task_id}: {task.title} - {error}")
+        # Update task status
+        task_obj.fail(error)
+        # QA_Engineer: Explicitly ensure status is set (redundant but ensures consistency)
+        task_obj.status = TaskStatus.FAILED
+        
+        # If task parameter provided and different from task_obj, update it too
+        if task and task.id == task_id and task is not task_obj:
+            task.status = TaskStatus.FAILED
+            task.error = error
+            task.completed_at = task_obj.completed_at
+        
+        self.failed_tasks.append(task_obj)
+        self.logger.error(f"Failed task {task_id}: {task_obj.title} - {error}")
         
         # Update task in database
         db_task_id = self.db_task_ids.get(task_id)
@@ -744,7 +814,10 @@ class BaseAgent(ABC):
                 self.logger.warning(f"Failed to update task in database: {e}")
         
         # Emit dashboard event
-        self._emit_task_failed(task_id, task, error)
+        self._emit_task_failed(task_id, task_obj, error)
+        
+        # QA_Engineer: Return task object for status synchronization (Solution 3)
+        return task_obj
 
     def get_status(self) -> Dict[str, Any]:
         """

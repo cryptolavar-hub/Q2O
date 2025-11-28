@@ -251,10 +251,27 @@ def safe_write_file(
     
     # Step 4: Write file
     try:
-        with open(validated_file_path, 'w', encoding=encoding) as f:
+        # QA_Engineer: CRITICAL FIX - Use explicit flush and sync to ensure file is written to disk
+        # Windows file buffering can cause files to be written but not flushed before process exit
+        with open(validated_file_path, 'w', encoding=encoding, buffering=1) as f:  # Line buffering
             f.write(content)
+            f.flush()  # Force flush to OS buffer
+            os.fsync(f.fileno())  # Force sync to disk (Windows compatible)
+        
+        # QA_Engineer: CRITICAL FIX - Verify file exists after write to catch silent failures
+        if not validated_file_path.exists():
+            error_msg = f"CRITICAL: File write reported success but file does not exist: {validated_file_path}"
+            logger.error(error_msg)
+            raise OSError(error_msg)
+        
+        # Verify file has content (not empty)
+        if validated_file_path.stat().st_size == 0 and len(content) > 0:
+            error_msg = f"CRITICAL: File written but is empty (expected {len(content)} bytes): {validated_file_path}"
+            logger.error(error_msg)
+            raise OSError(error_msg)
         
         logger.debug(f"[SAFE_WRITE] Wrote file: {validated_file_path.relative_to(Path(__file__).resolve().parents[1])}")
+        logger.info(f"[SAFE_WRITE] Verified file exists: {validated_file_path} ({validated_file_path.stat().st_size} bytes)")
         return validated_file_path
     except OSError as e:
         logger.error(f"Failed to write file '{validated_file_path}': {e}")

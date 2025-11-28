@@ -1,0 +1,77 @@
+{
+  "query": "Build a WordPress module",
+  "timestamp": "2025-11-27T08:28:51.651020",
+  "depth": "deep",
+  "search_results": [],
+  "key_findings": [
+    "Utilize the official WordPress Plugin Handbook as your primary resource for understanding plugin architecture and best practices: https://developer.wordpress.org/plugins/",
+    "Follow the WordPress Coding Standards to ensure your code is clean, maintainable, and consistent with the WordPress ecosystem: https://developer.wordpress.org/plugins/wordpress-coding-standards/",
+    "Implement security best practices by validating and sanitizing user inputs, using nonces for form submissions, and escaping output to prevent vulnerabilities: https://developer.wordpress.org/plugins/plugin-security/",
+    "Ensure your plugin is translation-ready by using the WordPress internationalization functions, allowing for easy localization: https://developer.wordpress.org/plugins/internationalization/",
+    "Structure your plugin with a clear directory layout, separating PHP files, assets, and languages for better organization and maintainability.",
+    "Use hooks (actions and filters) effectively to extend WordPress functionality without modifying core files, promoting compatibility and ease of updates.",
+    "Leverage the WordPress REST API for seamless integration with external applications, ensuring you adhere to authentication requirements using OAuth or application passwords.",
+    "Test your plugin thoroughly in various environments (different PHP versions, WordPress installations) to identify compatibility issues before release.",
+    "Document your code and provide clear instructions for installation and usage to enhance user experience and adoption of your plugin."
+  ],
+  "documentation_urls": [
+    "https://developer.wordpress.org/plugins/",
+    "https://developer.wordpress.org/plugins/plugin-basics/",
+    "https://developer.wordpress.org/plugins/plugin-security/",
+    "https://developer.wordpress.org/plugins/internationalization/",
+    "https://developer.wordpress.org/plugins/wordpress-coding-standards/"
+  ],
+  "code_examples": [
+    {
+      "language": "php",
+      "description": "Basic structure of a WordPress plugin",
+      "code": "<?php\n\n/**\n * Plugin Name: My Custom Plugin\n * Description: A brief description of the plugin.\n * Version: 1.0\n * Author: Your Name\n */\n\n// Exit if accessed directly\nif ( ! defined( 'ABSPATH' ) ) exit;\n\nfunction my_custom_plugin_function() {\n    // Your code here\n}\n\nadd_action( 'init', 'my_custom_plugin_function' );"
+    },
+    {
+      "language": "php",
+      "description": "Sanitizing user input in a settings form",
+      "code": "<?php\n\nfunction my_custom_plugin_settings_page() {\n    if ( isset( $_POST['my_custom_option'] ) ) {\n        update_option( 'my_custom_option', sanitize_text_field( $_POST['my_custom_option'] ) );\n    }\n}\n\nadd_action( 'admin_post_my_custom_plugin_save', 'my_custom_plugin_settings_page' );"
+    }
+  ],
+  "best_practices": [
+    "Practice 1: Follow WordPress coding standards for PHP, JavaScript, and CSS.",
+    "Practice 2: Use nonces for form submissions to protect against CSRF attacks.",
+    "Practice 3: Keep your plugin lightweight and avoid unnecessary dependencies.",
+    "Practice 4: Use transients or object caching to improve performance.",
+    "Practice 5: Regularly update your plugin to address security vulnerabilities and compatibility issues."
+  ],
+  "confidence_score": 60,
+  "sources_consulted": [
+    "llm_research_primary",
+    "llm_research"
+  ],
+  "common_pitfalls": [],
+  "implementation_patterns": [
+    "Pattern 1: Use the MVC (Model-View-Controller) pattern to separate logic, presentation, and data handling.",
+    "Pattern 2: Implement a settings API for managing plugin options and settings.",
+    "Pattern 3: Use shortcodes to allow users to easily embed functionality into posts and pages."
+  ],
+  "integration_requirements": {
+    "authentication": "Use WordPress's built-in user authentication and capabilities system.",
+    "apis_required": [
+      "WordPress REST API for external integrations"
+    ],
+    "data_formats": [
+      "JSON for REST API responses",
+      "HTML for front-end display"
+    ]
+  },
+  "performance_considerations": [
+    "Consideration 1: Minimize database queries by using caching and optimizing queries.",
+    "Consideration 2: Load scripts and styles conditionally to reduce page load times.",
+    "Consideration 3: Use asynchronous loading for non-essential scripts."
+  ],
+  "security_considerations": [
+    "Security tip 1: Always validate and sanitize user inputs to prevent SQL injection and XSS attacks.",
+    "Security tip 2: Use prepared statements for database queries to enhance security.",
+    "Security tip 3: Regularly review and update your plugin to patch any security vulnerabilities."
+  ],
+  "llm_provider": "openai",
+  "llm_model": "gpt-4o-mini-2024-07-18",
+  "cached": false
+}

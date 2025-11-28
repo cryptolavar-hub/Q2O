@@ -1,0 +1,81 @@
+{
+  "query": "posting of video reels",
+  "timestamp": "2025-11-28T08:14:04.546538",
+  "depth": "deep",
+  "search_results": [],
+  "key_findings": [
+    "Utilize FFmpeg for video processing tasks such as encoding, decoding, and format conversion. Refer to the official FFmpeg documentation for command-line options and library usage.",
+    "For React Native applications, leverage the 'react-native-ffmpeg' library to integrate FFmpeg capabilities seamlessly. Ensure to follow the setup instructions carefully to avoid compatibility issues.",
+    "When posting video reels, ensure that the video format is compatible with both iOS and Android platforms. H.264 for video and AAC for audio are widely supported formats.",
+    "Implement MediaCodec on Android for efficient video encoding and decoding. This allows for hardware acceleration, improving performance during video processing.",
+    "On iOS, use AVFoundation for video handling. Familiarize yourself with AVAsset and AVAssetExportSession for managing video files and exporting them in the desired format.",
+    "Ensure proper authentication mechanisms are in place when integrating with APIs for video posting. OAuth 2.0 is a recommended approach for secure API access.",
+    "Be mindful of data formats when uploading videos to ensure compatibility with backend services. Use multipart/form-data for file uploads to handle video files correctly.",
+    "Optimize video size and quality before posting to improve upload speed and reduce server load. Consider implementing a compression step using FFmpeg or native libraries.",
+    "Monitor performance metrics such as upload time and processing time to identify bottlenecks in the video posting workflow. Use profiling tools to gather insights.",
+    "Prioritize security by validating video content and implementing rate limiting on API endpoints to prevent abuse and ensure a smooth user experience."
+  ],
+  "documentation_urls": [
+    "https://ffmpeg.org/documentation.html",
+    "https://github.com/tanersener/react-native-ffmpeg",
+    "https://reactnative.dev/docs/getting-started",
+    "https://developer.android.com/reference/android/media/MediaCodec",
+    "https://developer.apple.com/documentation/avfoundation"
+  ],
+  "code_examples": [
+    {
+      "language": "javascript",
+      "description": "Example: Using react-native-ffmpeg to compress a video",
+      "code": "import { FFmpegKit } from 'react-native-ffmpeg';\n\nconst compressVideo = async (inputPath, outputPath) => {\n    const command = `-i ${inputPath} -vcodec libx264 -crf 28 ${outputPath}`;\n    const session = await FFmpegKit.execute(command);\n    const returnCode = await session.getReturnCode();\n    if (returnCode.isSuccess()) {\n        console.log('Video compressed successfully!');\n    } else {\n        console.error('Error compressing video.');\n    }\n};"
+    },
+    {
+      "language": "javascript",
+      "description": "Example: Using react-native-video for video playback",
+      "code": "import Video from 'react-native-video';\n\nconst VideoPlayer = ({ source }) => {\n    return <Video source={{ uri: source }} style={{ width: '100%', height: '100%' }} />;\n};"
+    }
+  ],
+  "best_practices": [
+    "Always test video processing on multiple devices to ensure compatibility and performance.",
+    "Use appropriate video codecs (e.g., H.264) for better compression without significant quality loss.",
+    "Implement user feedback mechanisms (like progress indicators) during video processing tasks.",
+    "Consider using lower resolutions for previews to enhance performance and speed up processing.",
+    "Optimize the video processing commands to balance quality and performance based on the target device capabilities."
+  ],
+  "confidence_score": 60,
+  "sources_consulted": [
+    "llm_research_primary",
+    "llm_research"
+  ],
+  "common_pitfalls": [],
+  "implementation_patterns": [
+    "Use a modular approach where video processing functions are encapsulated in separate utilities for better maintainability.",
+    "Implement a service layer that handles all video processing tasks, allowing for easier testing and debugging.",
+    "Utilize React Native's lifecycle methods to manage video processing tasks effectively, ensuring they run at the right times."
+  ],
+  "integration_requirements": {
+    "authentication": "No specific authentication is required for FFmpeg; however, ensure proper permissions for accessing media files on mobile devices.",
+    "apis_required": [
+      "react-native-ffmpeg",
+      "react-native-video"
+    ],
+    "data_formats": [
+      "MP4",
+      "MOV",
+      "AVI"
+    ]
+  },
+  "performance_considerations": [
+    "Use hardware acceleration when available to speed up video encoding and decoding processes.",
+    "Limit the size and resolution of videos being processed to reduce processing time and memory usage.",
+    "Consider using background tasks or services for processing to avoid blocking the main UI thread."
+  ],
+  "security_considerations": [
+    "Ensure that user-uploaded videos are scanned for malware before processing.",
+    "Implement proper file permissions to prevent unauthorized access to sensitive media files.",
+    "Be cautious with user input to avoid command injection vulnerabilities when constructing FFmpeg commands."
+  ],
+  "llm_provider": "openai",
+  "llm_model": "gpt-4o-mini-2024-07-18",
+  "cached": true,
+  "research_id": "cf7a3135-dffe-492f-8126-6626b36a125e"
+}

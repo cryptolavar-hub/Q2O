@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 # Database imports
+# QA_Engineer: Fix Import Statement - Ensure ResearchResult is properly imported with error handling
 try:
     import sys
     from pathlib import Path
@@ -25,16 +26,30 @@ try:
     try:
         from addon_portal.api.core.db import get_db
         from addon_portal.api.models.research import ResearchResult, ResearchAnalytics
-    except ImportError:
+        ResearchResult  # Verify import succeeded (NameError if not imported)
+        ResearchAnalytics  # Verify import succeeded
+    except (ImportError, NameError) as e:
         # Fallback: try api.core.db (when addon_portal is in path)
-        from api.core.db import get_db
-        from api.models.research import ResearchResult, ResearchAnalytics
+        try:
+            from api.core.db import get_db
+            from api.models.research import ResearchResult, ResearchAnalytics
+            ResearchResult  # Verify import succeeded
+            ResearchAnalytics  # Verify import succeeded
+        except (ImportError, NameError) as e2:
+            # Both import attempts failed
+            raise ImportError(f"Failed to import ResearchResult: {e}, fallback also failed: {e2}")
     
     from sqlalchemy.orm import Session
+    from sqlalchemy.sql import func  # For aggregate functions (avg, sum, etc.)
     DB_AVAILABLE = True
-except ImportError as e:
+    ResearchResult  # Ensure ResearchResult is available in module scope
+    ResearchAnalytics  # Ensure ResearchAnalytics is available in module scope
+except (ImportError, NameError) as e:
     logging.warning(f"Database not available for research storage, using file system: {e}")
     DB_AVAILABLE = False
+    ResearchResult = None  # Set to None to prevent NameError
+    ResearchAnalytics = None
+    func = None  # Set to None to prevent NameError
 
 
 class ResearchDatabase:
@@ -71,6 +86,11 @@ class ResearchDatabase:
         """
         if not self.enabled:
             logging.warning("Database not available, research not stored")
+            return research_id
+        
+        # QA_Engineer: Fix Import Statement - Verify ResearchResult is available before use
+        if ResearchResult is None:
+            logging.warning("ResearchResult model not available, research not stored in database")
             return research_id
         
         try:
@@ -153,6 +173,10 @@ class ResearchDatabase:
         if not self.enabled:
             return []
         
+        # QA_Engineer: Fix Import Statement - Verify ResearchResult is available before use
+        if ResearchResult is None:
+            return []
+        
         try:
             db = next(get_db())
             
@@ -221,6 +245,10 @@ class ResearchDatabase:
         if not self.enabled:
             return None
         
+        # QA_Engineer: Fix Import Statement - Verify ResearchResult is available before use
+        if ResearchResult is None:
+            return None
+        
         try:
             db = next(get_db())
             
@@ -263,6 +291,10 @@ class ResearchDatabase:
             helpfulness_score: How helpful (0-100)
         """
         if not self.enabled:
+            return
+        
+        # QA_Engineer: Fix Import Statement - Verify ResearchAnalytics is available before use
+        if ResearchAnalytics is None:
             return
         
         try:
@@ -308,6 +340,10 @@ class ResearchDatabase:
             List of matching research results
         """
         if not self.enabled:
+            return []
+        
+        # QA_Engineer: Fix Import Statement - Verify ResearchResult is available before use
+        if ResearchResult is None:
             return []
         
         try:
@@ -357,6 +393,10 @@ class ResearchDatabase:
         if not self.enabled:
             return {}
         
+        # QA_Engineer: Fix Import Statement - Verify ResearchResult is available before use
+        if ResearchResult is None or func is None:
+            return {}
+        
         try:
             db = next(get_db())
             
@@ -395,6 +435,10 @@ class ResearchDatabase:
             Number of records deleted
         """
         if not self.enabled:
+            return 0
+        
+        # QA_Engineer: Fix Import Statement - Verify ResearchResult is available before use
+        if ResearchResult is None:
             return 0
         
         try:

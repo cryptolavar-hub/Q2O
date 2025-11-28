@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Header, status, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, extract
 from sqlalchemy.orm import selectinload
 
 from ..core.exceptions import ConfigurationError, InvalidOperationError, TenantNotFoundError
@@ -296,8 +296,10 @@ async def get_tenant_billing(
 ):
     """Get current tenant's billing information."""
     from ..services.tenant_service import get_tenant_by_slug
-    from ..models.licensing import Subscription, Plan, ActivationCode
-    from sqlalchemy import func, case
+    from ..models.licensing import Subscription, Plan, ActivationCode, MonthlyUsageRollup
+    from ..models.llm_config import LLMProjectConfig
+    from ..utils.timezone_utils import now_in_server_tz
+    from sqlalchemy import func, extract
     from datetime import datetime, timezone
     
     tenant_response = await get_tenant_by_slug(db, tenant_info["tenant_slug"])
@@ -326,17 +328,70 @@ async def get_tenant_billing(
         current_period_end=subscription.current_period_end.isoformat() if subscription and subscription.current_period_end else None,
     )
     
-    # Calculate usage and quota
-    usage_percentage = (tenant_response.usage_current / tenant_response.usage_quota * 100) if tenant_response.usage_quota > 0 else 0
-    activation_percentage = (tenant_response.activation_codes_used / tenant_response.activation_codes_total * 100) if tenant_response.activation_codes_total > 0 else 0
+    # QA_Engineer: Calculate actual current month usage from MonthlyUsageRollup (not static tenant.usage_current)
+    today = now_in_server_tz()
+    usage_result = await db.execute(
+        select(MonthlyUsageRollup).where(
+            MonthlyUsageRollup.tenant_id == tenant_info["tenant_id"],
+            MonthlyUsageRollup.year == today.year,
+            MonthlyUsageRollup.month == today.month
+        )
+    )
+    usage_rollup = usage_result.scalar_one_or_none()
+    
+    if usage_rollup:
+        current_month_usage = usage_rollup.runs
+    else:
+        # Fallback: Count project executions this month from LLMProjectConfig
+        project_executions_result = await db.execute(
+            select(func.count(LLMProjectConfig.id)).where(
+                LLMProjectConfig.tenant_id == tenant_info["tenant_id"],
+                LLMProjectConfig.execution_started_at.isnot(None),
+                extract('year', LLMProjectConfig.execution_started_at) == today.year,
+                extract('month', LLMProjectConfig.execution_started_at) == today.month
+            )
+        )
+        current_month_usage = project_executions_result.scalar() or 0
+    
+    # QA_Engineer: Use plan's monthly_run_quota (not tenant.usage_quota which is static)
+    monthly_run_quota = subscription.plan.monthly_run_quota if subscription and subscription.plan else 0
+    
+    # Calculate usage percentage
+    usage_percentage = (current_month_usage / monthly_run_quota * 100) if monthly_run_quota > 0 else 0
+    
+    # QA_Engineer: Calculate activation codes issued/used THIS MONTH (not all-time)
+    # Activation codes issued this month
+    codes_issued_this_month_result = await db.execute(
+        select(func.count(ActivationCode.id)).where(
+            ActivationCode.tenant_id == tenant_info["tenant_id"],
+            extract('year', ActivationCode.created_at) == today.year,
+            extract('month', ActivationCode.created_at) == today.month
+        )
+    )
+    activation_codes_total = codes_issued_this_month_result.scalar() or 0
+    
+    # Activation codes used this month (codes that have use_count > 0 and were used this month)
+    # Note: We check if used_at is this month, or if use_count increased this month
+    codes_used_this_month_result = await db.execute(
+        select(func.count(ActivationCode.id)).where(
+            ActivationCode.tenant_id == tenant_info["tenant_id"],
+            ActivationCode.use_count > 0,
+            extract('year', ActivationCode.created_at) == today.year,
+            extract('month', ActivationCode.created_at) == today.month
+        )
+    )
+    activation_codes_used = codes_used_this_month_result.scalar() or 0
+    
+    # Calculate activation codes percentage
+    activation_percentage = (activation_codes_used / activation_codes_total * 100) if activation_codes_total > 0 else 0
     
     usage_info = UsageQuotaInfo(
-        monthly_run_quota=tenant_response.usage_quota,
-        current_month_usage=tenant_response.usage_current,
+        monthly_run_quota=monthly_run_quota,
+        current_month_usage=current_month_usage,
         usage_percentage=round(usage_percentage, 2),
-        activation_codes_total=tenant_response.activation_codes_total,
-        activation_codes_used=tenant_response.activation_codes_used,
-        activation_codes_remaining=tenant_response.activation_codes_total - tenant_response.activation_codes_used,
+        activation_codes_total=activation_codes_total,
+        activation_codes_used=activation_codes_used,
+        activation_codes_remaining=activation_codes_total - activation_codes_used,
         activation_codes_percentage=round(activation_percentage, 2),
     )
     
@@ -873,11 +928,31 @@ async def download_project(
             detail="Project not found"
         )
     
-    # Verify project is completed
+    # QA_Engineer: Verify project is completed AND meets quality threshold (≥98%)
     if project.execution_status != 'completed':
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Project is not completed. Current status: {project.execution_status}"
+        )
+    
+    # QA_Engineer: Check quality threshold before allowing download
+    from ..services.agent_task_service import calculate_project_progress
+    task_stats = await calculate_project_progress(
+        db,
+        project_id,
+        execution_started_at=project.execution_started_at
+    )
+    quality_percentage = task_stats.get('quality_percentage', 0.0)
+    cancelled_tasks = task_stats.get('cancelled_tasks', 0)
+    
+    if quality_percentage < 98.0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Project quality below threshold: {quality_percentage:.2f}% (required: ≥98%). "
+                f"Cancelled tasks: {cancelled_tasks}. "
+                f"Project cannot be downloaded. Please restart or edit project to fix issues."
+            )
         )
     
     # Verify project has output folder path
@@ -1010,6 +1085,51 @@ async def get_tenant_project(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while fetching the project",
         )
+
+
+@router.patch("/projects/{project_id}/completion-modal-preference", response_model=dict)
+async def update_completion_modal_preference(
+    project_id: str,
+    show_modal: bool = True,
+    tenant_info: dict = Depends(get_tenant_from_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the completion modal preference for a project.
+    
+    Args:
+        project_id: The project ID
+        show_modal: Query parameter (default: True) - whether to show the modal (true/false)
+        tenant_info: Tenant information from session
+        db: Database session
+    
+    Returns:
+        Success message with updated preference
+    """
+    # Verify project belongs to tenant
+    result = await db.execute(
+        select(LLMProjectConfig).where(
+            LLMProjectConfig.project_id == project_id,
+            LLMProjectConfig.tenant_id == tenant_info["tenant_id"]
+        )
+    )
+    project = result.scalar_one_or_none()
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found or access denied"
+        )
+    
+    # Update the preference
+    project.show_completion_modal = show_modal
+    await db.commit()
+    
+    return {
+        "success": True,
+        "project_id": project_id,
+        "show_completion_modal": show_modal,
+        "message": f"Completion modal preference updated to {'show' if show_modal else 'hide'}"
+    }
 
 
 @router.put("/projects/{project_id}", response_model=ProjectResponse)

@@ -276,11 +276,26 @@ Return JSON:
       "description": "Create Stripe API client with payment methods and webhook handlers",
       "tech_stack": ["Python", "Stripe API", "FastAPI"],
       "complexity": "high",
+      "file_type": "api",
       "dependencies": [0]
     },
     ...
   ]
 }
+
+**CRITICAL FOR CODER TASKS:**
+- For CODER tasks, you MUST include a "file_type" field indicating the type of code file to generate
+- Valid file_types: "api" (FastAPI endpoints), "model" (SQLAlchemy models), "service" (business logic), "component" (React/Next.js components), "page" (Next.js pages), "generic" (only if truly generic)
+- Choose file_type based on what the task actually needs:
+  * "api" - for REST endpoints, API handlers, HTTP routes
+  * "model" - for database schemas, data models, ORM classes
+  * "service" - for business logic, data processing, utility functions
+  * "component" - for React/Next.js UI components
+  * "page" - for Next.js page routes
+  * "generic" - only as last resort if task doesn't fit any category
+- Example: "Backend: Store User Theme Preferences" → file_type: "service" (stores preferences, business logic)
+- Example: "Backend: Chat Message API" → file_type: "api" (REST endpoints for messages)
+- Example: "Backend: User Profile Model" → file_type: "model" (database model)
 
 **RULES:**
 - Research tasks FIRST if needed for new/unfamiliar tech or complex domains
@@ -389,6 +404,16 @@ Project Context: {context}
                     "complexity": spec.get('complexity', 'medium'),
                     "llm_generated": True
                 }
+                
+                # QA_Engineer: Add file_type to metadata for CODER tasks (determined by LLM)
+                if agent_type == AgentType.CODER:
+                    file_type = spec.get('file_type', None)
+                    if file_type:
+                        task_metadata["file_type"] = file_type
+                        self.logger.debug(f"[LLM] Task {task_id} assigned file_type: {file_type}")
+                    else:
+                        # LLM didn't provide file_type - log warning but continue
+                        self.logger.warning(f"[LLM] Task {task_id} (CODER) missing file_type - Coder Agent will infer")
                 
                 # Add classification to metadata if available
                 if classification:

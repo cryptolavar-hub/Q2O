@@ -1,0 +1,84 @@
+{
+  "query": "Instagram and YouTube.",
+  "timestamp": "2025-11-27T11:20:52.139196",
+  "depth": "deep",
+  "search_results": [],
+  "key_findings": [
+    "Utilize the Instagram Graph API for accessing user profiles, media, and insights. Ensure you have the required permissions (scopes) for the data you intend to access.",
+    "For YouTube API integration, leverage the YouTube Data API v3 to manage video uploads, retrieve video statistics, and access user subscriptions. Familiarize yourself with quota limits to optimize your API usage.",
+    "Implement OAuth 2.0 for authentication when accessing both Instagram and YouTube APIs. This ensures secure access and user consent management.",
+    "Use webhooks for Instagram to receive real-time updates on user media and comments. This allows your application to respond promptly to user interactions without constant polling.",
+    "When working with media uploads on YouTube, use resumable uploads for large video files to enhance reliability and user experience, especially on unstable connections.",
+    "Be aware of rate limiting in both APIs. Implement exponential backoff strategies to handle API request failures gracefully and avoid service disruptions.",
+    "For data formats, both APIs primarily use JSON. Ensure your application can parse and generate JSON efficiently to handle API responses and requests.",
+    "Monitor API response times and optimize your application's performance by caching frequently accessed data, especially for static resources like user profiles or video metadata.",
+    "Ensure compliance with data privacy regulations when handling user data from Instagram and YouTube. Always inform users about data usage and obtain necessary consents.",
+    "Regularly review the official documentation for both APIs to stay updated on changes, new features, and deprecations that could affect your integration."
+  ],
+  "documentation_urls": [
+    "https://developers.facebook.com/docs/instagram-api",
+    "https://developers.google.com/youtube/v3",
+    "https://developers.facebook.com/docs/instagram-api/getting-started",
+    "https://developers.google.com/youtube/v3/getting-started",
+    "https://developers.facebook.com/docs/instagram-api/webhooks",
+    "https://developers.google.com/youtube/v3/guides/authentication"
+  ],
+  "code_examples": [
+    {
+      "language": "python",
+      "description": "Example: Authenticate with Instagram API",
+      "code": "import requests\n\n# Replace with your credentials\nclient_id = 'YOUR_CLIENT_ID'\nclient_secret = 'YOUR_CLIENT_SECRET'\nredirect_uri = 'YOUR_REDIRECT_URI'\n\n# Step 1: Get authorization code\nauth_url = f'https://api.instagram.com/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&scope=user_profile,user_media&response_type=code'\nprint(f'Visit this URL to authorize: {auth_url}')\n\n# Step 2: Exchange code for access token\n# After user authorizes, they will be redirected to redirect_uri with code\ncode = 'CODE_FROM_REDIRECT'\nresponse = requests.post('https://api.instagram.com/oauth/access_token', data={\n    'client_id': client_id,\n    'client_secret': client_secret,\n    'grant_type': 'authorization_code',\n    'redirect_uri': redirect_uri,\n    'code': code\n})\naccess_token = response.json()['access_token']"
+    },
+    {
+      "language": "python",
+      "description": "Example: Upload a video to YouTube",
+      "code": "import google_auth_oauthlib.flow\nimport googleapiclient.discovery\nimport googleapiclient.errors\n\n# Set up the YouTube API client\nscopes = ['https://www.googleapis.com/auth/youtube.upload']\n\nflow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file('client_secret.json', scopes)\ncredentials = flow.run_console()\n\nyoutube = googleapiclient.discovery.build('youtube', 'v3', credentials=credentials)\n\n# Upload video\nrequest = youtube.videos().insert(\n    part='snippet,status',\n    body={\n        'snippet': {\n            'title': 'Test Video',\n            'description': 'This is a test video',\n            'tags': ['test', 'video'],\n            'categoryId': '22'\n        },\n        'status': {\n            'privacyStatus': 'public'\n        }\n    },\n    media_body='path/to/video.mp4'\n)\nresponse = request.execute()\nprint(response)"
+    }
+  ],
+  "best_practices": [
+    "Use OAuth 2.0 for secure user authentication and authorization.",
+    "Implement caching mechanisms to reduce API calls and improve performance.",
+    "Handle API rate limits gracefully by implementing exponential backoff strategies.",
+    "Use webhooks to receive real-time updates instead of polling the APIs.",
+    "Regularly review and update permissions and scopes to ensure minimal access is granted."
+  ],
+  "confidence_score": 60,
+  "sources_consulted": [
+    "llm_research_primary",
+    "llm_research"
+  ],
+  "common_pitfalls": [
+    "Failing to handle API rate limits can lead to service disruptions; always check response headers for rate limit information.",
+    "Not validating user input can lead to security vulnerabilities; always sanitize inputs when interacting with APIs.",
+    "Ignoring error handling in API requests can result in unresponsive applications; implement robust error handling and logging.",
+    "Hardcoding sensitive information like API keys in source code can lead to security breaches; use environment variables instead."
+  ],
+  "implementation_patterns": [
+    "Use a service-oriented architecture to separate API interactions from business logic, making the application more maintainable.",
+    "Implement a microservices approach where each service handles a specific aspect of the application (e.g., user management, media handling).",
+    "Utilize background jobs for long-running tasks like video processing to keep the user interface responsive."
+  ],
+  "integration_requirements": {
+    "authentication": "OAuth 2.0 for both Instagram and YouTube APIs.",
+    "apis_required": [
+      "Instagram Graph API",
+      "YouTube Data API v3"
+    ],
+    "data_formats": [
+      "JSON"
+    ]
+  },
+  "performance_considerations": [
+    "Optimize API calls by batching requests where possible to reduce latency.",
+    "Use pagination for data retrieval to avoid overwhelming the client and server with large datasets.",
+    "Monitor API usage and performance metrics to identify bottlenecks and optimize accordingly."
+  ],
+  "security_considerations": [
+    "Always use HTTPS to encrypt data in transit between your application and the APIs.",
+    "Regularly rotate API keys and secrets to minimize the impact of potential leaks.",
+    "Implement proper access controls to ensure that only authorized users can access sensitive data."
+  ],
+  "llm_provider": "openai",
+  "llm_model": "gpt-4o-mini-2024-07-18",
+  "cached": false
+}

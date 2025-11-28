@@ -18,7 +18,7 @@ import {
   SYSTEM_METRICS_STREAM_SUBSCRIPTION,
   PROJECT_QUERY,
 } from '../lib/graphql';
-import { listProjects, type Project } from '../lib/projects';
+import { listProjects, updateCompletionModalPreference, type Project } from '../lib/projects';
 
 // Mock data structure (will be replaced with WebSocket/API integration)
 interface DashboardState {
@@ -85,6 +85,13 @@ export default function StatusPage() {
   const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
   const [projectSearch, setProjectSearch] = useState('');
   const [loadingProjects, setLoadingProjects] = useState(true);
+  
+  // QA_Engineer: Completion modal state - track which projects we've shown completion for
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [completedProjectId, setCompletedProjectId] = useState<string | null>(null);
+  const [completedProjectName, setCompletedProjectName] = useState<string>('');
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+  const shownCompletionForProjectsRef = useRef<Set<string>>(new Set());
   
   // QA_Engineer: Read projectId from URL query parameters on page load
   useEffect(() => {
@@ -250,6 +257,69 @@ export default function StatusPage() {
       setCurrentProject(projectResult.data.project);
     }
   }, [projectResult.data]);
+  
+  // QA_Engineer: Reset modal state when project changes
+  useEffect(() => {
+    // When project ID changes, close any open modal and reset state
+    if (selectedProjectId && completedProjectId && selectedProjectId !== completedProjectId) {
+      setShowCompletionModal(false);
+      setCompletedProjectId(null);
+      setCompletedProjectName('');
+      setDontShowAgain(false);
+      // Remove from shown set so it can be shown again if user switches back
+      shownCompletionForProjectsRef.current.delete(completedProjectId);
+    }
+  }, [selectedProjectId, completedProjectId]);
+
+  // QA_Engineer: Detect project completion and show modal
+  useEffect(() => {
+    // Check both GraphQL project status and REST API project execution_status
+    const graphqlStatus = selectedProject?.status;
+    const restStatus = selectedProjectRest?.execution_status;
+    const projectId = selectedProjectId;
+    const projectName = selectedProject?.name || selectedProjectRest?.name || projectId || 'Project';
+    
+    // Check if project is completed (either from GraphQL or REST API)
+    const isCompleted = 
+      graphqlStatus === 'COMPLETED' || 
+      restStatus === 'completed';
+    
+    // Check if user has disabled modal for this project (from database)
+    const projectShowModal = selectedProjectRest?.show_completion_modal !== undefined 
+      ? selectedProjectRest.show_completion_modal 
+      : true; // Default to true if not set
+    
+    // Only show modal if:
+    // 1. Project is completed
+    // 2. We have a project ID
+    // 3. We haven't shown the modal for this project yet (in this session)
+    // 4. User hasn't disabled the modal for this project (show_completion_modal !== false)
+    // 5. The modal is not already showing (to prevent stale data)
+    if (isCompleted && projectId && !shownCompletionForProjectsRef.current.has(projectId) && projectShowModal !== false && !showCompletionModal) {
+      setCompletedProjectId(projectId);
+      setCompletedProjectName(projectName);
+      setShowCompletionModal(true);
+      setDontShowAgain(false); // Reset checkbox state when showing modal
+      // Mark this project as having shown completion modal (for this session)
+      shownCompletionForProjectsRef.current.add(projectId);
+    }
+    
+    // If we switch to a project that hasn't completed yet, hide any existing modal
+    if (projectId && !isCompleted && showCompletionModal && completedProjectId === projectId) {
+      setShowCompletionModal(false);
+    }
+    
+    // If modal is showing but for wrong project, update it
+    if (showCompletionModal && projectId && completedProjectId && projectId !== completedProjectId && isCompleted && projectShowModal !== false) {
+      setCompletedProjectId(projectId);
+      setCompletedProjectName(projectName);
+      setDontShowAgain(false);
+      // Mark this project as shown
+      if (!shownCompletionForProjectsRef.current.has(projectId)) {
+        shownCompletionForProjectsRef.current.add(projectId);
+      }
+    }
+  }, [selectedProject?.status, selectedProjectRest?.execution_status, selectedProjectId, selectedProject?.name, selectedProjectRest?.name, showCompletionModal, completedProjectId]);
 
   // Calculate real-time progress from project data
   // Always returns whole numbers (0-100)
@@ -734,6 +804,106 @@ export default function StatusPage() {
             </div>
           </div>
         </main>
+        
+        {/* QA_Engineer: Project Completion Success Modal */}
+        {showCompletionModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg w-full mx-4 transform transition-all duration-300 scale-100">
+              <div className="text-center">
+                {/* Success Icon */}
+                <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
+                  <svg className="h-10 w-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Project Completed Successfully!</h3>
+                <p className="text-lg text-gray-700 mb-1 font-semibold">{completedProjectName}</p>
+                <p className="text-gray-600 mb-6">
+                  Your project has been completed successfully. All tasks have been finished and the code is ready for download.
+                </p>
+                
+                {/* Project Stats */}
+                {currentProject && (
+                  <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div className="text-2xl font-bold text-blue-600">{currentProject.totalTasks || 0}</div>
+                        <div className="text-xs text-gray-500 mt-1">Total Tasks</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-green-600">{currentProject.completedTasks || 0}</div>
+                        <div className="text-xs text-gray-500 mt-1">Completed</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-purple-600">{Math.round(realTimeProgress)}%</div>
+                        <div className="text-xs text-gray-500 mt-1">Progress</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* QA_Engineer: "Don't show again" checkbox */}
+                <div className="mb-6 flex items-center justify-center">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={dontShowAgain}
+                      onChange={(e) => setDontShowAgain(e.target.checked)}
+                      className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
+                    />
+                    <span className="ml-2 text-sm text-gray-600">
+                      Don't show this again for this project
+                    </span>
+                  </label>
+                </div>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={async () => {
+                      // Save preference if checkbox is checked
+                      if (dontShowAgain && completedProjectId) {
+                        try {
+                          await updateCompletionModalPreference(completedProjectId, false);
+                        } catch (error) {
+                          console.error('Failed to update completion modal preference:', error);
+                          // Continue anyway - don't block user action
+                        }
+                      }
+                      setShowCompletionModal(false);
+                      // Navigate to project details page where user can download
+                      if (completedProjectId) {
+                        router.push(`/projects/${completedProjectId}`);
+                      } else {
+                        router.push('/projects');
+                      }
+                    }}
+                    className="flex-1 px-6 py-3 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 transition-colors shadow-md"
+                  >
+                    View Project
+                  </button>
+                  <button
+                    onClick={async () => {
+                      // Save preference if checkbox is checked
+                      if (dontShowAgain && completedProjectId) {
+                        try {
+                          await updateCompletionModalPreference(completedProjectId, false);
+                        } catch (error) {
+                          console.error('Failed to update completion modal preference:', error);
+                          // Continue anyway - don't block user action
+                        }
+                      }
+                      setShowCompletionModal(false);
+                    }}
+                    className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    Stay Here
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </SessionGuard>
   );

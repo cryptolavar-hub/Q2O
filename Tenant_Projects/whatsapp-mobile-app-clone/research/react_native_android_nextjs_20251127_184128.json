@@ -1,0 +1,86 @@
+{
+  "query": "and production ready React Native Android and iOS support. NextJS frontend must be modern mobile responsive.",
+  "timestamp": "2025-11-27T18:10:53.593922",
+  "depth": "deep",
+  "search_results": [],
+  "key_findings": [
+    "Utilize Flexbox for layout management in React Native to ensure responsive designs across different screen sizes. Reference: https://reactnative.dev/docs/flexbox",
+    "Leverage Next.js's built-in Image component for optimized image loading and automatic resizing, improving performance on mobile devices. Reference: https://nextjs.org/docs/api-reference/next/image",
+    "Implement SafeAreaView in React Native to prevent UI elements from being obscured by notches and rounded corners on modern devices. Reference: https://reactnative.dev/docs/safeareaview",
+    "Use the Dimensions API in React Native to dynamically adjust component sizes based on the device's screen dimensions, ensuring a consistent user experience. Reference: https://reactnative.dev/docs/dimensions",
+    "In Next.js, utilize the Head component to manage metadata and improve SEO for your mobile responsive application, enhancing discoverability. Reference: https://nextjs.org/docs/api-reference/next/head",
+    "Ensure that your React Native app is production-ready by thoroughly testing on both Android and iOS devices, focusing on performance and user experience across platforms.",
+    "Adopt a mobile-first approach in your Next.js frontend development to prioritize responsive design and ensure optimal performance on mobile devices.",
+    "Avoid hardcoding styles in React Native; instead, use StyleSheet.create for better performance and maintainability of your styles.",
+    "Integrate authentication using OAuth or JWT for secure API access in both React Native and Next.js applications, ensuring user data protection.",
+    "Monitor performance using tools like React Native Performance Monitor and Next.js Analytics to identify bottlenecks and optimize load times."
+  ],
+  "documentation_urls": [
+    "https://reactnative.dev/docs/flexbox",
+    "https://nextjs.org/docs/api-reference/next/image",
+    "https://reactnative.dev/docs/dimensions",
+    "https://nextjs.org/docs/api-reference/next/head",
+    "https://reactnative.dev/docs/safeareaview",
+    "https://styled-components.com/docs/basics#installation",
+    "https://emotion.sh/docs/introduction"
+  ],
+  "code_examples": [
+    {
+      "language": "javascript",
+      "description": "Responsive layout using Flexbox in React Native",
+      "code": "import React from 'react';\nimport { View, Text, StyleSheet } from 'react-native';\n\nconst App = () => {\n  return (\n    <View style={styles.container}>\n      <Text style={styles.text}>Hello, World!</Text>\n    </View>\n  );\n};\n\nconst styles = StyleSheet.create({\n  container: {\n    flex: 1,\n    justifyContent: 'center',\n    alignItems: 'center',\n  },\n  text: {\n    fontSize: 20,\n  },\n});\n\nexport default App;"
+    },
+    {
+      "language": "javascript",
+      "description": "Responsive image in Next.js",
+      "code": "import Image from 'next/image';\n\nconst MyComponent = () => {\n  return (\n    <Image\n      src=\"/path/to/image.jpg\"\n      alt=\"Description\"\n      layout=\"responsive\"\n      width={700}\n      height={475}\n    />\n  );\n};\n\nexport default MyComponent;"
+    },
+    {
+      "language": "javascript",
+      "description": "Using Dimensions API in React Native",
+      "code": "import React, { useEffect, useState } from 'react';\nimport { View, Text, Dimensions } from 'react-native';\n\nconst App = () => {\n  const [dimensions, setDimensions] = useState(Dimensions.get('window'));\n\n  useEffect(() => {\n    const subscription = Dimensions.addEventListener('change', ({ window }) => {\n      setDimensions(window);\n    });\n    return () => subscription.remove();\n  }, []);\n\n  return (\n    <View>\n      <Text>Width: {dimensions.width}</Text>\n      <Text>Height: {dimensions.height}</Text>\n    </View>\n  );\n};\n\nexport default App;"
+    }
+  ],
+  "best_practices": [
+    "Use percentage-based widths and heights to allow elements to scale with the screen size.",
+    "Test on multiple devices and screen sizes to ensure a consistent experience.",
+    "Leverage media queries in CSS for Next.js to apply styles based on screen size.",
+    "Use the SafeAreaView component in React Native to avoid content being cut off by notches or rounded corners.",
+    "Optimize images and assets for different screen resolutions to improve loading times and performance."
+  ],
+  "confidence_score": 60,
+  "sources_consulted": [
+    "llm_research_primary",
+    "llm_research"
+  ],
+  "common_pitfalls": [],
+  "implementation_patterns": [
+    "Mobile-first design: Start with styles for the smallest screens and progressively enhance for larger screens.",
+    "Component-based architecture: Break down UI into reusable components that can adapt based on props.",
+    "Conditional rendering: Use screen dimensions to conditionally render components or styles based on the device type."
+  ],
+  "integration_requirements": {
+    "authentication": "OAuth 2.0 for user authentication in Next.js applications.",
+    "apis_required": [
+      "REST API for backend services",
+      "GraphQL API if needed for data fetching"
+    ],
+    "data_formats": [
+      "JSON for API responses",
+      "GraphQL for structured data queries"
+    ]
+  },
+  "performance_considerations": [
+    "Minimize the use of heavy libraries and components that can slow down mobile performance.",
+    "Use lazy loading for images and components in Next.js to improve initial load times.",
+    "Optimize bundle size using Next.js's built-in features like dynamic imports."
+  ],
+  "security_considerations": [
+    "Ensure all API endpoints are secured and validate user input to prevent injection attacks.",
+    "Use HTTPS for all communications between the client and server to protect data in transit.",
+    "Implement proper authentication and authorization checks to secure sensitive routes."
+  ],
+  "llm_provider": "openai",
+  "llm_model": "gpt-4o-mini-2024-07-18",
+  "cached": true
+}

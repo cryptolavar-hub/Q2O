@@ -195,6 +195,33 @@ async def update_task_status(
     return task
 
 
+async def cancel_task(
+    db: AsyncSession,
+    task_id: str,
+    cancellation_reason: str,
+) -> Optional[AgentTask]:
+    """
+    Cancel a task with a reason for tracking.
+    
+    QA_Engineer: This function ensures cancelled tasks have a reason logged
+    so we can investigate why tasks are being cancelled.
+    
+    Args:
+        db: Database session
+        task_id: Task ID to cancel
+        cancellation_reason: Reason why task is being cancelled (for logging/investigation)
+        
+    Returns:
+        Updated AgentTask object with status='cancelled', or None if task not found
+    """
+    return await update_task_status(
+        db=db,
+        task_id=task_id,
+        status='cancelled',
+        error_message=f"Cancelled: {cancellation_reason}",  # QA_Engineer: Store reason in error_message field
+    )
+
+
 async def update_task_llm_usage(
     db: AsyncSession,
     task_id: str,
@@ -327,6 +354,7 @@ async def calculate_project_progress(
         func.sum(case((AgentTask.status == 'failed', 1), else_=0)).label('failed'),
         func.sum(case((AgentTask.status.in_(['started', 'running']), 1), else_=0)).label('in_progress'),
         func.sum(case((AgentTask.status == 'pending', 1), else_=0)).label('pending'),
+        func.sum(case((AgentTask.status == 'cancelled', 1), else_=0)).label('cancelled'),  # QA_Engineer: Count cancelled tasks
     ).where(AgentTask.project_id == project_id)
     
     # CRITICAL FIX: Only count tasks from current run (created after execution_started_at)
@@ -345,6 +373,7 @@ async def calculate_project_progress(
     failed_tasks = stats.failed or 0
     in_progress_tasks = stats.in_progress or 0
     pending_tasks = stats.pending or 0
+    cancelled_tasks = stats.cancelled or 0  # QA_Engineer: Get cancelled task count
     
     # Calculate completion percentage (percentage of tasks that have finished)
     # Completion Rate = (Completed + Failed) / Total * 100%
@@ -354,8 +383,16 @@ async def calculate_project_progress(
         completion_percentage = (finished_tasks / total_tasks) * 100.0
         completion_percentage = max(0.0, min(100.0, completion_percentage))  # Cap at 100%
         completion_percentage = round(completion_percentage)  # Round to whole number for clean display
+        
+        # QA_Engineer: Calculate quality percentage (completed tasks / total tasks)
+        # Quality measures how many tasks completed successfully vs total tasks
+        # Cancelled tasks reduce quality (they're not completed)
+        quality_percentage = (completed_tasks / total_tasks) * 100.0
+        quality_percentage = max(0.0, min(100.0, quality_percentage))  # Cap at 100%
+        quality_percentage = round(quality_percentage, 2)  # Round to 2 decimal places for precision
     else:
         completion_percentage = 0.0
+        quality_percentage = 0.0
     
     return {
         "total_tasks": total_tasks,
@@ -363,6 +400,8 @@ async def calculate_project_progress(
         "failed_tasks": failed_tasks,
         "in_progress_tasks": in_progress_tasks,
         "pending_tasks": pending_tasks,
+        "cancelled_tasks": cancelled_tasks,  # QA_Engineer: Include cancelled tasks in response
         "completion_percentage": completion_percentage,
+        "quality_percentage": quality_percentage,  # QA_Engineer: Include quality percentage
     }
 

@@ -5,18 +5,20 @@
 
 ---
 
-## 🚨 **LATEST: Critical Platform Fixes & Status Page Enhancement - November 27, 2025** ⭐🔥
+## 🚨 **LATEST: Process Monitoring & Production Stability - November 28, 2025** ⭐🔥💎
 
-**Major Updates**: Production-critical fixes and enhanced user experience:
+**Major Updates**: Production-critical stability improvements and process monitoring:
 
-✅ **Windows Event Loop Compatibility** 🔧 - Fixed PostgreSQL async operations on Windows (ProactorEventLoop → SelectorEventLoop)  
-✅ **Status Page Auto-Selection** 🎯 - RUN PROJECT button now automatically redirects to project status (no manual search needed)  
-✅ **LLM Response Handling** 🧠 - Enhanced MAX_TOKENS detection (content-based validation, not just finish reason)  
-✅ **JSON Parsing Improvements** 📝 - Better error handling for invalid escape sequences  
-✅ **RuntimeWarning Fixes** ⚡ - Proper async context handling for coroutine execution  
+✅ **Process Monitoring & Heartbeat System** 💓 - Automatic heartbeat mechanism detects hung/crashed processes, enables auto-restart  
+✅ **Conditional Logging Control** 📊 - `MAIN_PROCESS_LOGGING_ENABLED` environment variable (default: false) reduces production overhead  
+✅ **Git Operation Control** 🔒 - `GIT_AUTO_COMMIT_ENABLED` environment variable (default: false) prevents Git interference with main process  
+✅ **Iteration Limit Logging** 📈 - Detailed logging when max_iterations reached (completion %, task counts, status)  
+✅ **Process Exit Logging** 🚪 - Explicit exit reasons logged (completed/failed/limit reached) for better debugging  
+✅ **Hung Project Detection** ⏱️ - Auto-detection and failure marking for projects stuck >1 hour (already implemented)  
 
 **Previous Milestones**:
 
+✅ **November 27, 2025**: Critical Platform Fixes & Status Page Enhancement (Windows compatibility, LLM response handling)  
 ✅ **November 26, 2025**: LLM Multi-Model Fallback & Documentation Reorganization  
 ✅ **November 21, 2025**: Project Execution Enhancements (Restart, Cleanup, Monitoring)  
 ✅ **November 20, 2025**: Tenant Portal Foundation Complete - Week 3 Milestone  
@@ -24,7 +26,7 @@
 ✅ **November 12, 2025**: Admin Portal Licensing Dashboard Complete (100% production-ready)  
 ✅ **November 9, 2025**: LLM Integration Complete - Multi-provider support
 
-**Current Progress**: ~72% Complete (Week 4-5 Complete + Critical Fixes) | **Target Launch**: Late December 2025 - Early January 2026
+**Current Progress**: ~73% Complete (Week 4-5 Complete + Critical Fixes + Process Monitoring) | **Target Launch**: Late December 2025 - Early January 2026
 
 **Next Focus**: Stripe Integration Testing (Week 5), then Multi-Agent Dashboard Client View (Week 7-8)
 
@@ -139,6 +141,15 @@ Your Objective → AI Agents Research → AI Agents Build → AI Agents Test →
         │ (agent_tasks table)           │
         │ - Status, progress, LLM usage │
         │ - Real-time GraphQL updates   │
+        └───────────────────────────────┘
+                        │
+                        ▼
+        ┌───────────────────────────────┐
+        │ Process Monitoring System ⭐  │
+        │ - Heartbeat mechanism         │
+        │ - Conditional logging         │
+        │ - Git operation control       │
+        │ - Crash detection             │
         └───────────────────────────────┘
                         │
                         ▼
@@ -443,6 +454,61 @@ Result: Platform gets smarter and cheaper with every project!
 
 **See**: [Fixes Applied - Project Execution Issues](docs/FIXES_APPLIED_PROJECT_EXECUTION_ISSUES.md) | [Project Execution Analysis](docs/PROJECT_EXECUTION_ANALYSIS_quickbooks-mobile-app-ver2.md) | [MAX_TOKENS Fix](docs/MAX_TOKENS_FIX.md) | [MAX_TOKENS Empty Content Fix](docs/MAX_TOKENS_EMPTY_CONTENT_FIX.md)
 
+### **Phase 5.5: Process Monitoring & Production Stability** (November 28, 2025) ✅ 💓🔒
+**Production Stability & Monitoring** - Process health monitoring and Git operation control:
+
+**🎯 Achievements**:
+- ✅ **Heartbeat Mechanism** 💓
+  - Periodic heartbeat emissions every 60 seconds (configurable)
+  - Enables detection of hung/crashed processes
+  - Background thread execution (non-blocking)
+  - Database integration for process health tracking
+  - **Impact**: Future auto-restart capability, better process visibility
+- ✅ **Conditional Logging Control** 📊
+  - `MAIN_PROCESS_LOGGING_ENABLED` environment variable (default: false)
+  - Reduces logging overhead in production
+  - Detailed debugging available when enabled
+  - Iteration logs, agent activity, status updates controlled
+  - **Impact**: Reduced resource usage, production-optimized logging
+- ✅ **Git Operation Control** 🔒
+  - `GIT_AUTO_COMMIT_ENABLED` environment variable (default: false)
+  - Prevents Git operations from interfering with main process
+  - Production-safe default (Git disabled)
+  - Works with `VCS_ENABLED` for granular control
+  - **Impact**: Prevents Git-related process crashes/hangs
+- ✅ **Iteration Limit Logging** 📈
+  - Detailed logging when max_iterations reached
+  - Includes completion percentage, task counts, status
+  - Only logs if `MAIN_PROCESS_LOGGING_ENABLED=true`
+  - **Impact**: Better diagnosis of why projects stop
+- ✅ **Process Exit Logging** 🚪
+  - Explicit exit reasons logged (completed/failed/limit reached)
+  - Final iteration count and project status
+  - Only logs if `MAIN_PROCESS_LOGGING_ENABLED=true`
+  - **Impact**: Clear visibility into why execution stopped
+
+**📊 Implementation**:
+- **Heartbeat Function**: `update_project_heartbeat()` in `agents/task_tracking.py`
+- **Environment Variables**: `MAIN_PROCESS_LOGGING_ENABLED`, `GIT_AUTO_COMMIT_ENABLED`, `PROCESS_HEARTBEAT_ENABLED`, `PROCESS_HEARTBEAT_INTERVAL_SECONDS`
+- **Main.py**: Conditional logging throughout execution loop
+- **GitManager**: Respects `GIT_AUTO_COMMIT_ENABLED` environment variable
+- **Process Exit**: Logging added after execution loop completes
+
+**💡 Benefits**:
+- **Production Stability**: Git operations won't crash/hang processes
+- **Resource Efficiency**: Reduced logging overhead in production
+- **Process Visibility**: Heartbeat enables crash detection and future auto-restart
+- **Better Debugging**: Detailed logs available when needed
+- **Production Safety**: Safe defaults (logging off, Git off)
+
+**🐛 Critical Issues Addressed**:
+- ✅ **Git Process Interference**: Git operations were blocking main process, causing crashes
+- ✅ **Logging Overhead**: Verbose logging consuming resources in production
+- ✅ **Process Crash Detection**: No way to detect if process crashed silently
+- ✅ **Exit Reason Visibility**: Couldn't tell why project execution stopped
+
+**See**: [Process Monitoring & Logging Implementation](docs/IMPLEMENTATION_PROCESS_MONITORING_AND_LOGGING.md) | [Deep Analysis - Facebook Mobile Clone Failure](docs/QA_DEEP_ANALYSIS_FACEBOOK_MOBILE_CLONE_FAILURE.md) | [Hung Project Detection](docs/QA_BUG_REPORT_HUNG_PROJECT_DETECTION.md)
+
 ---
 
 ## 🚀 **Quick Start**
@@ -565,7 +631,9 @@ After running Q2O, agents automatically BUILD:
 │ │   └── 📊 Task Tracking (agent_tasks table, LLM usage metrics)     │
 │ ├── 🎼 Multi-agent orchestration                                    │
 │ ├── 🔀 Hybrid code generation (templates + LLM)                    │
-│ └── 💾 Research & caching system (PostgreSQL)                       │
+│ ├── 💾 Research & caching system (PostgreSQL)                       │
+│ ├── 💓 Process Monitoring (Heartbeat, Conditional Logging) ⭐ **NEW** │
+│ └── 🔒 Git Operation Control (Prevents interference) ⭐ **NEW**     │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                 ┌───────────────┼───────────────┐
@@ -618,7 +686,7 @@ After running Q2O, agents automatically BUILD:
 
 ---
 
-## 🔥 **Current Platform State (November 27, 2025)** 🚀
+## 🔥 **Current Platform State (November 28, 2025)** 🚀
 
 ### **✅ Fully Operational**
 
@@ -639,9 +707,13 @@ After running Q2O, agents automatically BUILD:
 | **Service Management** | ✅ Automated | Sequential startup with verification |
 | **LLM Fallback System** | ✅ Live | Multi-provider + multi-model fallback chains ⭐ |
 | **Tenant Dashboard** | ✅ Fixed | Agent Activity and Task Timeline display correctly ⭐ |
-| **Windows Compatibility** | ✅ Fixed | Event loop compatibility for PostgreSQL async ⭐ **NEW** |
-| **Status Page Redirect** | ✅ Enhanced | Auto-selects project from RUN PROJECT button ⭐ **NEW** |
-| **LLM Response Handling** | ✅ Enhanced | Content-based MAX_TOKENS detection ⭐ **NEW** |
+| **Windows Compatibility** | ✅ Fixed | Event loop compatibility for PostgreSQL async ⭐ |
+| **Status Page Redirect** | ✅ Enhanced | Auto-selects project from RUN PROJECT button ⭐ |
+| **LLM Response Handling** | ✅ Enhanced | Content-based MAX_TOKENS detection ⭐ |
+| **Process Monitoring** | ✅ Live | Heartbeat mechanism for crash detection ⭐ **NEW** |
+| **Conditional Logging** | ✅ Live | Production-optimized logging control ⭐ **NEW** |
+| **Git Operation Control** | ✅ Live | Prevents Git interference with main process ⭐ **NEW** |
+| **Hung Project Detection** | ✅ Live | Auto-detection and failure marking (>1 hour) ⭐ |
 
 ### **Recent Enhancements (November 13-26, 2025)**
 
@@ -1074,6 +1146,8 @@ Q2O includes a **complete licensing and billing system**:
 - **Week 3.5**: ✅ Complete (Restart Functionality, Failed Project Cleanup, Critical Bug Fixes)
 - **Week 4-5**: ✅ Complete (Profile Page, Billing Page, Stripe integration - needs full testing)
 - **Week 4.5**: ✅ Complete (LLM Multi-Model Fallback, Tenant Dashboard Fixes, Documentation Reorganization)
+- **Week 5**: ✅ Complete (Critical Platform Fixes - Windows compatibility, Status page enhancements)
+- **Week 5.5**: ✅ Complete (Process Monitoring, Conditional Logging, Git Operation Control)
 - **Week 6-12**: 📅 Planned (Multi-Agent Dashboard Client View, Mobile App, Testing, Documentation)
 
 **Flexible Pricing Models:**
@@ -1129,12 +1203,27 @@ Q2O includes a **complete licensing and billing system**:
 - [x] Payment method management
 - [x] Billing history display
 
+**Phase 5: Critical Platform Fixes** (November 27, 2025) ✅
+- [x] Windows event loop compatibility
+- [x] Status page auto-selection
+- [x] LLM response handling enhancements
+- [x] JSON parsing improvements
+- [x] RuntimeWarning fixes
+
+**Phase 5.5: Process Monitoring & Production Stability** (November 28, 2025) ✅
+- [x] Heartbeat mechanism for process health monitoring
+- [x] Conditional logging control (production-optimized)
+- [x] Git operation control (prevents interference)
+- [x] Iteration limit logging
+- [x] Process exit logging
+
 **Infrastructure** ✅
 - [x] 12 AI agents with task tracking
 - [x] PostgreSQL 18 with 9 migrations
 - [x] GraphQL API with real-time subscriptions
 - [x] Async SQLAlchemy migration
 - [x] Sequential service management
+- [x] Process monitoring and heartbeat system
 
 ### **🚀 In Progress (Week 5)**
 
@@ -1224,9 +1313,9 @@ python main.py --project "Your Amazing Project" \
 
 ---
 
-**Platform Version**: 4.5  
+**Platform Version**: 4.6  
 **Last Updated**: November 27, 2025  
 **Repository**: https://github.com/cryptolavar-hub/Q2O  
-**Status**: ✅ Admin Portal 100% Complete | ✅ Tenant Portal Week 1-5 Complete (72% overall) | ✅ Critical Platform Fixes Complete | ⏳ Stripe Integration Testing Next  
-**Recent Updates**: Windows event loop compatibility, Status page auto-selection, LLM response handling enhancements, JSON parsing improvements, RuntimeWarning fixes  
+**Status**: ✅ Admin Portal 100% Complete | ✅ Tenant Portal Week 1-5 Complete (73% overall) | ✅ Critical Platform Fixes Complete | ✅ Process Monitoring & Production Stability Complete | ⏳ Stripe Integration Testing Next  
+**Recent Updates**: Process monitoring & heartbeat system, Conditional logging control, Git operation control, Iteration limit logging, Process exit logging  
 **Implementation Plan**: [See Project Status Report](docs/status_reports/PROJECT_STATUS_NOV20_2025.md) | [LLM Fallback Implementation](docs/LLM_MULTI_MODEL_FALLBACK_IMPLEMENTATION.md) | [Recent Improvements](docs/RECENT_IMPROVEMENTS_SUMMARY.md) | [Comprehensive Skillset Assessment](docs/COMPREHENSIVE_ROLES_AND_SKILLSET_ASSESSMENT.md) | [Fixes Applied](docs/FIXES_APPLIED_PROJECT_EXECUTION_ISSUES.md)

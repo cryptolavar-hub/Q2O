@@ -30,7 +30,7 @@ export default function ProjectsPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [searchQuery, setSearchQuery] = useState(''); // Actual search query used for API calls
-  const [statusFilter, setStatusFilter] = useState<Project['status'] | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<Project['execution_status'] | 'all'>('all');
   
   // UI state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -45,16 +45,37 @@ export default function ProjectsPage() {
       setLoading(true);
       setError(null);
       
+      // Fetch all projects (no status filter on backend since we filter by execution_status)
       const response = await listProjects(
         page,
         pageSize,
         searchQuery || undefined,
-        statusFilter !== 'all' ? statusFilter : undefined
+        undefined // Don't filter by status on backend
       );
       
-      setProjects(response.items);
-      setTotal(response.total);
-      setTotalPages(response.total_pages);
+      // Filter by execution_status on frontend
+      let filteredProjects = response.items;
+      if (statusFilter !== 'all') {
+        filteredProjects = response.items.filter((project) => {
+          // Use execution_status if available, otherwise fallback to status
+          const projectStatus = project.execution_status || project.status;
+          return projectStatus === statusFilter;
+        });
+      }
+      
+      setProjects(filteredProjects);
+      // For filtered results, we need to recalculate totals
+      // Note: This is a simplified approach - for accurate pagination with filters,
+      // the backend would need to support execution_status filtering
+      if (statusFilter !== 'all') {
+        // If filtering, we show filtered count but pagination might not be accurate
+        // This is a limitation of frontend-only filtering
+        setTotal(filteredProjects.length);
+        setTotalPages(Math.max(1, Math.ceil(filteredProjects.length / pageSize)));
+      } else {
+        setTotal(response.total);
+        setTotalPages(response.total_pages);
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load projects';
       setError(errorMessage);
@@ -74,7 +95,7 @@ export default function ProjectsPage() {
     setSearchQuery(search); // Update the actual search query, which triggers useEffect
   };
 
-  const handleStatusFilter = (status: Project['status'] | 'all') => {
+  const handleStatusFilter = (status: Project['execution_status'] | 'all') => {
     setStatusFilter(status);
     setPage(1); // Reset to first page
   };
@@ -85,9 +106,21 @@ export default function ProjectsPage() {
     setPage(1);
   };
 
-  const getStatusColor = (status: Project['status']) => {
-    switch (status) {
-      case 'active':
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setPage(newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setPage(1); // Reset to first page when changing page size
+  };
+
+  const getStatusColor = (executionStatus?: Project['execution_status']) => {
+    switch (executionStatus) {
+      case 'running':
         return 'bg-green-100 text-green-800';
       case 'completed':
         return 'bg-blue-100 text-blue-800';
@@ -98,8 +131,14 @@ export default function ProjectsPage() {
       case 'failed':
         return 'bg-red-100 text-red-800';
       default:
+        // Fallback to gray if execution_status is not set
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const getDisplayStatus = (project: Project): string => {
+    // Use execution_status if available, otherwise fallback to status
+    return project.execution_status || project.status || 'pending';
   };
 
   return (
@@ -137,7 +176,7 @@ export default function ProjectsPage() {
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search projects by name or client..."
+                    placeholder="Search by name, description, project ID, or objectives..."
                     className="flex-1 px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
                   />
                   <button
@@ -170,7 +209,7 @@ export default function ProjectsPage() {
                 >
                   All
                 </button>
-                {(['pending', 'active', 'completed', 'paused', 'failed'] as const).map((status) => (
+                {(['pending', 'running', 'completed', 'paused', 'failed'] as const).map((status) => (
                   <button
                     key={status}
                     onClick={() => handleStatusFilter(status)}
@@ -227,10 +266,10 @@ export default function ProjectsPage() {
                         </div>
                         <span
                           className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${getStatusColor(
-                            project.status
+                            project.execution_status
                           )}`}
                         >
-                          {project.status}
+                          {getDisplayStatus(project)}
                         </span>
                       </div>
 
@@ -266,32 +305,127 @@ export default function ProjectsPage() {
                 </div>
 
                 {/* Pagination */}
-                {totalPages > 1 && (
+                {(totalPages > 1 || total > 0) && (
                   <div className="bg-white rounded-2xl shadow-xl p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="text-gray-600">
-                        Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total} projects
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                      {/* Left: Results info and page size selector */}
+                      <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <div className="text-gray-600 text-sm">
+                          Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total} projects
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm text-gray-600 whitespace-nowrap">Items Per Page:</label>
+                          <select
+                            value={pageSize}
+                            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                            className="px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors text-sm font-medium"
+                          >
+                            <option value={10}>10</option>
+                            <option value={20}>20</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                          </select>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setPage((p) => Math.max(1, p - 1))}
-                          disabled={page === 1}
-                          className="px-4 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          Previous
-                        </button>
-                        <span className="px-4 py-2 bg-purple-500 text-white font-semibold rounded-lg">
-                          Page {page} of {totalPages}
-                        </span>
-                        <button
-                          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                          disabled={page === totalPages}
-                          className="px-4 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          Next
-                        </button>
-                      </div>
+
+                      {/* Right: Pagination controls */}
+                      {totalPages > 1 && (
+                        <div className="flex items-center gap-2">
+                          {/* First Page Button */}
+                          <button
+                            onClick={() => handlePageChange(1)}
+                            disabled={page === 1}
+                            className={`px-3 py-2 rounded-lg font-medium transition-colors text-sm ${
+                              page === 1
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                            title="First page"
+                          >
+                            ««
+                          </button>
+                          
+                          {/* Previous Page Button */}
+                          <button
+                            onClick={() => handlePageChange(page - 1)}
+                            disabled={page === 1}
+                            className={`px-3 py-2 rounded-lg font-medium transition-colors text-sm ${
+                              page === 1
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                            title="Previous page"
+                          >
+                            «
+                          </button>
+                          
+                          {/* Page Number Buttons */}
+                          <div className="flex items-center gap-1">
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                              let pageNum: number;
+                              if (totalPages <= 5) {
+                                pageNum = i + 1;
+                              } else if (page <= 3) {
+                                pageNum = i + 1;
+                              } else if (page >= totalPages - 2) {
+                                pageNum = totalPages - 4 + i;
+                              } else {
+                                pageNum = page - 2 + i;
+                              }
+                              
+                              return (
+                                <button
+                                  key={pageNum}
+                                  onClick={() => handlePageChange(pageNum)}
+                                  className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                                    page === pageNum
+                                      ? 'bg-purple-500 text-white'
+                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                  }`}
+                                >
+                                  {pageNum}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* Next Page Button */}
+                          <button
+                            onClick={() => handlePageChange(page + 1)}
+                            disabled={page === totalPages}
+                            className={`px-3 py-2 rounded-lg font-medium transition-colors text-sm ${
+                              page === totalPages
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                            title="Next page"
+                          >
+                            »
+                          </button>
+                          
+                          {/* Last Page Button */}
+                          <button
+                            onClick={() => handlePageChange(totalPages)}
+                            disabled={page === totalPages}
+                            className={`px-3 py-2 rounded-lg font-medium transition-colors text-sm ${
+                              page === totalPages
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                            title="Last page"
+                          >
+                            »»
+                          </button>
+                        </div>
+                      )}
                     </div>
+                    
+                    {/* Page info */}
+                    {totalPages > 1 && (
+                      <div className="mt-4 text-center text-sm text-gray-600">
+                        Page {page} of {totalPages}
+                      </div>
+                    )}
                   </div>
                 )}
               </>

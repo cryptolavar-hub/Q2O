@@ -114,6 +114,9 @@ class LLMProjectConfig(Base):
     execution_error = Column(Text, nullable=True)
     output_folder_path = Column(String(500), nullable=True)
     
+    # UI preferences
+    show_completion_modal = Column(Boolean, default=True)  # Whether to show completion modal (1=On/True, 0=Off/False)
+    
     # Metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

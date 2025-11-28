@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -166,6 +166,7 @@ def _serialize_project(project: LLMProjectConfig) -> ProjectResponse:
         execution_status=project.execution_status,  # Include execution status
         tenant_name=tenant_name,  # Include tenant name
         tenant_slug=tenant_slug,  # Include tenant slug
+        show_completion_modal=project.show_completion_modal if hasattr(project, 'show_completion_modal') else True,  # Include completion modal preference
     )
 
 
@@ -190,8 +191,15 @@ async def list_projects(
     
     if search:
         pattern = f"%{search.strip().lower()}%"
-        # Search by client_name (which is the project name)
-        stmt = stmt.where(func.lower(LLMProjectConfig.client_name).like(pattern))
+        # Search across multiple fields: client_name (project name), description, project_id, and custom_instructions (objectives)
+        # Use or_() for proper SQL OR condition
+        search_conditions = or_(
+            func.lower(LLMProjectConfig.client_name).like(pattern),
+            func.lower(LLMProjectConfig.description).like(pattern),
+            func.lower(LLMProjectConfig.project_id).like(pattern),
+            func.lower(LLMProjectConfig.custom_instructions).like(pattern)
+        )
+        stmt = stmt.where(search_conditions)
 
     result = await session.execute(
         stmt.with_only_columns(func.count(LLMProjectConfig.id)).order_by(None)

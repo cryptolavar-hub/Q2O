@@ -1,0 +1,79 @@
+{
+  "query": "Profile picture.",
+  "timestamp": "2025-11-27T20:06:33.792506",
+  "depth": "deep",
+  "search_results": [],
+  "key_findings": [
+    "Implement file upload functionality using the <input type='file'> HTML element, ensuring to set the 'accept' attribute to restrict file types to images only.",
+    "Utilize CORS (Cross-Origin Resource Sharing) headers when uploading profile pictures to allow your application to access resources from different origins securely.",
+    "Leverage resource hints like 'preload' or 'prefetch' to optimize loading times for profile pictures, especially on pages where they are displayed prominently.",
+    "When storing profile pictures, consider using cloud storage solutions (e.g., Google Cloud Storage) to handle scalability and reliability, following their best practices for uploading objects.",
+    "Ensure proper validation of image files on both the client and server sides to prevent malicious uploads and enforce size limits to enhance security.",
+    "Use asynchronous file uploads with progress indicators to improve user experience, providing feedback while the image is being uploaded.",
+    "Implement image compression techniques before upload to reduce file size and improve upload speed without significantly compromising quality.",
+    "Consider using a consistent data format (e.g., JPEG or PNG) for profile pictures to simplify processing and storage across different platforms.",
+    "Be mindful of security considerations such as validating file types and sizes, and implementing rate limiting to prevent abuse of the upload functionality.",
+    "Ensure that the uploaded profile pictures are served over HTTPS to protect user data during transmission."
+  ],
+  "documentation_urls": [
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS",
+    "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file",
+    "https://developer.mozilla.org/en-US/docs/Web/Performance/Resource_hints",
+    "https://cloud.google.com/storage/docs/uploading-objects",
+    "https://www.w3.org/TR/html52/sec-forms.html#file-upload",
+    "https://web.dev/image-optimization/"
+  ],
+  "code_examples": [
+    {
+      "language": "javascript",
+      "description": "Client-side image validation before upload",
+      "code": "function validateImage(file) {\n    const validTypes = ['image/jpeg', 'image/png', 'image/gif'];\n    if (!validTypes.includes(file.type)) {\n        alert('Invalid file type!');\n        return false;\n    }\n    if (file.size > 2 * 1024 * 1024) { // 2MB limit\n        alert('File size exceeds 2MB!');\n        return false;\n    }\n    return true;\n}"
+    },
+    {
+      "language": "python",
+      "description": "Flask server-side image upload handling",
+      "code": "from flask import Flask, request, redirect, url_for\nimport os\n\napp = Flask(__name__)\napp.config['UPLOAD_FOLDER'] = 'uploads/'\n\n@app.route('/upload', methods=['POST'])\ndef upload_file():\n    if 'file' not in request.files:\n        return 'No file part'\n    file = request.files['file']\n    if file.filename == '':\n        return 'No selected file'\n    if file:\n        file.save(os.path.join(app.config['UPLOAD_FOLDER'], file.filename))\n        return redirect(url_for('uploaded_file', filename=file.filename))"
+    }
+  ],
+  "best_practices": [
+    "1. Always validate images both on the client-side and server-side.",
+    "2. Use a dedicated service or library for image processing to ensure consistency and reliability.",
+    "3. Store images in a structured directory format to facilitate easy retrieval and management.",
+    "4. Implement rate limiting on image uploads to prevent abuse.",
+    "5. Use asynchronous processing for image uploads to enhance user experience."
+  ],
+  "confidence_score": 60,
+  "sources_consulted": [
+    "llm_research_primary",
+    "llm_research"
+  ],
+  "common_pitfalls": [],
+  "implementation_patterns": [
+    "1. Client-Server Model: Use client-side scripts for initial validation and server-side scripts for final validation and processing.",
+    "2. Microservices Architecture: Separate image processing into a dedicated microservice that handles uploads, processing, and storage."
+  ],
+  "integration_requirements": {
+    "authentication": "JWT or API keys for secure access to image upload endpoints.",
+    "apis_required": [
+      "Image processing API (e.g., Cloudinary, Imgix)",
+      "Storage API (e.g., AWS S3, Google Cloud Storage)"
+    ],
+    "data_formats": [
+      "JSON for API requests/responses",
+      "Multipart/form-data for file uploads"
+    ]
+  },
+  "performance_considerations": [
+    "1. Use image compression libraries to reduce file size without sacrificing quality.",
+    "2. Implement caching strategies for frequently accessed images to reduce load times.",
+    "3. Monitor image load times and optimize based on user feedback and analytics."
+  ],
+  "security_considerations": [
+    "1. Sanitize file names to prevent directory traversal attacks.",
+    "2. Limit the types of files that can be uploaded to avoid malicious file uploads.",
+    "3. Use secure storage solutions and set appropriate permissions to protect uploaded images."
+  ],
+  "llm_provider": "openai",
+  "llm_model": "gpt-4o-mini-2024-07-18",
+  "cached": false
+}

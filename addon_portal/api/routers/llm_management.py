@@ -430,3 +430,115 @@ async def get_llm_logs(
         "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
     }
 
+
+@router.get("/templates")
+async def get_learned_templates(
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
+    search: Optional[str] = Query(None, max_length=200),
+    tech_stack: Optional[str] = Query(None, description="Filter by tech stack"),
+    sort_by: str = Query("usage_count", description="Sort by: usage_count, quality_score, created_at"),
+) -> dict:
+    """Return paginated learned templates with filtering and sorting."""
+    
+    if not LLM_AVAILABLE:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM integration not available")
+    
+    template_engine = get_template_learning_engine()
+    
+    if not template_engine.enabled:
+        return {
+            "templates": [],
+            "total": 0,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": 0,
+        }
+    
+    # Normalize sort_by to match template engine expectations
+    sort_field = sort_by
+    if sort_by == "recent":
+        sort_field = "created_at"
+    elif sort_by == "quality":
+        sort_field = "quality_score"
+    elif sort_by == "usage":
+        sort_field = "usage_count"
+    
+    # Get all templates (template engine doesn't support pagination directly)
+    # We'll implement pagination in Python
+    all_templates = template_engine.get_all_templates(limit=10000, sort_by=sort_field)
+    
+    # Apply search filter
+    if search:
+        search_lower = search.lower()
+        all_templates = [
+            t for t in all_templates
+            if search_lower in t.name.lower()
+            or search_lower in t.task_pattern.lower()
+            or any(search_lower in tech.lower() for tech in t.tech_stack)
+        ]
+    
+    # Apply tech stack filter
+    if tech_stack and tech_stack != 'all':
+        all_templates = [
+            t for t in all_templates
+            if tech_stack in t.tech_stack
+        ]
+    
+    # Calculate pagination
+    total = len(all_templates)
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    
+    # Apply pagination
+    offset = (page - 1) * page_size
+    paginated_templates = all_templates[offset:offset + page_size]
+    
+    # Convert to dict format
+    templates_data = []
+    for template in paginated_templates:
+        templates_data.append({
+            "template_id": template.template_id,
+            "name": template.name,
+            "task_pattern": template.task_pattern,
+            "tech_stack": template.tech_stack,
+            "template_content": template.template_content,
+            "source_llm": template.source_llm,
+            "quality_score": template.quality_score,
+            "usage_count": template.usage_count,
+            "cost_saved": template.cost_saved,
+            "created_at": template.created_at.isoformat() if template.created_at else None,
+            "last_used": template.last_used.isoformat() if template.last_used else None,
+            "parameters": template.parameters,
+        })
+    
+    return {
+        "templates": templates_data,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
+
+
+@router.delete("/templates/{template_id}")
+async def delete_learned_template(
+    template_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Delete a learned template."""
+    
+    if not LLM_AVAILABLE:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM integration not available")
+    
+    template_engine = get_template_learning_engine()
+    
+    if not template_engine.enabled:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Template learning not enabled")
+    
+    deleted = template_engine.delete_template(template_id)
+    
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    
+    return {"success": True, "message": "Template deleted successfully"}

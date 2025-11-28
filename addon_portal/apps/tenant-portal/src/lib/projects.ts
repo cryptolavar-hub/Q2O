@@ -16,6 +16,7 @@ export interface Project {
   status: 'pending' | 'active' | 'completed' | 'paused' | 'failed';
   activation_code_id?: string;
   execution_status?: 'pending' | 'running' | 'completed' | 'failed' | 'paused';
+  show_completion_modal?: boolean;  // Whether to show completion modal (default: true)
   created_at: string;
   updated_at: string;
 }
@@ -160,6 +161,11 @@ function mapBackendProjectToFrontend(backendProject: any): Project {
   // Handle execution_status (from backend execution tracking)
   const executionStatus = backendProject.execution_status || backendProject.executionStatus;
   
+  // Handle show_completion_modal (from backend UI preferences)
+  const showCompletionModal = backendProject.show_completion_modal !== undefined 
+    ? backendProject.show_completion_modal 
+    : (backendProject.showCompletionModal !== undefined ? backendProject.showCompletionModal : true);
+  
   return {
     id: projectId,
     name: projectName,
@@ -169,6 +175,7 @@ function mapBackendProjectToFrontend(backendProject: any): Project {
     status: status,
     activation_code_id: backendProject.activation_code_id || backendProject.activationCodeId,
     execution_status: executionStatus || undefined,
+    show_completion_modal: showCompletionModal,
     created_at: backendProject.created_at || backendProject.createdAt || new Date().toISOString(),
     updated_at: backendProject.updated_at || backendProject.updatedAt || backendProject.created_at || backendProject.createdAt || new Date().toISOString(),
   };
@@ -424,6 +431,35 @@ export async function runProject(projectId: string): Promise<{
     const errorMessage = typeof error.detail === 'string' 
       ? error.detail 
       : (error.message || response.statusText || `Failed to run project: ${response.status}`);
+    throw new Error(errorMessage);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Update completion modal preference for a project
+ */
+export async function updateCompletionModalPreference(
+  projectId: string,
+  showModal: boolean
+): Promise<{ success: boolean; project_id: string; show_completion_modal: boolean; message: string }> {
+  const response = await fetch(`${API_BASE}/api/tenant/projects/${projectId}/completion-modal-preference?show_modal=${showModal}`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Session expired. Please login again.');
+    }
+    if (response.status === 404) {
+      throw new Error('Project not found');
+    }
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    const errorMessage = typeof error.detail === 'string' 
+      ? error.detail 
+      : (error.message || response.statusText || `Failed to update completion modal preference: ${response.status}`);
     throw new Error(errorMessage);
   }
 

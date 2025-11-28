@@ -12,12 +12,18 @@ from pathlib import Path
 
 # CRITICAL: Load .env from root directory (C:\Q2O_Combined\.env)
 # This ensures GOOGLE_API_KEY and other keys are found
+# QA_Engineer: Ensure .env is loaded from root directory only
 env_path = Path(__file__).parent / ".env"
 if env_path.exists():
     load_dotenv(dotenv_path=env_path, override=True)
+    # Verify .env was loaded (for debugging)
+    if os.getenv("DEBUG_ENV_LOADING", "false").lower() == "true":
+        print(f"[DEBUG] Loaded .env from: {env_path.resolve()}")
 else:
     # Fallback to default behavior (current directory)
     load_dotenv()
+    if os.getenv("DEBUG_ENV_LOADING", "false").lower() == "true":
+        print(f"[WARNING] .env not found at {env_path.resolve()}, using default dotenv behavior")
 
 # Check Python version FIRST (before any imports)
 if sys.version_info < (3, 10):
@@ -80,6 +86,14 @@ from agents import (
     TaskStatus
 )
 
+# Mobile Agent (12th agent - React Native mobile development)
+try:
+    from agents.mobile_agent import MobileAgent
+    HAS_MOBILE_AGENT = True
+except ImportError:
+    MobileAgent = None
+    HAS_MOBILE_AGENT = False
+
 # Optional: NodeAgent for Node.js support
 try:
     from agents.node_agent import NodeAgent
@@ -105,11 +119,15 @@ def verify_environment():
     """Verify critical environment variables are loaded."""
     logger = logging.getLogger("main")
     
+    # QA_Engineer: Check if main process logging is enabled (default: false for production)
+    main_process_logging_enabled = os.getenv("MAIN_PROCESS_LOGGING_ENABLED", "false").lower() == "true"
+    
     # Check if .env file exists
     env_path = Path(".env")
     if not env_path.exists():
-        logger.warning("[WARNING] .env file not found! Create it from env.example")
-        logger.info("Run: cp env.example .env")
+        if main_process_logging_enabled:
+            logger.warning("[WARNING] .env file not found! Create it from env.example")
+            logger.info("Run: cp env.example .env")
         return False
     
     # Check Google Search API configuration
@@ -118,14 +136,16 @@ def verify_environment():
     
     if google_key and google_cx:
         masked_key = google_key[:10] + "..." if len(google_key) > 10 else "***"
-        logger.info(f"[OK] Google Search API configured: {masked_key}")
+        if main_process_logging_enabled:
+            logger.info(f"[OK] Google Search API configured: {masked_key}")
     else:
-        logger.warning("[WARNING] Google Search API not configured - will use DuckDuckGo (may have rate limits)")
-        logger.info("To configure: Add GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_CX to .env")
+        if main_process_logging_enabled:
+            logger.warning("[WARNING] Google Search API not configured - will use DuckDuckGo (may have rate limits)")
+            logger.info("To configure: Add GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_CX to .env")
     
     # Check Bing API
     bing_key = os.getenv("BING_SEARCH_API_KEY")
-    if bing_key:
+    if bing_key and main_process_logging_enabled:
         logger.info(f"[OK] Bing Search API configured")
     
     return True
@@ -158,10 +178,11 @@ class AgentSystem:
             self.workspace_path = validated_workspace
             self.workspace_path.mkdir(parents=True, exist_ok=True)
         except WorkspaceSecurityError as e:
-            logger.error(f"CRITICAL SECURITY ERROR: {e}")
+            # QA_Engineer: Use self.logger after it's initialized, or use print for critical errors
+            print(f"CRITICAL SECURITY ERROR: {e}")
             raise
         except Exception as e:
-            logger.error(f"Failed to validate workspace_path '{workspace_path}': {e}")
+            print(f"Failed to validate workspace_path '{workspace_path}': {e}")
             raise
         
         self.project_id = project_id
@@ -240,6 +261,14 @@ class AgentSystem:
             ResearcherAgent(agent_id="researcher_backup", **agent_kwargs)  # CRITICAL: Include workspace_path for backup agents
         ]
         
+        # Mobile agent (12th agent - React Native mobile development)
+        self.mobile_agents = []
+        if HAS_MOBILE_AGENT:
+            self.mobile_agents = [
+                MobileAgent(**agent_kwargs),
+                MobileAgent(agent_id="mobile_backup", **agent_kwargs)  # CRITICAL: Include workspace_path for backup agents
+            ]
+        
         # Node.js agent (if available)
         self.node_agents = []
         if HAS_NODE_AGENT:
@@ -255,6 +284,9 @@ class AgentSystem:
             self.frontend_agents, self.workflow_agents, self.security_agents,
             self.researcher_agents
         ]
+        
+        if HAS_MOBILE_AGENT:
+            all_agent_lists.append(self.mobile_agents)
         
         if HAS_NODE_AGENT:
             all_agent_lists.append(self.node_agents)
@@ -282,15 +314,24 @@ class AgentSystem:
             self.orchestrator.register_agent(agent)
         for agent in self.researcher_agents:
             self.orchestrator.register_agent(agent)
+        # QA_Engineer: Mobile agents registration - CRITICAL FIX for mobile task failures
+        if HAS_MOBILE_AGENT:
+            for agent in self.mobile_agents:
+                self.orchestrator.register_agent(agent)
         
         self.logger = logging.getLogger(__name__)
         
         # Initialize VCS integration if enabled
         self.vcs_enabled = os.getenv("VCS_ENABLED", "false").lower() == "true"
+        # QA_Engineer: Add GIT_AUTO_COMMIT_ENABLED environment variable (default: false for production safety)
+        git_auto_commit_enabled = os.getenv("GIT_AUTO_COMMIT_ENABLED", "false").lower() == "true"
         if self.vcs_enabled:
             from utils.git_manager import get_git_manager
-            self.git_manager = get_git_manager(str(self.workspace_path), auto_commit=True)
-            self.logger.info("VCS integration enabled")
+            self.git_manager = get_git_manager(str(self.workspace_path), auto_commit=git_auto_commit_enabled)
+            if git_auto_commit_enabled:
+                self.logger.info("VCS integration enabled with auto-commit")
+            else:
+                self.logger.info("VCS integration enabled (auto-commit disabled)")
         else:
             self.git_manager = None
 
@@ -325,6 +366,8 @@ class AgentSystem:
                     self.frontend_agents + self.workflow_agents + self.security_agents +
                     self.researcher_agents
                 )
+                if hasattr(self, 'mobile_agents'):
+                    all_agents.extend(self.mobile_agents)
                 if hasattr(self, 'node_agents'):
                     all_agents.extend(self.node_agents)
                 
@@ -421,39 +464,99 @@ class AgentSystem:
         self.logger.info(f"Created {len(tasks)} tasks")
         
         # Process tasks iteratively
-        max_iterations = 100  # Safety limit
+        # QA_Engineer - Dynamic max iterations: 50 iterations per task (e.g., 50 x 50 tasks = 2500 iterations)
+        max_iterations = 50 * len(tasks) if len(tasks) > 0 else 100
         iteration = 0
+        
+        # QA_Engineer: Check if main process logging is enabled (default: false for production)
+        main_process_logging_enabled = os.getenv("MAIN_PROCESS_LOGGING_ENABLED", "false").lower() == "true"
+        
+        # QA_Engineer: Heartbeat mechanism - track last heartbeat time
+        import time
+        last_heartbeat_time = time.time()
+        heartbeat_interval = int(os.getenv("PROCESS_HEARTBEAT_INTERVAL_SECONDS", "60"))  # Default: 60 seconds
+        heartbeat_enabled = os.getenv("PROCESS_HEARTBEAT_ENABLED", "true").lower() == "true"
+        
+        if main_process_logging_enabled:
+            self.logger.info(f"Main process logging enabled (DEBUG mode)")
+            self.logger.info(f"Max iterations: {max_iterations}, Heartbeat interval: {heartbeat_interval}s")
         
         while iteration < max_iterations:
             iteration += 1
-            self.logger.info(f"\n--- Iteration {iteration} ---")
+            
+            # QA_Engineer: Conditional logging based on MAIN_PROCESS_LOGGING_ENABLED
+            if main_process_logging_enabled:
+                self.logger.info(f"\n--- Iteration {iteration} ---")
+            
+            # QA_Engineer: Heartbeat mechanism - emit periodic status updates
+            current_time = time.time()
+            if heartbeat_enabled and (current_time - last_heartbeat_time) >= heartbeat_interval:
+                try:
+                    # Emit heartbeat to database/API if available
+                    from agents.task_tracking import update_project_heartbeat
+                    import asyncio
+                    try:
+                        loop = asyncio.get_running_loop()
+                        # Schedule heartbeat in async context
+                        asyncio.create_task(update_project_heartbeat(self.project_id, self.tenant_id))
+                    except RuntimeError:
+                        # No async loop - run in background thread
+                        import threading
+                        def emit_heartbeat():
+                            from utils.event_loop_utils import create_compatible_event_loop
+                            loop = create_compatible_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                loop.run_until_complete(update_project_heartbeat(self.project_id, self.tenant_id))
+                            finally:
+                                loop.close()
+                                asyncio.set_event_loop(None)
+                        thread = threading.Thread(target=emit_heartbeat, daemon=True)
+                        thread.start()
+                    last_heartbeat_time = current_time
+                    if main_process_logging_enabled:
+                        self.logger.debug(f"Heartbeat emitted at iteration {iteration}")
+                except Exception as e:
+                    # Heartbeat is optional - don't fail if it doesn't work
+                    if main_process_logging_enabled:
+                        self.logger.debug(f"Heartbeat failed (optional): {e}")
             
             # Distribute ready tasks
             self.orchestrator.distribute_tasks()
             
             # Process active tasks for each agent
+            # QA_Engineer: Include mobile agents in main execution loop (critical bug fix)
             all_agents = (
                 self.coder_agents + self.testing_agents + self.qa_agents +
                 self.infrastructure_agents + self.integration_agents +
                 self.frontend_agents + self.workflow_agents + self.security_agents +
                 self.researcher_agents
             )
+            # Add mobile agents if available (consistent with run_project method)
+            if hasattr(self, 'mobile_agents') and self.mobile_agents:
+                all_agents = list(all_agents) + self.mobile_agents
+            # Add node agents if available
+            if hasattr(self, 'node_agents') and self.node_agents:
+                all_agents = list(all_agents) + self.node_agents
             
             for agent in all_agents:
                 for task_id, task in list(agent.active_tasks.items()):
-                    self.logger.info(f"Agent {agent.agent_id} processing task {task_id}")
+                    # QA_Engineer: Conditional logging based on MAIN_PROCESS_LOGGING_ENABLED
+                    if main_process_logging_enabled:
+                        self.logger.info(f"Agent {agent.agent_id} processing task {task_id}")
                     # Process task with automatic retry
                     try:
                         updated_task = agent.process_task_with_retry(task)
                         
                         # Update orchestrator
+                        # QA_Engineer: complete_task/fail_task already called in process_task, just update orchestrator
                         if updated_task.status == TaskStatus.COMPLETED:
-                            agent.complete_task(task_id, updated_task.result)
+                            # Don't call complete_task again - already called in process_task
                             self.orchestrator.update_task_status(
                                 task_id, TaskStatus.COMPLETED, updated_task.result
                             )
                         elif updated_task.status == TaskStatus.FAILED:
-                            agent.fail_task(task_id, updated_task.error or "Unknown error")
+                            # Don't call fail_task again - already called in process_task
                             self.orchestrator.update_task_status(
                                 task_id, TaskStatus.FAILED, None, updated_task.error
                             )
@@ -466,24 +569,63 @@ class AgentSystem:
             
             # Check if all tasks are completed
             status = self.orchestrator.get_project_status()
-            self.logger.info(f"Project status: {status}")
+            # QA_Engineer: Conditional logging based on MAIN_PROCESS_LOGGING_ENABLED
+            if main_process_logging_enabled:
+                self.logger.info(f"Project status: {status}")
             
             if status["completion_percentage"] == 100:
-                self.logger.info("All tasks completed!")
+                if main_process_logging_enabled:
+                    self.logger.info("All tasks completed!")
+                # QA_Engineer: Solution 2 - Batch Commits - Flush pending commits when project completes
+                try:
+                    from utils.git_manager import get_git_manager
+                    git_manager = get_git_manager(str(self.workspace_path))
+                    if git_manager.auto_commit:  # Only flush if auto-commit is enabled
+                        git_manager.flush_pending_commits()
+                        if main_process_logging_enabled:
+                            self.logger.info("Flushed pending batch commits")
+                except Exception as e:
+                    if main_process_logging_enabled:
+                        self.logger.debug(f"Failed to flush batch commits (optional): {e}")
+                break
+            
+            # QA_Engineer: Check if iteration limit reached
+            if iteration >= max_iterations:
+                if main_process_logging_enabled:
+                    self.logger.warning(f"Reached max_iterations limit: {max_iterations}")
+                    self.logger.info(f"Project status at limit: {status}")
+                    self.logger.info(f"Completion: {status.get('completion_percentage', 0)}%")
+                    self.logger.info(f"Tasks: {status.get('completed', 0)}/{status.get('total_tasks', 0)} completed")
+                    self.logger.info(f"In progress: {status.get('in_progress', 0)}, Pending: {status.get('pending', 0)}")
                 break
             
             # Check if we're stuck (no progress possible)
             if status["pending"] == 0 and status["in_progress"] == 0:
                 if status["blocked"] > 0:
-                    self.logger.warning("Some tasks are blocked - checking dependencies")
+                    if main_process_logging_enabled:
+                        self.logger.warning("Some tasks are blocked - checking dependencies")
                 elif status["failed"] > 0:
-                    self.logger.error("Some tasks failed - stopping")
+                    if main_process_logging_enabled:
+                        self.logger.error("Some tasks failed - stopping")
                     break
                 else:
                     break
         
         # Get final project status
         final_status = self.orchestrator.get_project_status()
+        
+        # QA_Engineer: Process exit logging - log final status and exit reason
+        if main_process_logging_enabled:
+            self.logger.info(f"Project execution completed. Final iteration: {iteration}/{max_iterations}")
+            self.logger.info(f"Final status: {final_status}")
+            if final_status.get("completion_percentage", 0) == 100:
+                self.logger.info("Exit reason: All tasks completed successfully")
+            elif iteration >= max_iterations:
+                self.logger.warning(f"Exit reason: Reached max_iterations limit ({max_iterations})")
+            elif final_status.get("failed", 0) > 0:
+                self.logger.error(f"Exit reason: {final_status.get('failed', 0)} tasks failed")
+            else:
+                self.logger.info("Exit reason: Normal completion")
         
         # Emit dashboard project complete event
         try:

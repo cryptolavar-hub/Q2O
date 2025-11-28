@@ -1,0 +1,85 @@
+{
+  "query": "Profile status posting phone/image or video",
+  "timestamp": "2025-11-27T16:45:31.379047",
+  "depth": "deep",
+  "search_results": [],
+  "key_findings": [
+    "Insight 1: Utilize the Graph API for Facebook to post status updates by making a POST request to '/user/feed' with the required parameters such as message, link, and media attachments.",
+    "Insight 2: For Twitter, use the 'statuses/update' endpoint to post tweets. Ensure to include the 'status' parameter for text and 'media_ids' for attaching images or videos, adhering to the media upload process beforehand.",
+    "Insight 3: When posting to Instagram, leverage the Media API to create a media object. Use the 'user/media' endpoint to upload images or videos, and ensure to handle the media upload in two steps: first upload, then publish.",
+    "Insight 4: Implement OAuth 2.0 for authentication across all platforms. Each API requires a valid access token to authorize requests, so ensure to manage token generation and expiration effectively.",
+    "Insight 5: Be aware of rate limits imposed by each API. For example, Twitter limits the number of tweets you can post in a 15-minute window, so implement error handling to manage 'rate limit exceeded' responses.",
+    "Insight 6: Use JSON as the data format for API requests and responses. Ensure that your application can parse and serialize JSON data correctly to avoid issues with data transmission.",
+    "Insight 7: Always validate and sanitize user inputs before sending them to the APIs to prevent injection attacks and ensure compliance with platform policies.",
+    "Insight 8: Implement error handling for API responses. Check for common HTTP status codes (e.g., 400 for bad requests, 401 for unauthorized) and provide meaningful feedback to users.",
+    "Insight 9: Optimize media files for size and format before uploading. Each platform has specific requirements for file types and sizes, which can affect upload success and performance.",
+    "Insight 10: Consider user privacy settings when posting on behalf of users. Ensure that your application respects user permissions and complies with platform guidelines regarding data sharing."
+  ],
+  "documentation_urls": [
+    "https://developers.facebook.com/docs/graph-api/reference/v12.0/user/feed",
+    "https://developer.twitter.com/en/docs/twitter-api/v1/tweets/manage-tweets/api-reference/post-statuses-update",
+    "https://developer.instagram.com/docs/instagram-api/reference/user/media",
+    "https://developer.snapchat.com/docs/api/overview"
+  ],
+  "code_examples": [
+    {
+      "language": "python",
+      "description": "Example: Posting an image status to Facebook",
+      "code": "import requests\n\ndef post_image_to_facebook(access_token, image_path, message):\n    url = 'https://graph.facebook.com/v12.0/me/photos'\n    files = {'file': open(image_path, 'rb')}\n    payload = {'message': message, 'access_token': access_token}\n    response = requests.post(url, files=files, data=payload)\n    return response.json()"
+    },
+    {
+      "language": "javascript",
+      "description": "Example: Posting a video status to Twitter",
+      "code": "async function postVideoToTwitter(videoPath, message) {\n    const formData = new FormData();\n    formData.append('media', videoPath);\n    formData.append('status', message);\n    const response = await fetch('https://upload.twitter.com/1.1/statuses/update_with_media.json', {\n        method: 'POST',\n        body: formData,\n        headers: {\n            'Authorization': `Bearer ${accessToken}`\n        }\n    });\n    return await response.json();\n}"
+    }
+  ],
+  "best_practices": [
+    "Ensure that the user interface is intuitive and allows easy access to multimedia posting options.",
+    "Implement robust content moderation tools that utilize both AI and human oversight to ensure community standards are met.",
+    "Encourage user engagement by allowing users to react to posts and provide feedback through comments.",
+    "Optimize image and video uploads for speed and performance to enhance user experience.",
+    "Provide clear guidelines and feedback on the content that is acceptable to post to minimize moderation issues."
+  ],
+  "confidence_score": 60,
+  "sources_consulted": [
+    "llm_research_primary",
+    "llm_research"
+  ],
+  "common_pitfalls": [
+    "Neglecting to optimize media files can lead to slow uploads and a poor user experience.",
+    "Over-relying on automated moderation can result in false positives, where legitimate content is flagged as inappropriate.",
+    "Failing to provide users with feedback on their posts can lead to decreased engagement and user satisfaction.",
+    "Not considering the accessibility of multimedia content can alienate users with disabilities."
+  ],
+  "implementation_patterns": [
+    "Use a microservices architecture to separate the media upload, processing, and posting functionalities for better scalability.",
+    "Implement a queue system for processing media uploads to handle high traffic and ensure smooth user experience.",
+    "Utilize a CDN (Content Delivery Network) for serving images and videos to reduce latency and improve load times."
+  ],
+  "integration_requirements": {
+    "authentication": "OAuth 2.0 for social media APIs, API keys for direct access.",
+    "apis_required": [
+      "Facebook Graph API",
+      "Twitter API",
+      "Instagram Graph API",
+      "Snapchat API"
+    ],
+    "data_formats": [
+      "JSON for API requests/responses",
+      "Multipart/form-data for file uploads"
+    ]
+  },
+  "performance_considerations": [
+    "Optimize media files before upload to reduce size without sacrificing quality, using formats like WebP for images and H.264 for videos.",
+    "Implement lazy loading for images and videos in the feed to improve initial load times and user experience.",
+    "Cache frequently accessed data to reduce API calls and improve response times."
+  ],
+  "security_considerations": [
+    "Ensure that all API calls are made over HTTPS to protect user data during transmission.",
+    "Implement rate limiting on API endpoints to prevent abuse and denial-of-service attacks.",
+    "Regularly audit and update security measures to protect against vulnerabilities in third-party libraries and APIs."
+  ],
+  "llm_provider": "openai",
+  "llm_model": "gpt-4o-mini-2024-07-18",
+  "cached": true
+}

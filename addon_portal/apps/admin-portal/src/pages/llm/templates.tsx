@@ -33,23 +33,64 @@ export default function LearnedTemplates() {
   const [filterTech, setFilterTech] = useState('all');
   const [sortBy, setSortBy] = useState<'usage' | 'quality' | 'recent'>('usage');
   const [selectedTemplate, setSelectedTemplate] = useState<LearnedTemplate | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalTemplates, setTotalTemplates] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [allTemplatesForStats, setAllTemplatesForStats] = useState<LearnedTemplate[]>([]);
 
   useEffect(() => {
     fetchTemplates();
-  }, []);
+  }, [currentPage, pageSize, searchTerm, filterTech, sortBy]);
 
   const fetchTemplates = async () => {
     try {
-      const response = await fetch('/api/llm/templates');
+      setLoading(true);
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        page_size: pageSize.toString(),
+        sort_by: sortBy === 'usage' ? 'usage_count' : sortBy === 'quality' ? 'quality_score' : 'created_at',
+      });
+      
+      if (searchTerm.trim()) {
+        params.append('search', searchTerm.trim());
+      }
+      if (filterTech !== 'all') {
+        params.append('tech_stack', filterTech);
+      }
+      
+      const response = await fetch(`/api/llm/templates?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
         setTemplates(data.templates || []);
+        setTotalTemplates(data.total || 0);
+        setTotalPages(data.total_pages || 1);
+        
+        // Reset to page 1 if current page is beyond total pages
+        if (currentPage > data.total_pages && data.total_pages > 0) {
+          setCurrentPage(1);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch templates:', error);
+      setTemplates([]);
+      setTotalTemplates(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setCurrentPage(1); // Reset to first page when changing page size
   };
 
   const exportTemplate = (template: LearnedTemplate) => {
@@ -83,7 +124,8 @@ export default function LearnedTemplates() {
       });
 
       if (response.ok) {
-        setTemplates(templates.filter(t => t.template_id !== templateId));
+        // Refresh templates after deletion
+        await fetchTemplates();
         setSelectedTemplate(null);
         alert('Template deleted successfully');
       } else {
@@ -95,42 +137,32 @@ export default function LearnedTemplates() {
     }
   };
 
-  // Filter and sort templates
-  const filteredTemplates = templates
-    .filter(t => {
-      const matchesSearch =
-        t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.task_pattern.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.tech_stack.some(tech => tech.toLowerCase().includes(searchTerm.toLowerCase()));
-
-      const matchesTech = filterTech === 'all' || t.tech_stack.includes(filterTech);
-
-      return matchesSearch && matchesTech;
-    })
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'usage':
-          return b.usage_count - a.usage_count;
-        case 'quality':
-          return b.quality_score - a.quality_score;
-        case 'recent':
-          return new Date(b.last_used).getTime() - new Date(a.last_used).getTime();
-        default:
-          return 0;
+  // Fetch all templates for stats (without pagination)
+  useEffect(() => {
+    const fetchAllForStats = async () => {
+      try {
+        const response = await fetch('/api/llm/templates?page=1&page_size=10000');
+        if (response.ok) {
+          const data = await response.json();
+          setAllTemplatesForStats(data.templates || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch templates for stats:', error);
       }
-    });
+    };
+    fetchAllForStats();
+  }, []);
 
-  // Get unique tech stacks
+  // Get unique tech stacks from all templates
   const allTechStacks = Array.from(
-    new Set(templates.flatMap(t => t.tech_stack))
+    new Set(allTemplatesForStats.flatMap(t => t.tech_stack))
   ).sort();
 
-  // Calculate stats
-  const totalTemplates = templates.length;
-  const totalUses = templates.reduce((sum, t) => sum + t.usage_count, 0);
-  const totalSaved = templates.reduce((sum, t) => sum + t.cost_saved, 0);
-  const avgQuality = templates.length > 0
-    ? templates.reduce((sum, t) => sum + t.quality_score, 0) / templates.length
+  // Calculate stats from all templates
+  const totalUses = allTemplatesForStats.reduce((sum, t) => sum + t.usage_count, 0);
+  const totalSaved = allTemplatesForStats.reduce((sum, t) => sum + t.cost_saved, 0);
+  const avgQuality = allTemplatesForStats.length > 0
+    ? allTemplatesForStats.reduce((sum, t) => sum + t.quality_score, 0) / allTemplatesForStats.length
     : 0;
 
   if (loading) {
@@ -189,13 +221,16 @@ export default function LearnedTemplates() {
 
         {/* Filters and Search */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <div className="md:col-span-2">
               <input
                 type="text"
                 placeholder="Search templates by name, pattern, or tech stack..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1); // Reset to first page when search changes
+                }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -203,7 +238,10 @@ export default function LearnedTemplates() {
             <div>
               <select
                 value={filterTech}
-                onChange={(e) => setFilterTech(e.target.value)}
+                onChange={(e) => {
+                  setFilterTech(e.target.value);
+                  setCurrentPage(1); // Reset to first page when filter changes
+                }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">All Technologies</option>
@@ -216,7 +254,10 @@ export default function LearnedTemplates() {
             <div>
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'usage' | 'quality' | 'recent')}
+                onChange={(e) => {
+                  setSortBy(e.target.value as 'usage' | 'quality' | 'recent');
+                  setCurrentPage(1); // Reset to first page when sort changes
+                }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="usage">Most Used</option>
@@ -226,26 +267,44 @@ export default function LearnedTemplates() {
             </div>
           </div>
 
-          <div className="mt-4 flex justify-between items-center">
-            <p className="text-sm text-gray-600">
-              Showing {filteredTemplates.length} of {totalTemplates} templates
-            </p>
-            <button
-              onClick={exportAll}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              Export All
-            </button>
+          <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+            <div className="text-sm text-gray-600">
+              Showing {templates.length > 0 ? ((currentPage - 1) * pageSize + 1) : 0} to {Math.min(currentPage * pageSize, totalTemplates)} of {totalTemplates} templates
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="text-sm text-gray-600">Items Per Page</label>
+              <select
+                value={pageSize}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <button
+                onClick={exportAll}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                Export All
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Templates List */}
-        {filteredTemplates.length === 0 ? (
+        {loading ? (
+          <div className="bg-white rounded-lg shadow p-12 text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <p className="mt-4 text-gray-600">Loading templates...</p>
+          </div>
+        ) : templates.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-12 text-center">
             <div className="text-6xl mb-4">📚</div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No Templates Yet</h3>
             <p className="text-gray-600 mb-6">
-              {templates.length === 0
+              {totalTemplates === 0
                 ? 'Templates will appear here as the system learns from LLM generations.'
                 : 'No templates match your search criteria.'}
             </p>
@@ -254,6 +313,7 @@ export default function LearnedTemplates() {
                 onClick={() => {
                   setSearchTerm('');
                   setFilterTech('all');
+                  setCurrentPage(1);
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
@@ -262,8 +322,9 @@ export default function LearnedTemplates() {
             ) : null}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {filteredTemplates.map((template) => (
+          <>
+            <div className="grid grid-cols-1 gap-4">
+              {templates.map((template) => (
               <div
                 key={template.template_id}
                 className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow cursor-pointer"
@@ -327,7 +388,107 @@ export default function LearnedTemplates() {
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="bg-white rounded-lg shadow px-6 py-4 border-t border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {/* First Page Button */}
+                    <button
+                      onClick={() => handlePageChange(1)}
+                      disabled={currentPage === 1}
+                      className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                        currentPage === 1
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                      }`}
+                      title="First page"
+                    >
+                      |&lt;&lt;
+                    </button>
+                    
+                    {/* Previous Page Button */}
+                    <button
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                        currentPage === 1
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                      }`}
+                      title="Previous page"
+                    >
+                      |&lt;
+                    </button>
+                    
+                    {/* Page Number Buttons */}
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum: number;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => handlePageChange(pageNum)}
+                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                              currentPage === pageNum
+                                ? 'bg-purple-600 text-white'
+                                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Next Page Button */}
+                    <button
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                        currentPage === totalPages
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                      }`}
+                      title="Next page"
+                    >
+                      &gt;|
+                    </button>
+                    
+                    {/* Last Page Button */}
+                    <button
+                      onClick={() => handlePageChange(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className={`px-3 py-2 rounded-lg font-medium transition-colors ${
+                        currentPage === totalPages
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                      }`}
+                      title="Last page"
+                    >
+                      &gt;&gt;|
+                    </button>
+                  </div>
+                  
+                  <div className="text-sm text-gray-600">
+                    Page {currentPage} of {totalPages}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

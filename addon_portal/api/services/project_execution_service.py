@@ -673,22 +673,25 @@ async def check_and_update_project_completion(project_id: str) -> Optional[bool]
         failed_tasks = task_stats.get('failed_tasks', 0)
         in_progress_tasks = task_stats.get('in_progress_tasks', 0)
         pending_tasks = task_stats.get('pending_tasks', 0)
+        cancelled_tasks = task_stats.get('cancelled_tasks', 0)  # QA_Engineer: Get cancelled task count
+        quality_percentage = task_stats.get('quality_percentage', 0.0)  # QA_Engineer: Get quality percentage
         
         # If no tasks exist yet, don't update status
         if total_tasks == 0:
             return None
         
-        # Check if all tasks are done (no pending or in_progress tasks)
-        all_tasks_done = (pending_tasks == 0 and in_progress_tasks == 0)
+        # QA_Engineer: Check if all tasks are done (no pending, in_progress, OR cancelled tasks)
+        # Cancelled tasks prevent completion - they indicate unfinished work
+        all_tasks_done = (pending_tasks == 0 and in_progress_tasks == 0 and cancelled_tasks == 0)
         
         if all_tasks_done:
-            # All tasks are completed or failed
-            # Determine final status based on completion rate
-            completion_rate = (completed_tasks / total_tasks) * 100.0 if total_tasks > 0 else 0.0
+            # All tasks are completed or failed (no cancelled tasks)
+            # QA_Engineer: Determine final status based on QUALITY threshold (98%)
+            # Quality = (completed_tasks / total_tasks) * 100
+            # Projects must achieve ≥98% quality to be marked as completed
             
-            # If more than 50% of tasks completed, mark as completed
-            # Otherwise, mark as failed (too many failures)
-            if completion_rate >= 50.0:
+            if quality_percentage >= 98.0:
+                # Quality threshold met - mark as completed
                 project.execution_status = 'completed'
                 project.execution_completed_at = datetime.now(timezone.utc)
                 project.execution_error = None
@@ -701,30 +704,159 @@ async def check_and_update_project_completion(project_id: str) -> Optional[bool]
                         "total_tasks": total_tasks,
                         "completed_tasks": completed_tasks,
                         "failed_tasks": failed_tasks,
-                        "completion_rate": completion_rate,
+                        "cancelled_tasks": cancelled_tasks,
+                        "quality_percentage": quality_percentage,
                     }
                 )
                 await db.commit()
                 return True
             else:
-                # Too many failures - mark as failed
+                # Quality threshold NOT met - mark as failed
+                # Project cannot be downloaded, must restart/edit
                 project.execution_status = 'failed'
                 project.execution_completed_at = datetime.now(timezone.utc)
                 project.execution_error = (
-                    f"Project failed: {failed_tasks} out of {total_tasks} tasks failed "
-                    f"(completion rate: {completion_rate:.1f}%). "
-                    f"Too many task failures to consider project successful."
+                    f"Project quality below threshold: {quality_percentage:.2f}% (required: ≥98%). "
+                    f"Completed: {completed_tasks}/{total_tasks} tasks. "
+                    f"Failed: {failed_tasks} tasks. "
+                    f"Project cannot be downloaded. Please restart or edit project to fix issues."
                 )
                 
                 LOGGER.warning(
-                    "project_auto_failed_by_tasks",
+                    "project_auto_failed_by_quality",
                     extra={
                         "project_id": project_id,
                         "tenant_id": project.tenant_id,
                         "total_tasks": total_tasks,
                         "completed_tasks": completed_tasks,
                         "failed_tasks": failed_tasks,
-                        "completion_rate": completion_rate,
+                        "cancelled_tasks": cancelled_tasks,
+                        "quality_percentage": quality_percentage,
+                        "quality_threshold": 98.0,
+                    }
+                )
+        else:
+            # QA_Engineer: Check for hung projects (no activity for >1 hour, <90% completion)
+            # Hung Project Detection:
+            # - Last agent activity > 1 hour ago
+            # - Completion percentage < 90%
+            # - Not all tasks completed
+            # - Project status is 'running'
+            
+            from ..models.agent_tasks import AgentTask
+            from sqlalchemy import func
+            
+            # Get last agent activity timestamp (most recent of started_at, completed_at, failed_at, created_at)
+            # Query each timestamp field separately and find max in Python (simpler and more reliable)
+            last_started = await db.execute(
+                select(func.max(AgentTask.started_at)).where(
+                    AgentTask.project_id == project_id,
+                    AgentTask.created_at >= project.execution_started_at,
+                    AgentTask.started_at.isnot(None)
+                )
+            )
+            last_completed = await db.execute(
+                select(func.max(AgentTask.completed_at)).where(
+                    AgentTask.project_id == project_id,
+                    AgentTask.created_at >= project.execution_started_at,
+                    AgentTask.completed_at.isnot(None)
+                )
+            )
+            last_failed = await db.execute(
+                select(func.max(AgentTask.failed_at)).where(
+                    AgentTask.project_id == project_id,
+                    AgentTask.created_at >= project.execution_started_at,
+                    AgentTask.failed_at.isnot(None)
+                )
+            )
+            last_created = await db.execute(
+                select(func.max(AgentTask.created_at)).where(
+                    AgentTask.project_id == project_id,
+                    AgentTask.created_at >= project.execution_started_at
+                )
+            )
+            
+            # Find the most recent timestamp among all activity types
+            timestamps = [
+                last_started.scalar(),
+                last_completed.scalar(),
+                last_failed.scalar(),
+                last_created.scalar()
+            ]
+            last_activity = max([ts for ts in timestamps if ts is not None], default=None)
+            
+            # Calculate completion percentage
+            completion_percentage = (completed_tasks / total_tasks * 100.0) if total_tasks > 0 else 0.0
+            
+            # Check if project is hung
+            if last_activity:
+                time_since_last_activity = datetime.now(timezone.utc) - last_activity
+                hours_since_activity = time_since_last_activity.total_seconds() / 3600.0
+                
+                is_hung = (
+                    hours_since_activity >= 1.0 and  # No activity for >= 1 hour
+                    completion_percentage < 90.0 and  # Below 90% completion
+                    not all_tasks_done  # Not all tasks completed
+                )
+                
+                if is_hung:
+                    # Project is hung - mark as failed
+                    project.execution_status = 'failed'
+                    project.execution_completed_at = datetime.now(timezone.utc)
+                    project.execution_error = (
+                        f"Project execution hung: No agent activity for {hours_since_activity:.1f} hours. "
+                        f"Completion: {completion_percentage:.1f}% ({completed_tasks}/{total_tasks} tasks). "
+                        f"Last activity: {last_activity.isoformat()}. "
+                        f"Project appears to be stuck. Please restart the project."
+                    )
+                    
+                    LOGGER.error(
+                        "project_hung_detected",
+                        extra={
+                            "project_id": project_id,
+                            "tenant_id": project.tenant_id,
+                            "hours_since_activity": hours_since_activity,
+                            "completion_percentage": completion_percentage,
+                            "total_tasks": total_tasks,
+                            "completed_tasks": completed_tasks,
+                            "in_progress_tasks": in_progress_tasks,
+                            "pending_tasks": pending_tasks,
+                            "failed_tasks": failed_tasks,
+                            "last_activity": last_activity.isoformat(),
+                        }
+                    )
+                    await db.commit()
+                    return False
+            
+            # QA_Engineer: Tasks still pending/in_progress/cancelled - log cancellation reasons if any
+            if cancelled_tasks > 0:
+                # Log cancelled tasks for investigation
+                cancelled_tasks_list = await db.execute(
+                    select(AgentTask).where(
+                        AgentTask.project_id == project_id,
+                        AgentTask.status == 'cancelled',
+                        AgentTask.created_at >= project.execution_started_at  # Only current run
+                    ).limit(10)  # Get first 10 cancelled tasks for logging
+                )
+                cancelled_reasons = []
+                for task in cancelled_tasks_list.scalars().all():
+                    reason = task.error_message or "No reason provided"
+                    cancelled_reasons.append({
+                        "task_id": task.task_id,
+                        "task_name": task.task_name,
+                        "agent_type": task.agent_type,
+                        "reason": reason,
+                    })
+                
+                LOGGER.warning(
+                    "project_has_cancelled_tasks",
+                    extra={
+                        "project_id": project_id,
+                        "tenant_id": project.tenant_id,
+                        "cancelled_tasks_count": cancelled_tasks,
+                        "cancelled_tasks_sample": cancelled_reasons,
+                        "total_tasks": total_tasks,
+                        "quality_percentage": quality_percentage,
                     }
                 )
                 await db.commit()

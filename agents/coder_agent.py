@@ -111,9 +111,18 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             complexity = metadata.get("complexity", "medium")
             objective = metadata.get("objective", task.title)
             tech_stack = task.tech_stack or []
+            
+            # QA_Engineer: Use file_type from Orchestrator's LLM if available (preferred over keyword matching)
+            file_type_from_orchestrator = metadata.get("file_type", None)
+            if file_type_from_orchestrator:
+                self.logger.info(f"[ORCHESTRATOR] Using LLM-determined file_type: {file_type_from_orchestrator}")
 
             # Generate code structure (with tech stack awareness)
-            code_structure = self._plan_code_structure(description, objective, complexity, tech_stack)
+            # Pass file_type from Orchestrator if available
+            code_structure = self._plan_code_structure(
+                description, objective, complexity, tech_stack, 
+                file_type_hint=file_type_from_orchestrator
+            )
             
             # Implement the code (handles async if LLM enabled)
             if self.llm_enabled:
@@ -164,17 +173,27 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
                 "status": "completed"
             }
 
-            self.complete_task(task.id, task.result)
+            # QA_Engineer: Pass task object to complete_task for status synchronization (Solution 3)
+            completed_task = self.complete_task(task.id, task.result, task=task)
+            # Ensure task status is synchronized
+            if completed_task:
+                task.status = completed_task.status
+                task.result = completed_task.result
             self.logger.info(f"Completed coding task {task.id}")
             
         except Exception as e:
             error_msg = f"Error processing coding task: {str(e)}"
             self.logger.error(error_msg, exc_info=True)
-            self.fail_task(task.id, error_msg)
+            # QA_Engineer: Pass task object to fail_task for status synchronization (Solution 3)
+            failed_task = self.fail_task(task.id, error_msg, task=task)
+            # Ensure task status is synchronized
+            if failed_task:
+                task.status = failed_task.status
+                task.error = failed_task.error
             
         return task
 
-    def _plan_code_structure(self, description: str, objective: str, complexity: str, tech_stack: List[str] = None) -> Dict[str, Any]:
+    def _plan_code_structure(self, description: str, objective: str, complexity: str, tech_stack: List[str] = None, file_type_hint: str = None) -> Dict[str, Any]:
         """
         Plan the code structure based on task requirements and tech stack.
         
@@ -190,7 +209,43 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
         tech_stack = tech_stack or []
         description_lower = description.lower()
         
-        # Analyze requirements and determine structure
+        # QA_Engineer: Use file_type from Orchestrator's LLM if provided (preferred approach)
+        if file_type_hint:
+            # Orchestrator's LLM determined the file type - use it directly
+            self.logger.info(f"[ORCHESTRATOR] Using LLM-determined file_type: {file_type_hint} for task: {objective}")
+            # Generate concise name first, then sanitize
+            # QA_Engineer: Fix import - sanitize_for_filename is in name_sanitizer, not name_generator
+            from utils.name_generator import generate_concise_name
+            concise_name = generate_concise_name(objective, max_length=40)
+            filename = sanitize_for_filename(concise_name)  # Already imported from name_sanitizer at top of file
+            
+            structure = {
+                "objective": objective,
+                "complexity": complexity,
+                "tech_stack": tech_stack,
+                "files": [],
+                "dependencies": [],
+                "main_components": []
+            }
+            
+            # Create file based on Orchestrator's file_type determination
+            if "python" in tech_stack or not tech_stack:
+                structure["files"].append({
+                    "type": file_type_hint,
+                    "path": os.path.join(self.project_layout.api_app_dir, f"{filename}.py"),
+                    "description": f"{file_type_hint.title()} implementation for {objective}"
+                })
+            else:
+                structure["files"].append({
+                    "type": file_type_hint,
+                    "path": f"src/{filename}.py",
+                    "description": f"{file_type_hint.title()} implementation for {objective}"
+                })
+            
+            return structure
+        
+        # Fallback: Analyze requirements and determine structure using keyword matching
+        # (This is used when Orchestrator doesn't provide file_type, e.g., rules-based breakdown)
         structure = {
             "objective": objective,
             "complexity": complexity,
@@ -200,24 +255,65 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             "main_components": []
         }
 
+        # QA_Engineer: Improved file type detection - reduce generic tasks
+        # Extract task prefix (e.g., "Backend:", "Frontend:") to infer file type
+        task_prefix = ""
+        if ":" in description:
+            task_prefix = description.split(":")[0].lower().strip()
+        
         # Technology-aware file planning
         # For Python/FastAPI projects
         if "python" in tech_stack or not tech_stack:
-            if "api" in description_lower or "endpoint" in description_lower:
+            # QA_Engineer: Enhanced keyword matching - check for API-related keywords
+            is_api_task = (
+                "api" in description_lower or 
+                "endpoint" in description_lower or
+                task_prefix in ["backend", "api"] or
+                "rest" in description_lower or
+                "graphql" in description_lower or
+                "route" in description_lower or
+                "handler" in description_lower
+            )
+            
+            if is_api_task:
                 structure["files"].append({
-                    "type": "fastapi",
+                    "type": "api",
                     "path": os.path.join(self.project_layout.api_app_dir, "endpoints.py"),
                     "description": "FastAPI endpoints implementation"
                 })
             
-            if "model" in description_lower or "database" in description_lower:
+            # QA_Engineer: Enhanced keyword matching - check for model/database keywords
+            is_model_task = (
+                "model" in description_lower or 
+                "database" in description_lower or
+                "schema" in description_lower or
+                "entity" in description_lower or
+                "table" in description_lower or
+                "data model" in description_lower or
+                "orm" in description_lower
+            )
+            
+            if is_model_task:
                 structure["files"].append({
                     "type": "model",
                     "path": os.path.join(self.project_layout.api_app_dir, "models.py"),
                     "description": "SQLAlchemy data models"
                 })
 
-            if "service" in description_lower or "business logic" in description_lower:
+            # QA_Engineer: Enhanced keyword matching - check for service/business logic keywords
+            is_service_task = (
+                "service" in description_lower or 
+                "business logic" in description_lower or
+                "store" in description_lower or
+                "save" in description_lower or
+                "preferences" in description_lower or
+                "settings" in description_lower or
+                "manager" in description_lower or
+                "handler" in description_lower or
+                task_prefix == "backend"  # Backend tasks without explicit API/model are usually services
+            )
+            
+            if is_service_task and not is_api_task and not is_model_task:
                 structure["files"].append({
                     "type": "service",
                     "path": os.path.join(self.project_layout.api_app_dir, "services.py"),
@@ -293,20 +389,37 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
                     "description": f"React component for {objective}"
                 })
 
-        # If no specific files identified, create a generic implementation
+        # QA_Engineer: If no specific files identified, infer file type from context
         if not structure["files"]:
             # Generate concise name first, then sanitize
             concise_name = generate_concise_name(objective, max_length=40)
             filename = sanitize_for_filename(concise_name)
+            
+            # QA_Engineer: Infer file type from task prefix and tech stack
+            inferred_type = "generic"
+            if "python" in tech_stack or not tech_stack:
+                # Infer from task prefix
+                if task_prefix == "backend":
+                    inferred_type = "service"  # Backend tasks are usually services if not API/model
+                elif task_prefix == "frontend":
+                    inferred_type = "component"  # Frontend tasks are usually components
+                elif "backend" in description_lower:
+                    inferred_type = "service"
+                elif "frontend" in description_lower:
+                    inferred_type = "component"
+                else:
+                    # Default to service for Python backend tasks
+                    inferred_type = "service"
+            
             if "python" in tech_stack:
                 structure["files"].append({
-                    "type": "generic",
+                    "type": inferred_type,
                     "path": os.path.join(self.project_layout.api_app_dir, f"{filename}.py"),
                     "description": f"Implementation for {objective}"
                 })
             else:
                 structure["files"].append({
-                    "type": "generic",
+                    "type": inferred_type,
                     "path": f"src/{filename}.py",
                     "description": f"Implementation for {objective}"
                 })
@@ -349,10 +462,19 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             )
             
             # Write file using safe file writer (HARD GUARANTEE)
+            # QA_Engineer: CRITICAL FIX - Verify file exists after write
             try:
-                self.safe_write_file(file_path, code_content)
+                written_path = self.safe_write_file(file_path, code_content)
+                
+                # Verify file actually exists (catches silent write failures)
+                from pathlib import Path
+                if not Path(written_path).exists():
+                    error_msg = f"CRITICAL: File write reported success but file does not exist: {written_path}"
+                    self.logger.error(error_msg)
+                    raise OSError(error_msg)
+                
                 implemented_files.append(file_path)
-                self.logger.info(f"[OK] Created file: {file_path}")
+                self.logger.info(f"[OK] Created and verified file: {file_path} ({Path(written_path).stat().st_size} bytes)")
             except Exception as e:
                 self.logger.error(f"[ERROR] Failed to write file {file_path}: {e}")
                 raise
@@ -399,12 +521,32 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
                 return learned_template.template_content
         
         # STEP 2: Try traditional template (FAST)
+        # QA_Engineer: CRITICAL FIX - Check if template is generic before using it
+        # If template is generic/low-quality, fall through to LLM for better code generation
         try:
             code_content = self._generate_code_content(file_type, file_info, objective, task)
-            self.logger.info(f"[TEMPLATE] Used traditional template for {file_type}")
-            return code_content
+            
+            # Check if template output is generic/insufficient
+            # Generic templates often have placeholder text or minimal content
+            is_generic = (
+                len(code_content.strip()) < 100 or  # Too short
+                "TODO" in code_content.upper() or  # Has TODOs
+                "PLACEHOLDER" in code_content.upper() or  # Has placeholders
+                code_content.count("pass") > 3 or  # Too many pass statements
+                (file_type == "generic" and len(code_content.strip()) < 500)  # Generic type with minimal content
+            )
+            
+            if is_generic and self.llm_service:
+                # Template is generic - use LLM for better code generation
+                self.logger.info(f"[TEMPLATE] Traditional template for {file_type} is generic, using LLM instead")
+                # Fall through to LLM generation (STEP 3)
+            else:
+                # Template is good enough - use it
+                self.logger.info(f"[TEMPLATE] Used traditional template for {file_type}")
+                return code_content
         except Exception as template_error:
             self.logger.debug(f"Traditional template not available: {template_error}")
+            # Fall through to LLM generation (STEP 3)
         
         # STEP 3: Generate with LLM (ADAPTIVE)
         if not self.llm_service:
