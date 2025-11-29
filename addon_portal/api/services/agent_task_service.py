@@ -347,6 +347,21 @@ async def calculate_project_progress(
     """
     from sqlalchemy import case
     
+    # QA_Engineer: CRITICAL FIX - If execution_started_at is None, return zero stats
+    # This prevents counting old tasks when project hasn't started yet (e.g., during restart)
+    # Old tasks should be deleted before restart, but this is a safety check
+    if execution_started_at is None:
+        return {
+            "total_tasks": 0,
+            "completed_tasks": 0,
+            "failed_tasks": 0,
+            "in_progress_tasks": 0,
+            "pending_tasks": 0,
+            "cancelled_tasks": 0,
+            "completion_percentage": 0.0,
+            "quality_percentage": 0.0,
+        }
+    
     # Build query with optional filter for execution_started_at
     query = select(
         func.count(AgentTask.id).label('total'),
@@ -358,22 +373,74 @@ async def calculate_project_progress(
     ).where(AgentTask.project_id == project_id)
     
     # CRITICAL FIX: Only count tasks from current run (created after execution_started_at)
-    if execution_started_at:
-        # Ensure timezone-aware datetime
-        if execution_started_at.tzinfo is None:
-            execution_started_at = execution_started_at.replace(tzinfo=timezone.utc)
-        query = query.where(AgentTask.created_at >= execution_started_at)
+    # Ensure timezone-aware datetime
+    if execution_started_at.tzinfo is None:
+        execution_started_at = execution_started_at.replace(tzinfo=timezone.utc)
+    query = query.where(AgentTask.created_at >= execution_started_at)
     
     result = await db.execute(query)
     
     stats = result.first()
     
-    total_tasks = stats.total or 0
-    completed_tasks = stats.completed or 0
-    failed_tasks = stats.failed or 0
-    in_progress_tasks = stats.in_progress or 0
-    pending_tasks = stats.pending or 0
-    cancelled_tasks = stats.cancelled or 0  # QA_Engineer: Get cancelled task count
+    # QA_Engineer: Count LOGICAL tasks (group by task_name + agent_type) instead of database entries
+    # This prevents counting duplicates from main/backup agents as separate tasks
+    # Get all tasks to group by logical task identifier
+    all_tasks_query = select(AgentTask).where(AgentTask.project_id == project_id)
+    if execution_started_at:
+        if execution_started_at.tzinfo is None:
+            execution_started_at = execution_started_at.replace(tzinfo=timezone.utc)
+        all_tasks_query = all_tasks_query.where(AgentTask.created_at >= execution_started_at)
+    
+    all_tasks_result = await db.execute(all_tasks_query)
+    all_tasks = all_tasks_result.scalars().all()
+    
+    # Group tasks by logical identifier (task_name + agent_type)
+    # Main and backup agents create separate entries for same logical task
+    logical_tasks: Dict[str, Dict[str, Any]] = {}
+    
+    for task in all_tasks:
+        # Create logical task identifier (task_name + agent_type)
+        logical_id = f"{task.task_name}::{task.agent_type}"
+        
+        if logical_id not in logical_tasks:
+            logical_tasks[logical_id] = {
+                'has_completed': False,
+                'has_failed': False,
+                'has_cancelled': False,
+                'has_in_progress': False,
+                'has_pending': False,
+                'db_entries': []
+            }
+        
+        logical_tasks[logical_id]['db_entries'].append(task.id)
+        
+        # Update logical task status (if ANY entry is completed, logical task is completed)
+        if task.status == 'completed':
+            logical_tasks[logical_id]['has_completed'] = True
+        elif task.status == 'failed':
+            logical_tasks[logical_id]['has_failed'] = True
+        elif task.status == 'cancelled':
+            logical_tasks[logical_id]['has_cancelled'] = True
+        elif task.status in ['started', 'running']:
+            logical_tasks[logical_id]['has_in_progress'] = True
+        elif task.status == 'pending':
+            logical_tasks[logical_id]['has_pending'] = True
+    
+    # Count logical tasks
+    total_logical_tasks = len(logical_tasks)
+    completed_logical_tasks = sum(1 for lt in logical_tasks.values() if lt['has_completed'])
+    failed_logical_tasks = sum(1 for lt in logical_tasks.values() if lt['has_failed'] and not lt['has_completed'])
+    in_progress_logical_tasks = sum(1 for lt in logical_tasks.values() if lt['has_in_progress'] and not lt['has_completed'] and not lt['has_failed'])
+    pending_logical_tasks = sum(1 for lt in logical_tasks.values() if lt['has_pending'] and not lt['has_completed'] and not lt['has_failed'] and not lt['has_in_progress'])
+    cancelled_logical_tasks = sum(1 for lt in logical_tasks.values() if lt['has_cancelled'] and not lt['has_completed'])
+    
+    # Use logical task counts for quality calculation
+    total_tasks = total_logical_tasks
+    completed_tasks = completed_logical_tasks
+    failed_tasks = failed_logical_tasks
+    in_progress_tasks = in_progress_logical_tasks
+    pending_tasks = pending_logical_tasks
+    cancelled_tasks = cancelled_logical_tasks
     
     # Calculate completion percentage (percentage of tasks that have finished)
     # Completion Rate = (Completed + Failed) / Total * 100%
@@ -384,9 +451,9 @@ async def calculate_project_progress(
         completion_percentage = max(0.0, min(100.0, completion_percentage))  # Cap at 100%
         completion_percentage = round(completion_percentage)  # Round to whole number for clean display
         
-        # QA_Engineer: Calculate quality percentage (completed tasks / total tasks)
-        # Quality measures how many tasks completed successfully vs total tasks
-        # Cancelled tasks reduce quality (they're not completed)
+        # QA_Engineer: Calculate quality percentage using LOGICAL tasks (completed logical tasks / total logical tasks)
+        # This ensures duplicates from main/backup agents don't inflate the denominator
+        # Quality measures how many logical tasks completed successfully vs total logical tasks
         quality_percentage = (completed_tasks / total_tasks) * 100.0
         quality_percentage = max(0.0, min(100.0, quality_percentage))  # Cap at 100%
         quality_percentage = round(quality_percentage, 2)  # Round to 2 decimal places for precision

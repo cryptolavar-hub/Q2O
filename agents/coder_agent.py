@@ -214,8 +214,7 @@ class CoderAgent(BaseAgent, ResearchAwareMixin):
             # Orchestrator's LLM determined the file type - use it directly
             self.logger.info(f"[ORCHESTRATOR] Using LLM-determined file_type: {file_type_hint} for task: {objective}")
             # Generate concise name first, then sanitize
-            # QA_Engineer: Fix import - sanitize_for_filename is in name_sanitizer, not name_generator
-            from utils.name_generator import generate_concise_name
+            # QA_Engineer: generate_concise_name already imported at top of file (line 21) - removing redundant local import to fix UnboundLocalError
             concise_name = generate_concise_name(objective, max_length=40)
             filename = sanitize_for_filename(concise_name)  # Already imported from name_sanitizer at top of file
             

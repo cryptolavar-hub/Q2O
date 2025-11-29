@@ -86,10 +86,11 @@ export default function StatusPage() {
   const [projectSearch, setProjectSearch] = useState('');
   const [loadingProjects, setLoadingProjects] = useState(true);
   
-  // QA_Engineer: Completion modal state - track which projects we've shown completion for
+  // QA_Engineer: Completion/Failure modal state - track which projects we've shown modal for
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [completedProjectId, setCompletedProjectId] = useState<string | null>(null);
   const [completedProjectName, setCompletedProjectName] = useState<string>('');
+  const [isProjectFailed, setIsProjectFailed] = useState(false); // QA_Engineer: Track if project failed
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const shownCompletionForProjectsRef = useRef<Set<string>>(new Set());
   
@@ -107,24 +108,28 @@ export default function StatusPage() {
     }
   }, [router.query.projectId, router]);
 
-  // QA_Engineer: Load tenant's active projects (execution_status = 'running')
+  // QA_Engineer: Load tenant's projects (ALL projects, not just running)
+  // This allows search to find failed/completed projects
   useEffect(() => {
     const loadProjects = async () => {
       try {
         setLoadingProjects(true);
+        // Load all projects (up to 100) - search will filter them
         const response = await listProjects(1, 100);
-        // Filter to only active/running projects
-        const activeProjects = response.items.filter(
-          p => p.execution_status === 'running' || p.status === 'active'
-        );
-        setAvailableProjects(activeProjects);
+        // QA_Engineer: Include ALL projects (running, failed, completed, etc.) for search
+        // Default to showing running projects, but allow search to find any project
+        setAvailableProjects(response.items);
         
-        // QA_Engineer: Auto-select first project if available and none selected
+        // QA_Engineer: Auto-select first RUNNING project if available and none selected
         // Only auto-select if no project is selected AND projects are available
         // AND no projectId was provided in URL query parameters
         const projectIdFromQuery = router.query.projectId;
-        if (activeProjects.length > 0 && !selectedProjectId && !projectIdFromQuery) {
-          setSelectedProjectId(activeProjects[0].id);
+        if (response.items.length > 0 && !selectedProjectId && !projectIdFromQuery) {
+          // Prefer running projects for auto-selection
+          const runningProject = response.items.find(
+            p => p.execution_status === 'running' || p.status === 'active'
+          );
+          setSelectedProjectId(runningProject?.id || response.items[0].id);
         }
       } catch (err) {
         console.error('Failed to load projects:', err);
@@ -265,13 +270,14 @@ export default function StatusPage() {
       setShowCompletionModal(false);
       setCompletedProjectId(null);
       setCompletedProjectName('');
+      setIsProjectFailed(false); // QA_Engineer: Reset failure state
       setDontShowAgain(false);
       // Remove from shown set so it can be shown again if user switches back
       shownCompletionForProjectsRef.current.delete(completedProjectId);
     }
   }, [selectedProjectId, completedProjectId]);
 
-  // QA_Engineer: Detect project completion and show modal
+  // QA_Engineer: Detect project completion/failure and show modal
   useEffect(() => {
     // Check both GraphQL project status and REST API project execution_status
     const graphqlStatus = selectedProject?.status;
@@ -284,35 +290,42 @@ export default function StatusPage() {
       graphqlStatus === 'COMPLETED' || 
       restStatus === 'completed';
     
+    // QA_Engineer: Check if project is failed
+    const isFailed = 
+      graphqlStatus === 'FAILED' || 
+      restStatus === 'failed';
+    
     // Check if user has disabled modal for this project (from database)
     const projectShowModal = selectedProjectRest?.show_completion_modal !== undefined 
       ? selectedProjectRest.show_completion_modal 
       : true; // Default to true if not set
     
     // Only show modal if:
-    // 1. Project is completed
+    // 1. Project is completed OR failed
     // 2. We have a project ID
     // 3. We haven't shown the modal for this project yet (in this session)
     // 4. User hasn't disabled the modal for this project (show_completion_modal !== false)
     // 5. The modal is not already showing (to prevent stale data)
-    if (isCompleted && projectId && !shownCompletionForProjectsRef.current.has(projectId) && projectShowModal !== false && !showCompletionModal) {
+    if ((isCompleted || isFailed) && projectId && !shownCompletionForProjectsRef.current.has(projectId) && projectShowModal !== false && !showCompletionModal) {
       setCompletedProjectId(projectId);
       setCompletedProjectName(projectName);
+      setIsProjectFailed(isFailed); // QA_Engineer: Set failure state
       setShowCompletionModal(true);
       setDontShowAgain(false); // Reset checkbox state when showing modal
-      // Mark this project as having shown completion modal (for this session)
+      // Mark this project as having shown modal (for this session)
       shownCompletionForProjectsRef.current.add(projectId);
     }
     
-    // If we switch to a project that hasn't completed yet, hide any existing modal
-    if (projectId && !isCompleted && showCompletionModal && completedProjectId === projectId) {
+    // If we switch to a project that hasn't completed/failed yet, hide any existing modal
+    if (projectId && !isCompleted && !isFailed && showCompletionModal && completedProjectId === projectId) {
       setShowCompletionModal(false);
     }
     
     // If modal is showing but for wrong project, update it
-    if (showCompletionModal && projectId && completedProjectId && projectId !== completedProjectId && isCompleted && projectShowModal !== false) {
+    if (showCompletionModal && projectId && completedProjectId && projectId !== completedProjectId && (isCompleted || isFailed) && projectShowModal !== false) {
       setCompletedProjectId(projectId);
       setCompletedProjectName(projectName);
+      setIsProjectFailed(isFailed); // QA_Engineer: Update failure state
       setDontShowAgain(false);
       // Mark this project as shown
       if (!shownCompletionForProjectsRef.current.has(projectId)) {
@@ -346,11 +359,47 @@ export default function StatusPage() {
   const loading = projectResult.fetching;
   const connected = !projectResult.error;
 
-  // Filter projects by search
-  const filteredProjects = availableProjects.filter(p =>
-    p.name.toLowerCase().includes(projectSearch.toLowerCase()) ||
-    p.id.toLowerCase().includes(projectSearch.toLowerCase())
-  );
+  // QA_Engineer: Enhanced search - search across multiple fields and use backend search when available
+  const [searchResults, setSearchResults] = useState<Project[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  
+  // QA_Engineer: Use backend search API when search query is provided (more comprehensive)
+  useEffect(() => {
+    const performSearch = async () => {
+      if (projectSearch.trim().length >= 2) {
+        // Use backend search API for comprehensive search (searches name, description, project_id, custom_instructions)
+        setIsSearching(true);
+        try {
+          const response = await listProjects(1, 100, projectSearch.trim());
+          setSearchResults(response.items);
+        } catch (err) {
+          console.error('Search failed:', err);
+          setSearchResults([]);
+        } finally {
+          setIsSearching(false);
+        }
+      } else {
+        // Clear search results when search is too short or empty
+        setSearchResults([]);
+      }
+    };
+    
+    // Debounce search to avoid too many API calls
+    const timeoutId = setTimeout(performSearch, 300);
+    return () => clearTimeout(timeoutId);
+  }, [projectSearch]);
+  
+  // Filter projects by search (use backend search results if available, otherwise frontend filter)
+  const filteredProjects = projectSearch.trim().length >= 2 && searchResults.length > 0
+    ? searchResults  // Use backend search results (comprehensive)
+    : projectSearch.trim().length > 0
+    ? availableProjects.filter(p =>
+        p.name?.toLowerCase().includes(projectSearch.toLowerCase()) ||
+        p.id?.toLowerCase().includes(projectSearch.toLowerCase()) ||
+        p.client_name?.toLowerCase().includes(projectSearch.toLowerCase()) ||
+        p.description?.toLowerCase().includes(projectSearch.toLowerCase())
+      )
+    : availableProjects;  // Show all projects when no search
 
   // Get agents from project query (real data from database)
   const projectAgents = selectedProject?.agents || [];
@@ -488,28 +537,48 @@ export default function StatusPage() {
                   onChange={(e) => setProjectSearch(e.target.value)}
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
                 />
-                {projectSearch && filteredProjects.length > 0 && (
+                {isSearching && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg p-4 text-center text-gray-500">
+                    Searching...
+                  </div>
+                )}
+                {!isSearching && projectSearch && filteredProjects.length > 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {filteredProjects.map((project) => (
-                      <button
-                        key={project.id}
-                        onClick={() => {
-                          setSelectedProjectId(project.id);
-                          setProjectSearch('');
-                        }}
-                        className={`w-full text-left px-4 py-2 hover:bg-purple-50 transition-colors ${
-                          selectedProjectId === project.id ? 'bg-purple-100' : ''
-                        }`}
-                      >
-                        <div className="font-semibold text-gray-900">{project.name}</div>
-                        <div className="text-xs text-gray-500">{project.id}</div>
-                        {project.execution_status && (
-                          <div className="text-xs text-blue-600 mt-1">
-                            Status: {project.execution_status}
-                          </div>
-                        )}
-                      </button>
-                    ))}
+                    {filteredProjects.map((project) => {
+                      const status = project.execution_status || project.status;
+                      const statusColor = 
+                        status === 'failed' ? 'text-red-600' :
+                        status === 'completed' ? 'text-green-600' :
+                        status === 'running' ? 'text-blue-600' :
+                        status === 'paused' ? 'text-yellow-600' :
+                        'text-gray-600';
+                      
+                      return (
+                        <button
+                          key={project.id}
+                          onClick={() => {
+                            setSelectedProjectId(project.id);
+                            setProjectSearch('');
+                          }}
+                          className={`w-full text-left px-4 py-2 hover:bg-purple-50 transition-colors ${
+                            selectedProjectId === project.id ? 'bg-purple-100' : ''
+                          }`}
+                        >
+                          <div className="font-semibold text-gray-900">{project.name}</div>
+                          <div className="text-xs text-gray-500">{project.id}</div>
+                          {status && (
+                            <div className={`text-xs ${statusColor} mt-1 font-medium`}>
+                              Status: {status}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {!isSearching && projectSearch && filteredProjects.length === 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg p-4 text-center text-gray-500">
+                    No projects found matching "{projectSearch}"
                   </div>
                 )}
               </div>
@@ -810,18 +879,38 @@ export default function StatusPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg w-full mx-4 transform transition-all duration-300 scale-100">
               <div className="text-center">
-                {/* Success Icon */}
-                <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
-                  <svg className="h-10 w-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Project Completed Successfully!</h3>
-                <p className="text-lg text-gray-700 mb-1 font-semibold">{completedProjectName}</p>
-                <p className="text-gray-600 mb-6">
-                  Your project has been completed successfully. All tasks have been finished and the code is ready for download.
-                </p>
+                {/* QA_Engineer: Show success or failure icon based on isProjectFailed */}
+                {isProjectFailed ? (
+                  <>
+                    {/* Failure Icon */}
+                    <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
+                      <svg className="h-10 w-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </div>
+                    
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">Project Execution Failed</h3>
+                    <p className="text-lg text-gray-700 mb-1 font-semibold">{completedProjectName}</p>
+                    <p className="text-gray-600 mb-6">
+                      Your project execution has failed. You can restart the project or edit it to fix any issues.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    {/* Success Icon */}
+                    <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
+                      <svg className="h-10 w-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">Project Completed Successfully!</h3>
+                    <p className="text-lg text-gray-700 mb-1 font-semibold">{completedProjectName}</p>
+                    <p className="text-gray-600 mb-6">
+                      Your project has been completed successfully. All tasks have been finished and the code is ready for download.
+                    </p>
+                  </>
+                )}
                 
                 {/* Project Stats */}
                 {currentProject && (
@@ -871,14 +960,18 @@ export default function StatusPage() {
                         }
                       }
                       setShowCompletionModal(false);
-                      // Navigate to project details page where user can download
+                      // Navigate to project details page where user can download or restart
                       if (completedProjectId) {
                         router.push(`/projects/${completedProjectId}`);
                       } else {
                         router.push('/projects');
                       }
                     }}
-                    className="flex-1 px-6 py-3 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 transition-colors shadow-md"
+                    className={`flex-1 px-6 py-3 font-semibold rounded-lg transition-colors shadow-md ${
+                      isProjectFailed 
+                        ? 'bg-red-500 text-white hover:bg-red-600' 
+                        : 'bg-purple-500 text-white hover:bg-purple-600'
+                    }`}
                   >
                     View Project
                   </button>

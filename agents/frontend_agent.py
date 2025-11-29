@@ -52,23 +52,55 @@ class FrontendAgent(BaseAgent):
             # Generate frontend code
             files_created = []
             
-            if "page" in description or "route" in description:
-                files_created.extend(self._create_pages(task))
+            # QA_Engineer: Check if this is a dynamic task from QA feedback
+            metadata = task.metadata
+            is_dynamic_task = metadata.get("dynamic_task", False)
+            component_path = metadata.get("component_path", "")
             
-            if "component" in description:
-                files_created.extend(self._create_components(task))
+            if is_dynamic_task and component_path:
+                # Handle dynamic tasks created from QA feedback
+                files_created.extend(self._handle_dynamic_task(task, component_path))
+            else:
+                # Handle regular tasks with keyword matching
+                if "page" in description or "route" in description:
+                    files_created.extend(self._create_pages(task))
+                
+                if "component" in description:
+                    files_created.extend(self._create_components(task))
+                
+                if "auth" in description or "nextauth" in description:
+                    files_created.extend(self._create_auth_config(task))
+                
+                if "theme" in description or "toggle" in description:
+                    files_created.extend(self._create_theme(task))
+                
+                if "onboarding" in description:
+                    files_created.extend(self._create_onboarding(task))
+                
+                if "mapping" in description:
+                    files_created.extend(self._create_mappings_ui(task))
             
-            if "auth" in description or "nextauth" in description:
-                files_created.extend(self._create_auth_config(task))
-            
-            if "theme" in description or "toggle" in description:
-                files_created.extend(self._create_theme(task))
-            
-            if "onboarding" in description:
-                files_created.extend(self._create_onboarding(task))
-            
-            if "mapping" in description:
-                files_created.extend(self._create_mappings_ui(task))
+            # QA_Engineer: Verify files are in correct location before marking complete
+            component_path = metadata.get("component_path", "")
+            if component_path and is_dynamic_task:
+                # Verify each file exists at the expected location
+                for file_path in files_created:
+                    # Check if file exists (relative to workspace)
+                    full_path = os.path.join(self.workspace_path, file_path) if not os.path.isabs(file_path) else file_path
+                    if not os.path.exists(full_path):
+                        error_msg = f"File verification failed: {file_path} does not exist at expected location"
+                        self.logger.error(error_msg)
+                        self.fail_task(task.id, error_msg, task=task)
+                        return task
+                    
+                    # Verify file is in correct directory (component_path)
+                    if component_path not in file_path.replace("\\", "/"):
+                        error_msg = f"File created at wrong location: {file_path}, expected in {component_path}"
+                        self.logger.error(error_msg)
+                        self.fail_task(task.id, error_msg, task=task)
+                        return task
+                
+                self.logger.info(f"Verified {len(files_created)} files created at correct location: {component_path}")
             
             # Update task metadata
             task.metadata["frontend_files"] = files_created
@@ -77,7 +109,7 @@ class FrontendAgent(BaseAgent):
                 "status": "completed"
             }
 
-            self.complete_task(task.id, task.result)
+            self.complete_task(task.id, task.result, task=task)
             self.logger.info(f"Completed frontend task {task.id}")
             
         except Exception as e:
@@ -820,6 +852,186 @@ export default ErrorsPage;
             files_created.append(self._create_theme_toggle(task))
         
         return files_created
+    
+    def _handle_dynamic_task(self, task: Task, component_path: str) -> List[str]:
+        """
+        QA_Engineer: Handle dynamic tasks created from QA feedback for missing components.
+        
+        CRITICAL FIX: Uses component_path directly instead of project_layout paths to ensure
+        files are created in the correct location (e.g., src/components for mobile apps,
+        web/components for Next.js apps).
+        
+        Args:
+            task: The dynamic task
+            component_path: Path to the component from metadata (e.g., "src/components", "src/hooks")
+        
+        Returns:
+            List of file paths created
+        """
+        files_created = []
+        component_name = task.metadata.get("component_name", "Component")
+        component_type = task.metadata.get("component_type", "directory")
+        
+        # Extract base name from component_path (e.g., "components" from "src/components")
+        path_parts = component_path.split("/")
+        base_name = path_parts[-1] if path_parts else "component"
+        
+        # QA_Engineer: CRITICAL FIX - Use component_path directly, not project_layout paths
+        # This ensures files are created in the EXACT location specified by QA agent
+        if "src/components" in component_path or component_path == "src/components":
+            # Create file at the EXACT path specified (src/components for mobile apps)
+            relative_path = os.path.join(component_path, f"{component_name.title()}.tsx")
+            file_path = os.path.join(self.workspace_path, relative_path)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            content = self._generate_basic_component(component_name.title())
+            self.safe_write_file(relative_path, content)  # Use relative path for safe_write_file
+            files_created.append(relative_path)  # Store relative path for verification
+            self.logger.info(f"Created dynamic component at correct path: {relative_path}")
+        
+        elif "src/hooks" in component_path or component_path == "src/hooks":
+            # Create file at the EXACT path specified (src/hooks for mobile apps)
+            relative_path = os.path.join(component_path, f"use{component_name.title()}.ts")
+            file_path = os.path.join(self.workspace_path, relative_path)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            content = self._generate_basic_hook(component_name.title())
+            self.safe_write_file(relative_path, content)  # Use relative path for safe_write_file
+            files_created.append(relative_path)  # Store relative path for verification
+            self.logger.info(f"Created dynamic hook at correct path: {relative_path}")
+        
+        elif "src/store" in component_path or component_path == "src/store":
+            # Create file at the EXACT path specified (src/store for mobile apps)
+            relative_path = os.path.join(component_path, f"{component_name.title()}Store.ts")
+            file_path = os.path.join(self.workspace_path, relative_path)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            content = self._generate_basic_store(component_name.title())
+            self.safe_write_file(relative_path, content)  # Use relative path for safe_write_file
+            files_created.append(relative_path)  # Store relative path for verification
+            self.logger.info(f"Created dynamic store at correct path: {relative_path}")
+        
+        elif "src/theme" in component_path or component_path == "src/theme":
+            # Create file at the EXACT path specified (src/theme for mobile apps)
+            relative_path = os.path.join(component_path, "theme.ts")
+            file_path = os.path.join(self.workspace_path, relative_path)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            content = self._generate_basic_theme()
+            self.safe_write_file(relative_path, content)  # Use relative path for safe_write_file
+            files_created.append(relative_path)  # Store relative path for verification
+            self.logger.info(f"Created dynamic theme at correct path: {relative_path}")
+        
+        elif "web/components" in component_path or component_path == "web/components":
+            # Handle Next.js web app structure (web/components)
+            relative_path = os.path.join(component_path, f"{component_name.title()}.tsx")
+            file_path = os.path.join(self.workspace_path, relative_path)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            content = self._generate_basic_component(component_name.title())
+            self.safe_write_file(relative_path, content)  # Use relative path for safe_write_file
+            files_created.append(relative_path)  # Store relative path for verification
+            self.logger.info(f"Created dynamic component at correct path: {relative_path}")
+        
+        elif "assets/images" in component_path or component_path == "assets/images":
+            # Create a placeholder README for images directory
+            file_path = os.path.join(self.workspace_path, "assets", "images", "README.md")
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            content = "# Images Directory\n\nPlace your image assets here.\n"
+            self.safe_write_file("assets/images/README.md", content)
+            files_created.append("assets/images/README.md")
+            self.logger.info(f"Created dynamic images directory: assets/images/README.md")
+        
+        elif "assets/fonts" in component_path or component_path == "assets/fonts":
+            # Create a placeholder README for fonts directory
+            file_path = os.path.join(self.workspace_path, "assets", "fonts", "README.md")
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            content = "# Fonts Directory\n\nPlace your font files here.\n"
+            self.safe_write_file("assets/fonts/README.md", content)
+            files_created.append("assets/fonts/README.md")
+            self.logger.info(f"Created dynamic fonts directory: assets/fonts/README.md")
+        
+        return files_created
+    
+    def _generate_basic_component(self, name: str) -> str:
+        """Generate a basic React component."""
+        return f'''/**
+ * {name} Component
+ * Generated by FrontendAgent
+ */
+
+import React from "react";
+
+interface {name}Props {{
+  className?: string;
+}}
+
+const {name}: React.FC<{name}Props> = ({{ className }}) => {{
+  return (
+    <div className={{className}}>
+      <h2>{{name}}</h2>
+      {{/* Component implementation */}}
+    </div>
+  );
+}};
+
+export default {name};
+'''
+    
+    def _generate_basic_hook(self, name: str) -> str:
+        """Generate a basic React hook."""
+        return f'''/**
+ * use{name} Hook
+ * Generated by FrontendAgent
+ */
+
+import {{ useState, useEffect }} from "react";
+
+export const use{name} = () => {{
+  const [state, setState] = useState(null);
+  
+  useEffect(() => {{
+    // Hook implementation
+  }}, []);
+  
+  return {{ state }};
+}};
+'''
+    
+    def _generate_basic_store(self, name: str) -> str:
+        """Generate a basic store (Zustand)."""
+        return f'''/**
+ * {name} Store
+ * Generated by FrontendAgent
+ */
+
+import {{ create }} from "zustand";
+
+interface {name}State {{
+  value: string | null;
+  setValue: (value: string) => void;
+}}
+
+export const use{name}Store = create<{name}State>((set) => ({{
+  value: null,
+  setValue: (value: string) => set({{ value }}),
+}}));
+'''
+    
+    def _generate_basic_theme(self) -> str:
+        """Generate basic theme configuration."""
+        return '''/**
+ * Theme Configuration
+ * Generated by FrontendAgent
+ */
+
+export const theme = {
+  colors: {
+    primary: "#000000",
+    secondary: "#ffffff",
+  },
+  spacing: {
+    small: "0.5rem",
+    medium: "1rem",
+    large: "2rem",
+  },
+};
+'''
 
     def _create_theme_toggle(self, task: Task) -> str:
         """Create theme toggle component."""

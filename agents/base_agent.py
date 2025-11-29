@@ -107,6 +107,7 @@ class BaseAgent(ABC):
         self.project_id = project_id or os.getenv("Q2O_PROJECT_ID")
         self.tenant_id = tenant_id or (int(os.getenv("Q2O_TENANT_ID")) if os.getenv("Q2O_TENANT_ID") else None)
         self.db_task_ids: Dict[str, str] = {}  # Map task.id -> db_task_id
+        self.pending_backup_tasks: Dict[str, str] = {}  # QA_Engineer: logical_task_id -> db_task_id (for backup agents)
         self.orchestrator = orchestrator  # Reference to orchestrator for dependency access
         
         # CRITICAL: Validate and set workspace_path with hard security guarantees
@@ -175,6 +176,14 @@ class BaseAgent(ABC):
             self.message_broker.subscribe(f"agents.{self.agent_type.value}", message_handler)
             self.message_broker.subscribe(f"agents.{self.agent_id}", message_handler)
             
+            # QA_Engineer: Subscribe to project-specific channel for peer coordination
+            if self.project_id:
+                self.message_broker.subscribe(f"agents.{self.project_id}", message_handler)
+                self.logger.info(f"Subscribed to project channel: agents.{self.project_id}")
+            
+            # QA_Engineer: Setup task coordination handlers
+            self._setup_task_coordination_handlers()
+            
             # Announce presence
             self.announce_presence()
         except Exception as e:
@@ -184,9 +193,131 @@ class BaseAgent(ABC):
         """Announce agent presence (can be overridden)."""
         pass
     
+    def _setup_task_coordination_handlers(self):
+        """Setup handlers for task coordination messages."""
+        try:
+            from utils.message_protocol import MessageType
+            
+            if not hasattr(self, 'message_handlers'):
+                self.message_handlers = {}
+            
+            self.message_handlers[MessageType.TASK_COMPLETED_BY_PEER] = self._handle_task_completed_by_peer
+        except Exception as e:
+            self.logger.warning(f"Failed to setup task coordination handlers: {e}")
+    
+    def _handle_task_completed_by_peer(self, message_dict: Dict[str, Any]):
+        """
+        Handle message when peer agent completes a task we're also working on.
+        
+        QA_Engineer: This prevents duplicate database entries by marking our backup task
+        as completed using the peer's result.
+        """
+        try:
+            from utils.message_protocol import AgentMessage
+            
+            # Extract the actual message data
+            msg_data = message_dict.get("data", message_dict)
+            agent_msg = AgentMessage.from_dict(msg_data)
+            
+            # Don't process our own messages
+            if agent_msg.sender_agent_id == self.agent_id:
+                return
+            
+            logical_task_id = agent_msg.payload.get("logical_task_id")
+            peer_db_task_id = agent_msg.payload.get("peer_db_task_id")  # QA_Engineer: Fixed field name
+            peer_result = agent_msg.payload.get("peer_result")  # QA_Engineer: Fixed field name
+            project_id = agent_msg.payload.get("project_id")  # QA_Engineer: Get project_id from payload
+            peer_agent_id = agent_msg.sender_agent_id
+            
+            # QA_Engineer: Filter by project_id to avoid processing messages from other projects
+            if project_id and project_id != self.project_id:
+                self.logger.debug(f"Received peer completion message for different project {project_id}, ignoring")
+                return
+            
+            # QA_Engineer: BIDIRECTIONAL COORDINATION
+            # Handle peer completion for both main and backup agents
+            # Check if we have this task (either as backup or main)
+            our_db_task_id = None
+            is_our_backup_task = logical_task_id in self.pending_backup_tasks
+            
+            if is_our_backup_task:
+                # We're a backup agent and this was our tracked backup task
+                our_db_task_id = self.pending_backup_tasks[logical_task_id]
+            elif logical_task_id in self.db_task_ids:
+                # We're a main agent and we have this task
+                our_db_task_id = self.db_task_ids.get(logical_task_id)
+            
+            if our_db_task_id:
+                agent_role = "backup" if is_our_backup_task else "main"
+                self.logger.info(
+                    f"Peer agent {peer_agent_id} completed task {logical_task_id} first. "
+                    f"Marking our {agent_role} task {our_db_task_id} as completed."
+                )
+                
+                # Mark our task as completed in database
+                try:
+                    from agents.task_tracking import update_task_status_in_db, run_async
+                    run_async(update_task_status_in_db(
+                        task_id=our_db_task_id,
+                        status="completed",
+                        progress_percentage=100.0,
+                        execution_metadata={
+                            "completed_by_peer": peer_agent_id,
+                            "peer_db_task_id": peer_db_task_id,
+                            "backup_task": is_our_backup_task,
+                            "logical_task_id": logical_task_id,
+                            "agent_role": agent_role
+                        }
+                    ))
+                    
+                    # Remove from pending backup tasks if it was tracked
+                    if is_our_backup_task:
+                        del self.pending_backup_tasks[logical_task_id]
+                    
+                    # Remove from active_tasks if present and mark as completed
+                    if logical_task_id in self.active_tasks:
+                        task = self.active_tasks.pop(logical_task_id)
+                        task.complete(peer_result)
+                        task.status = TaskStatus.COMPLETED
+                        self.completed_tasks.append(task)
+                        self.logger.info(f"Marked {agent_role} task {logical_task_id} as completed locally")
+                    
+                except Exception as e:
+                    self.logger.error(f"Error marking {agent_role} task as completed: {e}", exc_info=True)
+        except Exception as e:
+            self.logger.error(f"Error handling peer completion message: {e}", exc_info=True)
+    
     def _handle_incoming_message(self, message_dict: Dict[str, Any]):
-        """Handle incoming message (can be overridden)."""
-        pass
+        """
+        Handle incoming message (ENHANCED with task coordination).
+        """
+        try:
+            from utils.message_protocol import AgentMessage, MessageType
+            
+            # Extract the actual message data
+            msg_data = message_dict.get("data", message_dict)
+            agent_msg = AgentMessage.from_dict(msg_data)
+            
+            # Check if message is for this agent
+            if agent_msg.target_agent_id and agent_msg.target_agent_id != self.agent_id:
+                return  # Not for us
+            
+            if agent_msg.target_agent_type and agent_msg.target_agent_type != self.agent_type.value:
+                return  # Not for our agent type
+            
+            # Don't process our own messages
+            if agent_msg.sender_agent_id == self.agent_id:
+                return
+            
+            # Route to appropriate handler
+            if hasattr(self, 'message_handlers'):
+                handler = self.message_handlers.get(agent_msg.message_type)
+                if handler:
+                    handler(message_dict)
+                else:
+                    self.logger.debug(f"No handler for message type {agent_msg.message_type.value}")
+        except Exception as e:
+            self.logger.debug(f"Error handling incoming message: {e}")
 
     @abstractmethod
     def process_task(self, task: Task) -> Task:
@@ -615,6 +746,12 @@ class BaseAgent(ABC):
                 if db_task_id:
                     self.db_task_ids[task.id] = db_task_id
                     self.logger.info(f"Successfully created database task {db_task_id} for {task.id}")
+                    
+                    # QA_Engineer: Track backup tasks for peer coordination
+                    if "_backup" in self.agent_id:
+                        # This is a backup agent - track the task for potential peer completion
+                        self.pending_backup_tasks[task.id] = db_task_id
+                        self.logger.debug(f"Tracked backup task {task.id} -> {db_task_id}")
                 else:
                     self.logger.warning(f"Failed to create database task for {task.id} (returned None)")
             except Exception as e:
@@ -745,6 +882,41 @@ class BaseAgent(ABC):
                     execution_metadata=execution_metadata if execution_metadata else None,
                 ))
                 self.logger.info(f"Updated database task {db_task_id} to completed")
+                
+                # QA_Engineer: Notify peer agents (main or backup) that we completed this task first
+                # BIDIRECTIONAL: Both main and backup agents can notify each other
+                # Only notify if we completed first (not already notified by peer)
+                is_backup_agent = "_backup" in self.agent_id
+                is_tracked_backup = task_id in self.pending_backup_tasks
+                
+                # Notify peers if:
+                # 1. We're a backup agent AND this was our tracked backup task (we completed first)
+                # 2. We're a main agent AND this is NOT a tracked backup task (we completed first)
+                should_notify = (is_backup_agent and is_tracked_backup) or (not is_backup_agent and not is_tracked_backup)
+                
+                if should_notify and self.enable_messaging:
+                    try:
+                        from utils.message_protocol import create_task_completed_by_peer_message
+                        from utils.message_broker import get_default_broker
+                        
+                        message = create_task_completed_by_peer_message(
+                            sender_agent_id=self.agent_id,
+                            sender_agent_type=self.agent_type.value,
+                            logical_task_id=task_id,
+                            peer_db_task_id=db_task_id,
+                            peer_result=result,
+                            project_id=self.project_id  # QA_Engineer: Include project_id for filtering
+                        )
+                        
+                        broker = get_default_broker()
+                        broker.publish(message.channel, message.to_dict())
+                        
+                        self.logger.debug(
+                            f"Notified peer agents of task completion: {task_id} "
+                            f"(agent_type: {'backup' if is_backup_agent else 'main'})"
+                        )
+                    except Exception as e:
+                        self.logger.warning(f"Failed to notify peer agents: {e}")
             except Exception as e:
                 self.logger.warning(f"Failed to update task in database: {e}")
         

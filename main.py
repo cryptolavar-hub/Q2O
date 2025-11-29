@@ -466,6 +466,7 @@ class AgentSystem:
         # Process tasks iteratively
         # QA_Engineer - Dynamic max iterations: 50 iterations per task (e.g., 50 x 50 tasks = 2500 iterations)
         max_iterations = 50 * len(tasks) if len(tasks) > 0 else 100
+        initial_max_iterations = max_iterations  # Store initial value
         iteration = 0
         
         # QA_Engineer: Check if main process logging is enabled (default: false for production)
@@ -573,7 +574,35 @@ class AgentSystem:
             if main_process_logging_enabled:
                 self.logger.info(f"Project status: {status}")
             
-            if status["completion_percentage"] == 100:
+            # QA_Engineer: Recalculate max_iterations if dynamic tasks were added
+            current_total_tasks = len(self.orchestrator.project_tasks)
+            new_max_iterations = 50 * current_total_tasks if current_total_tasks > 0 else 100
+            if new_max_iterations > max_iterations:
+                max_iterations = new_max_iterations
+                if main_process_logging_enabled:
+                    self.logger.info(
+                        f"Adjusted max_iterations to {max_iterations} for {current_total_tasks} total tasks "
+                        f"(initial: {initial_max_iterations}, dynamic tasks added: {current_total_tasks - len(tasks)})"
+                    )
+            
+            # QA_Engineer: Check for pending QA feedback tasks before considering completion
+            has_pending_qa_tasks = False
+            if hasattr(self.orchestrator, 'pending_missing_tasks') and self.orchestrator.pending_missing_tasks:
+                has_pending_qa_tasks = len(self.orchestrator.pending_missing_tasks) > 0
+            
+            # Also check if there are tasks with created_by qa_feedback metadata
+            if not has_pending_qa_tasks:
+                try:
+                    pending_qa_feedback = [
+                        t for t in self.orchestrator.project_tasks.values()
+                        if t.metadata.get('created_by') == 'qa_feedback' and
+                        t.status not in [TaskStatus.COMPLETED, TaskStatus.FAILED]
+                    ]
+                    has_pending_qa_tasks = len(pending_qa_feedback) > 0
+                except Exception:
+                    pass
+            
+            if status["completion_percentage"] == 100 and not has_pending_qa_tasks:
                 if main_process_logging_enabled:
                     self.logger.info("All tasks completed!")
                 # QA_Engineer: Solution 2 - Batch Commits - Flush pending commits when project completes
@@ -588,6 +617,12 @@ class AgentSystem:
                     if main_process_logging_enabled:
                         self.logger.debug(f"Failed to flush batch commits (optional): {e}")
                 break
+            elif status["completion_percentage"] == 100 and has_pending_qa_tasks:
+                if main_process_logging_enabled:
+                    self.logger.info(
+                        f"Project appears complete but has {len(self.orchestrator.pending_missing_tasks) if hasattr(self.orchestrator, 'pending_missing_tasks') else 0} "
+                        f"pending QA feedback tasks. Continuing execution..."
+                    )
             
             # QA_Engineer: Check if iteration limit reached
             if iteration >= max_iterations:
@@ -608,6 +643,17 @@ class AgentSystem:
                     if main_process_logging_enabled:
                         self.logger.error("Some tasks failed - stopping")
                     break
+                elif has_pending_qa_tasks:
+                    # QA_Engineer: Don't exit if there are pending QA feedback tasks
+                    # This allows QA feedback to be resolved even if all current tasks are completed
+                    if main_process_logging_enabled:
+                        pending_count = len(self.orchestrator.pending_missing_tasks) if hasattr(self.orchestrator, 'pending_missing_tasks') else 0
+                        self.logger.info(
+                            f"All tasks completed but {pending_count} QA feedback tasks pending. "
+                            f"Continuing execution to resolve missing components..."
+                        )
+                    # Continue execution to allow QA feedback resolution
+                    # Don't break - let the loop continue
                 else:
                     break
         

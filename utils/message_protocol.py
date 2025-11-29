@@ -19,6 +19,7 @@ class MessageType(Enum):
     AGENT_DISCOVERY = "agent_discovery"
     COORDINATION = "coordination"
     STATUS_UPDATE = "status_update"
+    TASK_COMPLETED_BY_PEER = "task_completed_by_peer"  # QA_Engineer: For main/backup coordination
 
 
 @dataclass
@@ -175,5 +176,53 @@ def create_agent_discovery_message(
         payload={
             "capabilities": capabilities
         }
+    )
+
+
+def create_task_completed_by_peer_message(
+    sender_agent_id: str,
+    sender_agent_type: str,
+    logical_task_id: str,
+    peer_db_task_id: str,
+    peer_result: Any,
+    project_id: str,
+    correlation_id: Optional[str] = None
+) -> AgentMessage:
+    """
+    Create a message when an agent completes a task that has a backup.
+    
+    QA_Engineer: This message is used for main/backup agent coordination.
+    When a main agent completes a task first, it broadcasts this message to
+    backup agents so they can mark their backup task as completed without
+    creating duplicate database entries.
+    
+    Args:
+        sender_agent_id: ID of the agent that completed the task
+        sender_agent_type: Type of the agent (e.g., "researcher", "coder")
+        logical_task_id: The logical task ID (e.g., "task_0001_researcher")
+        peer_db_task_id: Database task ID created by the sender (peer)
+        peer_result: Task result from the peer
+        project_id: Project ID for filtering messages
+        correlation_id: Optional correlation ID for tracking
+    
+    Returns:
+        AgentMessage configured for peer notification
+    """
+    import uuid
+    
+    return AgentMessage(
+        message_id=str(uuid.uuid4()),
+        message_type=MessageType.TASK_COMPLETED_BY_PEER,
+        sender_agent_id=sender_agent_id,
+        sender_agent_type=sender_agent_type,
+        payload={
+            "logical_task_id": logical_task_id,
+            "peer_db_task_id": peer_db_task_id,  # QA_Engineer: Renamed for clarity
+            "peer_result": peer_result,  # QA_Engineer: Renamed for clarity
+            "project_id": project_id,  # QA_Engineer: Added project_id for filtering
+            "status": "completed"
+        },
+        channel=f"agents.{project_id}",  # QA_Engineer: Send to project-specific channel for all agents in that project
+        correlation_id=correlation_id
     )
 

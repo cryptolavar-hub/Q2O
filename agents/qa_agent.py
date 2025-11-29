@@ -66,16 +66,26 @@ class QAAgent(BaseAgent):
             # Generate overall QA report
             qa_report = self._generate_qa_report(qa_results, task)
             
+            # QA_Engineer: Analyze project structure completeness
+            structure_analysis = self._analyze_project_structure(task)
+            
             # Update task metadata
             task.metadata["qa_results"] = qa_results
             task.metadata["qa_report"] = qa_report
+            task.metadata["structure_analysis"] = structure_analysis
+            
             task.result = {
                 "files_reviewed": files_to_review,
                 "qa_results": qa_results,
                 "overall_score": avg_score,
                 "qa_report": qa_report,
+                "structure_analysis": structure_analysis,
                 "status": "passed" if avg_score >= 70 else "needs_improvement"
             }
+            
+            # If structure is incomplete, notify Orchestrator
+            if structure_analysis.get("missing_components"):
+                self._notify_orchestrator_missing_tasks(structure_analysis, task)
 
             self.complete_task(task.id, task.result)
             self.logger.info(f"Completed QA task {task.id} with score {avg_score:.2f}")
@@ -452,4 +462,370 @@ class QAAgent(BaseAgent):
         }
         
         return report
+    
+    def _analyze_project_structure(self, task: Task) -> Dict[str, Any]:
+        """
+        Analyze if project structure is complete based on tech stack and objective.
+        
+        QA_Engineer: This method checks if all expected directories and files exist
+        for a complete project structure. It detects missing components, services,
+        hooks, types, utils, etc.
+        
+        **ENHANCED**: Now uses project structure blueprint from Orchestrator if available.
+        This is like an inspector having the blueprint before checking the work site.
+        
+        Args:
+            task: The QA task
+        
+        Returns:
+            {
+                "is_complete": bool,
+                "missing_components": [
+                    {"type": "component", "name": "Button", "path": "src/components/Button.tsx"},
+                    {"type": "service", "name": "authService", "path": "src/services/authService.ts"},
+                    ...
+                ],
+                "existing_components": [...],
+                "recommendations": [...]
+            }
+        """
+        structure_analysis = {
+            "is_complete": True,
+            "missing_components": [],
+            "existing_components": [],
+            "recommendations": []
+        }
+        
+        # QA_Engineer: Get project structure blueprint from Orchestrator (if available)
+        # This is the "blueprint" that tells us what SHOULD exist
+        structure_blueprint = None
+        if self.orchestrator and hasattr(self.orchestrator, 'get_project_structure_blueprint'):
+            try:
+                structure_blueprint = self.orchestrator.get_project_structure_blueprint()
+                if structure_blueprint:
+                    self.logger.info(
+                        f"[BLUEPRINT] Using structure blueprint for {structure_blueprint.get('project_type', 'unknown')} project"
+                    )
+            except Exception as e:
+                self.logger.debug(f"Could not get structure blueprint from Orchestrator: {e}")
+        
+        # Determine expected structure based on tech stack
+        tech_stack = task.metadata.get("tech_stack", [])
+        objective_type = task.metadata.get("objective_type", "unknown")
+        project_metadata = task.metadata.get("project_metadata", {})
+        objective_classification = project_metadata.get("objective_classification", {})
+        
+        # Get objective type from classification if available
+        if objective_classification:
+            objective_type = objective_classification.get("type", objective_type)
+            tech_stack = objective_classification.get("tech_stack", tech_stack)
+        
+        # QA_Engineer: Use blueprint if available, otherwise fall back to hardcoded expectations
+        if structure_blueprint:
+            # Use blueprint to check structure
+            expected_dirs = structure_blueprint.get("expected_directories", [])
+            expected_files = structure_blueprint.get("expected_files", [])
+            
+            self.logger.info(
+                f"[BLUEPRINT] Checking {len(expected_dirs)} directories and {len(expected_files)} files "
+                f"from blueprint"
+            )
+            
+            # Check directories from blueprint
+            for dir_spec in expected_dirs:
+                dir_path = dir_spec.get("path", "")
+                required = dir_spec.get("required", True)
+                description = dir_spec.get("description", "")
+                
+                full_path = os.path.join(self.workspace_path, dir_path)
+                if os.path.exists(full_path):
+                    try:
+                        files = [f for f in os.listdir(full_path) 
+                                if os.path.isfile(os.path.join(full_path, f)) and not f.startswith('.')]
+                        if not files:
+                            # QA_Engineer: Check if files exist in wrong location (e.g., web/components instead of src/components)
+                            wrong_location = self._check_wrong_location(dir_path)
+                            if wrong_location:
+                                structure_analysis["missing_components"].append({
+                                    "type": dir_path.split("/")[-1],
+                                    "name": f"{dir_path} directory",
+                                    "path": dir_path,
+                                    "reason": f"Directory exists but is empty. Files found in wrong location: {wrong_location}",
+                                    "required": required,
+                                    "wrong_location": wrong_location
+                                })
+                            else:
+                                structure_analysis["missing_components"].append({
+                                    "type": dir_path.split("/")[-1],
+                                    "name": f"{dir_path} directory",
+                                    "path": dir_path,
+                                    "reason": f"Directory exists but is empty ({description})",
+                                    "required": required
+                                })
+                            if required:
+                                structure_analysis["is_complete"] = False
+                        else:
+                            structure_analysis["existing_components"].append({
+                                "type": dir_path.split("/")[-1],
+                                "path": dir_path,
+                                "file_count": len(files),
+                                "description": description
+                            })
+                    except Exception as e:
+                        self.logger.debug(f"Error checking directory {dir_path}: {e}")
+                else:
+                    structure_analysis["missing_components"].append({
+                        "type": dir_path.split("/")[-1],
+                        "name": f"{dir_path} directory",
+                        "path": dir_path,
+                        "reason": f"Directory does not exist ({description})",
+                        "required": required
+                    })
+                    if required:
+                        structure_analysis["is_complete"] = False
+            
+            # Check files from blueprint
+            for file_spec in expected_files:
+                file_path = file_spec.get("path", "")
+                required = file_spec.get("required", True)
+                description = file_spec.get("description", "")
+                
+                full_path = os.path.join(self.workspace_path, file_path)
+                if not os.path.exists(full_path):
+                    structure_analysis["missing_components"].append({
+                        "type": "file",
+                        "name": file_path.split("/")[-1],
+                        "path": file_path,
+                        "reason": f"File does not exist ({description})",
+                        "required": required
+                    })
+                    if required:
+                        structure_analysis["is_complete"] = False
+                else:
+                    structure_analysis["existing_components"].append({
+                        "type": "file",
+                        "path": file_path,
+                        "description": description
+                    })
+            
+            # Use blueprint-based analysis
+            return structure_analysis
+        
+        # Check for React Native mobile app
+        if "React Native" in str(tech_stack) or "Expo" in str(tech_stack) or objective_type == "mobile_app":
+            expected_dirs = {
+                "components": "src/components/",
+                "services": "src/services/",
+                "hooks": "src/hooks/",
+                "store": "src/store/",
+                "theme": "src/theme/",
+                "types": "src/types/",
+                "utils": "src/utils/"
+            }
+            
+            for dir_name, dir_path in expected_dirs.items():
+                full_path = os.path.join(self.workspace_path, dir_path)
+                if os.path.exists(full_path):
+                    # Check if directory is empty
+                    try:
+                        files = [f for f in os.listdir(full_path) 
+                                if os.path.isfile(os.path.join(full_path, f)) and not f.startswith('.')]
+                        if not files:
+                            structure_analysis["missing_components"].append({
+                                "type": dir_name,
+                                "name": f"{dir_name} directory",
+                                "path": dir_path,
+                                "reason": "Directory exists but is empty"
+                            })
+                            structure_analysis["is_complete"] = False
+                        else:
+                            structure_analysis["existing_components"].append({
+                                "type": dir_name,
+                                "path": dir_path,
+                                "file_count": len(files)
+                            })
+                    except Exception as e:
+                        self.logger.debug(f"Error checking directory {dir_path}: {e}")
+                else:
+                    structure_analysis["missing_components"].append({
+                        "type": dir_name,
+                        "name": f"{dir_name} directory",
+                        "path": dir_path,
+                        "reason": "Directory does not exist"
+                    })
+                    structure_analysis["is_complete"] = False
+        
+        # Check for Next.js web app
+        elif "Next.js" in str(tech_stack) or ("React" in str(tech_stack) and objective_type == "web_app"):
+            expected_dirs = {
+                "components": "src/components/",
+                "services": "src/services/",
+                "hooks": "src/hooks/",
+                "utils": "src/utils/",
+                "types": "src/types/",
+                "styles": "src/styles/"
+            }
+            
+            for dir_name, dir_path in expected_dirs.items():
+                full_path = os.path.join(self.workspace_path, dir_path)
+                if os.path.exists(full_path):
+                    try:
+                        files = [f for f in os.listdir(full_path) 
+                                if os.path.isfile(os.path.join(full_path, f)) and not f.startswith('.')]
+                        if not files:
+                            structure_analysis["missing_components"].append({
+                                "type": dir_name,
+                                "name": f"{dir_name} directory",
+                                "path": dir_path,
+                                "reason": "Directory exists but is empty"
+                            })
+                            structure_analysis["is_complete"] = False
+                    except Exception:
+                        pass
+                else:
+                    structure_analysis["missing_components"].append({
+                        "type": dir_name,
+                        "name": f"{dir_name} directory",
+                        "path": dir_path,
+                        "reason": "Directory does not exist"
+                    })
+                    structure_analysis["is_complete"] = False
+        
+        # Check for Python backend
+        elif "FastAPI" in str(tech_stack) or ("Python" in str(tech_stack) and objective_type == "api_service"):
+            expected_dirs = {
+                "services": "src/services/",
+                "models": "src/models/",
+                "schemas": "src/schemas/",
+                "utils": "src/utils/",
+                "config": "src/config/"
+            }
+            
+            for dir_name, dir_path in expected_dirs.items():
+                full_path = os.path.join(self.workspace_path, dir_path)
+                if os.path.exists(full_path):
+                    try:
+                        files = [f for f in os.listdir(full_path) 
+                                if os.path.isfile(os.path.join(full_path, f)) and not f.startswith('.')]
+                        if not files:
+                            structure_analysis["missing_components"].append({
+                                "type": dir_name,
+                                "name": f"{dir_name} directory",
+                                "path": dir_path,
+                                "reason": "Directory exists but is empty"
+                            })
+                            structure_analysis["is_complete"] = False
+                    except Exception:
+                        pass
+                else:
+                    structure_analysis["missing_components"].append({
+                        "type": dir_name,
+                        "name": f"{dir_name} directory",
+                        "path": dir_path,
+                        "reason": "Directory does not exist"
+                    })
+                    structure_analysis["is_complete"] = False
+        
+        # Generate recommendations
+        if structure_analysis["missing_components"]:
+            structure_analysis["recommendations"].append(
+                f"Project structure is incomplete. Missing {len(structure_analysis['missing_components'])} components. "
+                "Consider creating tasks to generate missing components, services, hooks, types, and utilities."
+            )
+        
+        return structure_analysis
+    
+    def _check_wrong_location(self, expected_path: str) -> Optional[str]:
+        """
+        QA_Engineer: Check if files exist in wrong location (e.g., web/components instead of src/components).
+        
+        This helps identify when tasks created files but in the wrong directory structure.
+        
+        Args:
+            expected_path: The expected directory path (e.g., "src/components")
+            
+        Returns:
+            Path where files were found (if wrong location), None otherwise
+        """
+        try:
+            # Common wrong location patterns
+            wrong_locations = []
+            
+            # If expecting src/components, check web/components
+            if "src/components" in expected_path:
+                wrong_locations.append("web/components")
+            if "src/hooks" in expected_path:
+                wrong_locations.append("web/components")  # Hooks might be in web/components
+            if "src/store" in expected_path:
+                wrong_locations.append("web/components")  # Store might be in web/components
+            if "src/theme" in expected_path:
+                wrong_locations.append("web/components")  # Theme might be in web/components
+            
+            # Check each wrong location
+            for wrong_path in wrong_locations:
+                full_wrong_path = os.path.join(self.workspace_path, wrong_path)
+                if os.path.exists(full_wrong_path):
+                    try:
+                        files = [f for f in os.listdir(full_wrong_path) 
+                                if os.path.isfile(os.path.join(full_wrong_path, f)) and not f.startswith('.')]
+                        if files:
+                            # Found files in wrong location
+                            self.logger.warning(
+                                f"[QA] Found {len(files)} files in wrong location: {wrong_path} "
+                                f"(expected: {expected_path})"
+                            )
+                            return wrong_path
+                    except Exception:
+                        pass
+            
+            return None
+        except Exception as e:
+            self.logger.debug(f"Error checking wrong location for {expected_path}: {e}")
+            return None
+    
+    def _notify_orchestrator_missing_tasks(self, structure_analysis: Dict, task: Task):
+        """
+        Notify Orchestrator about missing tasks that need to be created.
+        
+        QA_Engineer: When QA detects missing components, it sends a message to
+        the Orchestrator to create tasks for generating those components.
+        
+        Args:
+            structure_analysis: Structure analysis results
+            task: The QA task
+        """
+        try:
+            from utils.message_protocol import MessageType, AgentMessage
+            from utils.message_broker import get_default_broker
+            import uuid
+            
+            if not self.enable_messaging:
+                self.logger.debug("Messaging disabled, skipping Orchestrator notification")
+                return
+            
+            message = AgentMessage(
+                message_id=str(uuid.uuid4()),
+                message_type=MessageType.COORDINATION,
+                sender_agent_id=self.agent_id,
+                sender_agent_type=self.agent_type.value,
+                payload={
+                    "action": "missing_tasks_detected",
+                    "project_id": self.project_id,
+                    "missing_components": structure_analysis.get("missing_components", []),
+                    "task_id": task.id,
+                    "recommendations": structure_analysis.get("recommendations", [])
+                },
+                target_agent_type="orchestrator",
+                channel="agents.orchestrator"
+            )
+            
+            broker = get_default_broker()
+            broker.publish(message.channel, message.to_dict())
+            
+            self.logger.info(
+                f"Notified Orchestrator of {len(structure_analysis.get('missing_components', []))} "
+                f"missing components for project {self.project_id}"
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to notify Orchestrator: {e}", exc_info=True)
 

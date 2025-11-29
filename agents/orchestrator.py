@@ -62,6 +62,8 @@ class OrchestratorAgent(BaseAgent):
         self.task_queue: List[Task] = []
         self.max_task_size: int = 100  # Maximum size/complexity for a single task
         self.project_id = project_id
+        self.pending_missing_tasks: List[Dict[str, Any]] = []  # QA_Engineer: Tasks to create from QA feedback
+        self.project_structure_blueprint: Optional[Dict[str, Any]] = None  # QA_Engineer: Expected project structure from LLM breakdown
         
         # LLM Integration (Phase 2 - November 2025)
         self.use_llm = os.getenv("Q2O_USE_LLM", "true").lower() == "true"
@@ -79,6 +81,32 @@ class OrchestratorAgent(BaseAgent):
                 logging.warning("[WARNING] OrchestratorAgent: LLM requested but not available, using rules only")
             else:
                 logging.info("[INFO] OrchestratorAgent: LLM disabled, using rules only")
+        
+        # QA_Engineer: Setup QA feedback handlers for dynamic task creation
+        # Register handler for COORDINATION messages from QA agent
+        if self.enable_messaging:
+            try:
+                from utils.message_protocol import MessageType
+                from utils.message_broker import get_default_broker
+                
+                # Ensure message_handlers dict exists
+                if not hasattr(self, 'message_handlers'):
+                    self.message_handlers = {}
+                
+                # Register handler for COORDINATION messages
+                self.message_handlers[MessageType.COORDINATION] = self._handle_qa_feedback
+                
+                # Subscribe to orchestrator-specific channel (QA sends to "agents.orchestrator")
+                if self.message_broker:
+                    def orchestrator_message_handler(msg_dict):
+                        self._handle_incoming_message(msg_dict)
+                    
+                    self.message_broker.subscribe("agents.orchestrator", orchestrator_message_handler)
+                    self.logger.info("OrchestratorAgent subscribed to QA feedback channel: agents.orchestrator")
+                
+                self.logger.info("Registered QA feedback handler for dynamic task creation")
+            except Exception as e:
+                self.logger.warning(f"Failed to register QA feedback handler: {e}")
 
     def register_agent(self, agent: BaseAgent):
         """
@@ -127,6 +155,15 @@ class OrchestratorAgent(BaseAgent):
                 pass
 
         self.logger.info(f"Created {len(tasks)} tasks from project breakdown")
+        
+        # QA_Engineer: If blueprint was created during task breakdown, log it
+        if self.project_structure_blueprint:
+            blueprint_count = len(self.project_structure_blueprint)
+            self.logger.info(
+                f"[BLUEPRINT] Project structure blueprint available for QA agent "
+                f"({blueprint_count} objective{'s' if blueprint_count > 1 else ''})"
+            )
+        
         return tasks
 
     def _analyze_objective(self, objective: str, context: str, start_counter: int) -> List[Task]:
@@ -225,8 +262,52 @@ First, analyze and classify the objective to understand:
 - What TECHNOLOGIES are likely needed? (React Native, Python, FastAPI, Next.js, blockchain, ML frameworks, etc.)
 - What COMPLEXITY level? (low, medium, high)
 
-**STEP 2: CREATE INTELLIGENT TASK BREAKDOWN**
+**STEP 2: ANALYZE PROJECT STRUCTURE REQUIREMENTS**
+Based on the objective type and tech stack, determine what COMPLETE project structure is needed:
+
+For MOBILE_APP (React Native/Expo):
+- ✅ Core files: App.tsx, package.json, tsconfig.json, AndroidManifest.xml, Info.plist
+- ✅ Screens: All feature screens (authentication, profile, content posting, etc.)
+- ✅ Components: Reusable UI components (Button, Input, Card, etc.)
+- ✅ Navigation: Navigation setup (StackNavigator, TabNavigator, etc.)
+- ✅ Services: API clients, Firebase services, storage services
+- ✅ Hooks: Custom React hooks (useAuth, useApi, etc.)
+- ✅ Store: State management (Redux/Zustand setup)
+- ✅ Theme: Colors, typography, spacing configuration
+- ✅ Types: TypeScript type definitions
+- ✅ Utils: Helper functions, formatters, validators
+
+For WEB_APP (Next.js/React):
+- ✅ Pages: All route pages
+- ✅ Components: Reusable UI components
+- ✅ API Routes: Backend API endpoints
+- ✅ Services: API clients, external service integrations
+- ✅ Hooks: Custom React hooks
+- ✅ Utils: Helper functions
+- ✅ Types: TypeScript definitions
+- ✅ Styles: CSS/styled-components configuration
+
+For BACKEND_API (FastAPI/Python):
+- ✅ API Routes: All endpoint files
+- ✅ Models: Database models (SQLAlchemy)
+- ✅ Services: Business logic services
+- ✅ Schemas: Pydantic schemas
+- ✅ Utils: Helper functions
+- ✅ Config: Configuration management
+- ✅ Middleware: Custom middleware
+
+**STEP 3: CREATE COMPREHENSIVE TASK BREAKDOWN**
 Based on your understanding, break down the objective into a sequence of implementation tasks.
+
+CRITICAL: Include tasks for EVERY component of the project structure, not just the main features:
+1. Project scaffolding (package.json, config files)
+2. Core infrastructure (navigation, routing, state management setup)
+3. Reusable components (even if not explicitly mentioned)
+4. Service layer (API clients, external integrations)
+5. Type definitions (TypeScript types, Pydantic schemas)
+6. Utility functions (helpers, formatters, validators)
+7. Theme/styling configuration
+8. Testing infrastructure
 
 Available Agent Types:
 - RESEARCHER: Web research for documentation, best practices, code examples (use for new/unfamiliar technologies)
@@ -305,6 +386,10 @@ Return JSON:
 - QA tasks at the end
 - Security tasks after implementation
 - Use dependency indices (0-based) to reference prior tasks
+- **ALWAYS include scaffolding, infrastructure, and structural tasks**
+- **ALWAYS include reusable components, services, hooks, types, utils**
+- **Think about what a COMPLETE, PRODUCTION-READY project needs**
+- **Don't just focus on feature screens - include all supporting infrastructure**
 - **Think beyond keywords** - understand the objective's true nature and requirements"""
         
         user_prompt = f"""Objective: {objective}
@@ -365,6 +450,24 @@ Project Context: {context}
                     f"(platforms: {classification.get('platforms', [])}, "
                     f"domain: {classification.get('domain', 'unknown')}, "
                     f"complexity: {classification.get('complexity', 'unknown')})"
+                )
+                
+                # QA_Engineer: Extract and store project structure blueprint from LLM response
+                # This blueprint defines what the COMPLETE project structure should be
+                project_type = classification.get('type', 'unknown')
+                tech_stack = classification.get('tech_stack', [])
+                
+                # Build structure blueprint based on project type and tech stack
+                structure_blueprint = self._build_structure_blueprint(project_type, tech_stack, classification)
+                
+                # Store blueprint for QA agent to use (key by objective for multi-objective projects)
+                if not self.project_structure_blueprint:
+                    self.project_structure_blueprint = {}
+                self.project_structure_blueprint[objective] = structure_blueprint
+                
+                self.logger.info(
+                    f"[BLUEPRINT] Stored structure blueprint for {project_type} project "
+                    f"with {len(structure_blueprint.get('expected_directories', []))} expected directories"
                 )
             
             task_specs = result.get('tasks', [])
@@ -1058,6 +1161,25 @@ Project Context: {context}
             else:
                 self.logger.error(f"Task {task_id} failed after {retry_count} retries, giving up")
 
+    def _clear_completed_missing_tasks(self):
+        """
+        QA_Engineer: Remove completed/failed tasks from pending_missing_tasks.
+        This prevents infinite loop warnings when tasks are already done.
+        """
+        if not self.pending_missing_tasks:
+            return
+        
+        # Filter out completed/failed tasks
+        remaining_tasks = [
+            task for task in self.pending_missing_tasks
+            if task.status not in [TaskStatus.COMPLETED, TaskStatus.FAILED]
+        ]
+        
+        if len(remaining_tasks) != len(self.pending_missing_tasks):
+            cleared_count = len(self.pending_missing_tasks) - len(remaining_tasks)
+            self.logger.debug(f"Cleared {cleared_count} completed/failed tasks from pending_missing_tasks")
+            self.pending_missing_tasks = remaining_tasks
+
     def get_project_status(self) -> Dict[str, Any]:
         """
         Get overall project status.
@@ -1072,7 +1194,7 @@ Project Context: {context}
         blocked = sum(1 for t in self.project_tasks.values() if t.status == TaskStatus.BLOCKED)
         pending = sum(1 for t in self.project_tasks.values() if t.status == TaskStatus.PENDING)
 
-        return {
+        status = {
             "total_tasks": total_tasks,
             "completed": completed,
             "in_progress": in_progress,
@@ -1081,4 +1203,515 @@ Project Context: {context}
             "pending": pending,
             "completion_percentage": (completed / total_tasks * 100) if total_tasks > 0 else 0
         }
+        
+        # QA_Engineer: Clear completed/failed tasks from pending_missing_tasks
+        self._clear_completed_missing_tasks()
+        
+        # QA_Engineer: Check if we're near completion but have pending missing tasks
+        if status["completion_percentage"] >= 90 and self.pending_missing_tasks:
+            status["warning"] = f"{len(self.pending_missing_tasks)} missing components detected by QA"
+        
+        return status
+    
+    def _handle_qa_feedback(self, message_dict: Dict[str, Any]):
+        """
+        QA_Engineer: Handle incoming QA feedback regarding missing components or incomplete structure.
+        Dynamically creates new tasks for missing components.
+        
+        Args:
+            message_dict: Message dictionary from message broker
+        """
+        try:
+            from utils.message_protocol import AgentMessage
+            
+            # Extract the actual message data
+            msg_data = message_dict.get("data", message_dict)
+            agent_msg = AgentMessage.from_dict(msg_data)
+            
+            # Verify this is a QA feedback message
+            if agent_msg.message_type.value != "coordination":
+                self.logger.debug(f"Ignoring non-coordination message: {agent_msg.message_type.value}")
+                return
+            
+            payload = agent_msg.payload
+            action = payload.get("action")
+            
+            if action != "missing_tasks_detected":
+                self.logger.debug(f"Ignoring coordination message with action: {action}")
+                return
+            
+            project_id = payload.get("project_id")
+            missing_components = payload.get("missing_components", [])
+            
+            # Verify this message is for our project
+            if project_id != self.project_id:
+                self.logger.debug(f"Received QA feedback for different project {project_id}, ignoring")
+                return
+            
+            if not missing_components:
+                self.logger.debug("QA feedback has no missing components, ignoring")
+                return
+            
+            self.logger.info(
+                f"Received QA feedback: {len(missing_components)} missing components detected. "
+                f"Creating dynamic tasks."
+            )
+            
+            # Create new tasks for missing components
+            new_tasks = self._create_tasks_for_missing_components(missing_components)
+            
+            if new_tasks:
+                self.logger.info(f"Created {len(new_tasks)} new tasks for missing components")
+                
+                # Add tasks to project_tasks and task_queue
+                for task in new_tasks:
+                    self.project_tasks[task.id] = task
+                    self.task_queue.append(task)
+                    self.pending_missing_tasks.append(task)  # Track dynamically created tasks
+                    
+                    # Register task in global registry
+                    try:
+                        from utils.task_registry import register_task
+                        register_task(task)
+                    except ImportError:
+                        pass
+                    
+                    self.logger.info(f"Added dynamic task: {task.title} (ID: {task.id})")
+                
+                # Redistribute tasks to include new ones
+                self.distribute_tasks()
+            else:
+                self.logger.warning("Failed to create tasks for missing components")
+                
+        except Exception as e:
+            self.logger.error(f"Error handling QA feedback: {e}", exc_info=True)
+    
+    def _create_tasks_for_missing_components(self, missing_components: List[str]) -> List[Task]:
+        """
+        QA_Engineer: Create tasks for missing project components detected by QA.
+        
+        Args:
+            missing_components: List of missing component paths (e.g., ["src/components", "src/services"])
+            
+        Returns:
+            List of new tasks created for missing components
+        """
+        new_tasks = []
+        task_counter = len(self.project_tasks) + 1  # Start counter after existing tasks
+        
+        # Map component paths to agent types and task descriptions
+        component_mapping = {
+            "src/components": {
+                "agent_type": AgentType.FRONTEND if any("nextjs" in str(t.tech_stack).lower() or "react" in str(t.tech_stack).lower() for t in self.project_tasks.values()) else AgentType.MOBILE,
+                "title_prefix": "Frontend: " if any("nextjs" in str(t.tech_stack).lower() or "react" in str(t.tech_stack).lower() for t in self.project_tasks.values()) else "Mobile: ",
+                "description": "Create reusable UI components"
+            },
+            "src/screens": {
+                "agent_type": AgentType.MOBILE,
+                "title_prefix": "Mobile: ",
+                "description": "Create mobile app screens"
+            },
+            "src/services": {
+                "agent_type": AgentType.CODER,
+                "title_prefix": "Backend: ",
+                "description": "Create service layer for API calls and business logic"
+            },
+            "src/hooks": {
+                "agent_type": AgentType.FRONTEND if any("nextjs" in str(t.tech_stack).lower() or "react" in str(t.tech_stack).lower() for t in self.project_tasks.values()) else AgentType.MOBILE,
+                "title_prefix": "Frontend: " if any("nextjs" in str(t.tech_stack).lower() or "react" in str(t.tech_stack).lower() for t in self.project_tasks.values()) else "Mobile: ",
+                "description": "Create custom React hooks"
+            },
+            "src/store": {
+                "agent_type": AgentType.FRONTEND if any("nextjs" in str(t.tech_stack).lower() or "react" in str(t.tech_stack).lower() for t in self.project_tasks.values()) else AgentType.MOBILE,
+                "title_prefix": "Frontend: " if any("nextjs" in str(t.tech_stack).lower() or "react" in str(t.tech_stack).lower() for t in self.project_tasks.values()) else "Mobile: ",
+                "description": "Set up state management store (Redux/Zustand)"
+            },
+            "src/theme": {
+                "agent_type": AgentType.FRONTEND if any("nextjs" in str(t.tech_stack).lower() or "react" in str(t.tech_stack).lower() for t in self.project_tasks.values()) else AgentType.MOBILE,
+                "title_prefix": "Frontend: " if any("nextjs" in str(t.tech_stack).lower() or "react" in str(t.tech_stack).lower() for t in self.project_tasks.values()) else "Mobile: ",
+                "description": "Create theme configuration (colors, typography, spacing)"
+            },
+            "src/types": {
+                "agent_type": AgentType.CODER,
+                "title_prefix": "Backend: ",
+                "description": "Create TypeScript type definitions"
+            },
+            "src/utils": {
+                "agent_type": AgentType.CODER,
+                "title_prefix": "Backend: ",
+                "description": "Create utility functions and helpers"
+            },
+            "src/navigation": {
+                "agent_type": AgentType.MOBILE,
+                "title_prefix": "Mobile: ",
+                "description": "Set up app navigation (StackNavigator, TabNavigator)"
+            },
+            "assets/images": {
+                "agent_type": AgentType.FRONTEND if any("nextjs" in str(t.tech_stack).lower() or "react" in str(t.tech_stack).lower() for t in self.project_tasks.values()) else AgentType.MOBILE,
+                "title_prefix": "Frontend: " if any("nextjs" in str(t.tech_stack).lower() or "react" in str(t.tech_stack).lower() for t in self.project_tasks.values()) else "Mobile: ",
+                "description": "Set up assets/images directory structure"
+            },
+            "assets/fonts": {
+                "agent_type": AgentType.FRONTEND if any("nextjs" in str(t.tech_stack).lower() or "react" in str(t.tech_stack).lower() for t in self.project_tasks.values()) else AgentType.MOBILE,
+                "title_prefix": "Frontend: " if any("nextjs" in str(t.tech_stack).lower() or "react" in str(t.tech_stack).lower() for t in self.project_tasks.values()) else "Mobile: ",
+                "description": "Set up assets/fonts directory structure"
+            }
+        }
+        
+        # Get tech stack from existing tasks (if any)
+        tech_stack = []
+        for task in self.project_tasks.values():
+            if hasattr(task, 'tech_stack') and task.tech_stack:
+                tech_stack.extend(task.tech_stack)
+        tech_stack = list(set(tech_stack)) if tech_stack else ["TypeScript", "React"]  # Default
+        
+        # Create tasks for each missing component
+        # QA_Engineer: missing_components is a list of dicts with keys: type, name, path, reason
+        for component_info in missing_components:
+            # Extract path from component dict (component_info is a dict, not a string)
+            if isinstance(component_info, dict):
+                component_path = component_info.get("path", "")
+                component_name = component_info.get("name", component_path.split("/")[-1] if component_path else "unknown")
+                component_type = component_info.get("type", "directory")
+            else:
+                # Fallback: if it's already a string (backward compatibility)
+                component_path = str(component_info)
+                component_name = component_path.split("/")[-1]
+                component_type = "directory"
+            
+            if not component_path or component_path not in component_mapping:
+                self.logger.warning(f"Unknown component path: {component_path}, skipping")
+                continue
+            
+            mapping = component_mapping[component_path]
+            agent_type = mapping["agent_type"]
+            title_prefix = mapping["title_prefix"]
+            description = mapping["description"]
+            
+            # Generate task title
+            # Use component_name from dict if available, otherwise extract from path
+            if component_name and component_name != "unknown":
+                # Clean up component_name (remove " directory" or " file" suffix)
+                clean_name = component_name.replace(" directory", "").replace(" file", "").replace("src/", "").replace("assets/", "")
+                task_title = f"{title_prefix}{clean_name.title()}"
+            else:
+                task_title = f"{title_prefix}{component_path.split('/')[-1].title()}"
+            
+            # Determine dependencies (depend on implementation tasks)
+            dependencies = [
+                t.id for t in self.project_tasks.values()
+                if t.agent_type in [AgentType.CODER, AgentType.INTEGRATION, AgentType.INFRASTRUCTURE]
+                and t.status == TaskStatus.COMPLETED
+            ]
+            
+            # Create task
+            # QA_Engineer: Use sanitized component name for task ID
+            clean_id_name = component_path.replace("/", "_").replace(".", "_").replace("-", "_")
+            new_task = Task(
+                id=f"task_{task_counter:04d}_dynamic_{component_type}_{clean_id_name}",
+                title=task_title,
+                description=f"{description} for component: {component_name} at path {component_path}",
+                agent_type=agent_type,
+                tech_stack=tech_stack,
+                dependencies=dependencies,
+                metadata={
+                    "component_path": component_path,
+                    "created_by": "qa_feedback",
+                    "dynamic_task": True,
+                    "component_type": component_type,
+                    "component_name": component_name
+                }
+            )
+            
+            new_tasks.append(new_task)
+            task_counter += 1
+            
+            self.logger.info(
+                f"Created dynamic task for missing component: {component_name} at {component_path} "
+                f"(Agent: {agent_type.value}, Title: {task_title})"
+            )
+        
+        return new_tasks
+    
+    def _build_structure_blueprint(self, project_type: str, tech_stack: List[str], classification: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        QA_Engineer: Build project structure blueprint based on project type and tech stack.
+        
+        This blueprint defines what directories and files should exist for a COMPLETE project.
+        QA agent uses this blueprint to detect missing components.
+        
+        Args:
+            project_type: Type of project (mobile_app, web_app, api_service, etc.)
+            tech_stack: Technology stack list
+            classification: Full objective classification from LLM
+            
+        Returns:
+            Dictionary with expected structure:
+            {
+                "project_type": "mobile_app",
+                "expected_directories": [
+                    {"path": "src/components", "required": True, "description": "Reusable UI components"},
+                    {"path": "src/screens", "required": True, "description": "Mobile app screens"},
+                    ...
+                ],
+                "expected_files": [
+                    {"path": "App.tsx", "required": True, "description": "Main app entry point"},
+                    {"path": "package.json", "required": True, "description": "Dependencies and scripts"},
+                    ...
+                ],
+                "tech_stack": ["React Native", "TypeScript"],
+                "platforms": ["android", "ios"]
+            }
+        """
+        blueprint = {
+            "project_type": project_type,
+            "tech_stack": tech_stack,
+            "platforms": classification.get("platforms", []),
+            "expected_directories": [],
+            "expected_files": [],
+            "key_features": classification.get("key_features", [])
+        }
+        
+        tech_stack_str = " ".join(tech_stack).lower()
+        
+        # Build blueprint based on project type
+        if project_type == "mobile_app" or "react native" in tech_stack_str or "expo" in tech_stack_str:
+            blueprint["expected_directories"] = [
+                {"path": "src/screens", "required": True, "description": "Mobile app screens/pages"},
+                {"path": "src/components", "required": True, "description": "Reusable UI components"},
+                {"path": "src/navigation", "required": True, "description": "Navigation setup (StackNavigator, TabNavigator)"},
+                {"path": "src/services", "required": True, "description": "API clients, Firebase services, storage services"},
+                {"path": "src/hooks", "required": True, "description": "Custom React hooks (useAuth, useApi, etc.)"},
+                {"path": "src/store", "required": True, "description": "State management (Redux/Zustand setup)"},
+                {"path": "src/theme", "required": True, "description": "Colors, typography, spacing configuration"},
+                {"path": "src/types", "required": True, "description": "TypeScript type definitions"},
+                {"path": "src/utils", "required": True, "description": "Helper functions, formatters, validators"},
+                {"path": "assets/images", "required": False, "description": "Image assets"},
+                {"path": "assets/fonts", "required": False, "description": "Font assets"}
+            ]
+            blueprint["expected_files"] = [
+                {"path": "App.tsx", "required": True, "description": "Main app entry point"},
+                {"path": "package.json", "required": True, "description": "Dependencies and scripts"},
+                {"path": "tsconfig.json", "required": True, "description": "TypeScript configuration"},
+                {"path": "android/app/src/main/AndroidManifest.xml", "required": False, "description": "Android manifest"},
+                {"path": "ios/Info.plist", "required": False, "description": "iOS info plist"}
+            ]
+        
+        elif project_type == "web_app" or "next.js" in tech_stack_str or ("react" in tech_stack_str and "next" in tech_stack_str):
+            blueprint["expected_directories"] = [
+                {"path": "src/pages", "required": True, "description": "Next.js route pages"},
+                {"path": "src/components", "required": True, "description": "Reusable UI components"},
+                {"path": "src/app/api", "required": False, "description": "Backend API endpoints"},
+                {"path": "src/services", "required": True, "description": "API clients, external service integrations"},
+                {"path": "src/hooks", "required": True, "description": "Custom React hooks"},
+                {"path": "src/utils", "required": True, "description": "Helper functions"},
+                {"path": "src/types", "required": True, "description": "TypeScript definitions"},
+                {"path": "src/styles", "required": False, "description": "CSS/styled-components configuration"}
+            ]
+            blueprint["expected_files"] = [
+                {"path": "package.json", "required": True, "description": "Dependencies and scripts"},
+                {"path": "tsconfig.json", "required": True, "description": "TypeScript configuration"},
+                {"path": "next.config.js", "required": False, "description": "Next.js configuration"}
+            ]
+        
+        elif project_type == "api_service" or "fastapi" in tech_stack_str or ("python" in tech_stack_str and "api" in tech_stack_str):
+            blueprint["expected_directories"] = [
+                {"path": "src/api", "required": True, "description": "API route handlers"},
+                {"path": "src/models", "required": True, "description": "Database models (SQLAlchemy)"},
+                {"path": "src/schemas", "required": True, "description": "Pydantic schemas"},
+                {"path": "src/services", "required": True, "description": "Business logic services"},
+                {"path": "src/utils", "required": True, "description": "Helper functions"},
+                {"path": "src/config", "required": True, "description": "Configuration management"},
+                {"path": "src/middleware", "required": False, "description": "Custom middleware"}
+            ]
+            blueprint["expected_files"] = [
+                {"path": "main.py", "required": True, "description": "FastAPI application entry point"},
+                {"path": "requirements.txt", "required": True, "description": "Python dependencies"},
+                {"path": ".env.example", "required": False, "description": "Environment variables template"}
+            ]
+        
+        elif project_type == "saas_platform":
+            # SaaS platforms typically have both frontend and backend
+            blueprint["expected_directories"] = [
+                {"path": "src/frontend/pages", "required": True, "description": "Frontend pages/routes"},
+                {"path": "src/frontend/components", "required": True, "description": "Frontend UI components"},
+                {"path": "src/frontend/services", "required": True, "description": "Frontend API clients"},
+                {"path": "src/backend/api", "required": True, "description": "Backend API routes"},
+                {"path": "src/backend/models", "required": True, "description": "Database models"},
+                {"path": "src/backend/services", "required": True, "description": "Business logic services"},
+                {"path": "src/shared/types", "required": True, "description": "Shared TypeScript types"},
+                {"path": "src/shared/utils", "required": True, "description": "Shared utility functions"},
+                {"path": "src/config", "required": True, "description": "Configuration files"},
+                {"path": "src/migrations", "required": False, "description": "Database migrations"}
+            ]
+            blueprint["expected_files"] = [
+                {"path": "package.json", "required": True, "description": "Dependencies and scripts"},
+                {"path": "tsconfig.json", "required": True, "description": "TypeScript configuration"},
+                {"path": "docker-compose.yml", "required": False, "description": "Docker Compose configuration"},
+                {"path": ".env.example", "required": False, "description": "Environment variables template"}
+            ]
+        
+        elif project_type == "data_pipeline":
+            blueprint["expected_directories"] = [
+                {"path": "src/pipelines", "required": True, "description": "Data pipeline definitions"},
+                {"path": "src/operators", "required": True, "description": "Custom pipeline operators"},
+                {"path": "src/transformations", "required": True, "description": "Data transformation logic"},
+                {"path": "src/sources", "required": True, "description": "Data source connectors"},
+                {"path": "src/sinks", "required": True, "description": "Data destination connectors"},
+                {"path": "src/utils", "required": True, "description": "Utility functions"},
+                {"path": "src/config", "required": True, "description": "Pipeline configuration"},
+                {"path": "dags", "required": False, "description": "Airflow DAG definitions"},
+                {"path": "data", "required": False, "description": "Sample data files"}
+            ]
+            blueprint["expected_files"] = [
+                {"path": "requirements.txt", "required": True, "description": "Python dependencies"},
+                {"path": "pipeline_config.yaml", "required": False, "description": "Pipeline configuration file"},
+                {"path": ".env.example", "required": False, "description": "Environment variables template"}
+            ]
+        
+        elif project_type == "microservice":
+            blueprint["expected_directories"] = [
+                {"path": "src/api", "required": True, "description": "API route handlers"},
+                {"path": "src/models", "required": True, "description": "Data models"},
+                {"path": "src/services", "required": True, "description": "Business logic services"},
+                {"path": "src/repositories", "required": True, "description": "Data access layer"},
+                {"path": "src/middleware", "required": False, "description": "Custom middleware"},
+                {"path": "src/config", "required": True, "description": "Service configuration"},
+                {"path": "src/utils", "required": True, "description": "Utility functions"},
+                {"path": "deployments", "required": False, "description": "Deployment configurations"},
+                {"path": "proto", "required": False, "description": "gRPC protocol definitions"}
+            ]
+            blueprint["expected_files"] = [
+                {"path": "main.py", "required": True, "description": "Service entry point"},
+                {"path": "requirements.txt", "required": True, "description": "Python dependencies"},
+                {"path": "Dockerfile", "required": False, "description": "Docker container definition"},
+                {"path": ".env.example", "required": False, "description": "Environment variables template"}
+            ]
+        
+        elif project_type == "desktop_app":
+            blueprint["expected_directories"] = [
+                {"path": "src/main", "required": True, "description": "Main application code"},
+                {"path": "src/renderer", "required": False, "description": "Renderer process (Electron)"},
+                {"path": "src/components", "required": True, "description": "UI components"},
+                {"path": "src/services", "required": True, "description": "Application services"},
+                {"path": "src/utils", "required": True, "description": "Utility functions"},
+                {"path": "src/types", "required": True, "description": "TypeScript type definitions"},
+                {"path": "assets", "required": False, "description": "Application assets"},
+                {"path": "resources", "required": False, "description": "Resource files"}
+            ]
+            blueprint["expected_files"] = [
+                {"path": "package.json", "required": True, "description": "Dependencies and scripts"},
+                {"path": "tsconfig.json", "required": True, "description": "TypeScript configuration"},
+                {"path": "main.js", "required": False, "description": "Main process entry (Electron)"},
+                {"path": "preload.js", "required": False, "description": "Preload script (Electron)"}
+            ]
+        
+        elif project_type == "cli_tool":
+            blueprint["expected_directories"] = [
+                {"path": "src/commands", "required": True, "description": "CLI command implementations"},
+                {"path": "src/utils", "required": True, "description": "Utility functions"},
+                {"path": "src/config", "required": False, "description": "Configuration management"},
+                {"path": "src/parsers", "required": False, "description": "Input parsers"},
+                {"path": "src/formatters", "required": False, "description": "Output formatters"}
+            ]
+            blueprint["expected_files"] = [
+                {"path": "main.py", "required": True, "description": "CLI entry point"},
+                {"path": "requirements.txt", "required": True, "description": "Python dependencies"},
+                {"path": "setup.py", "required": False, "description": "Package setup configuration"},
+                {"path": "cli.py", "required": False, "description": "CLI interface definition"}
+            ]
+        
+        elif project_type == "library":
+            blueprint["expected_directories"] = [
+                {"path": "src", "required": True, "description": "Library source code"},
+                {"path": "src/types", "required": False, "description": "TypeScript type definitions"},
+                {"path": "src/utils", "required": False, "description": "Utility functions"},
+                {"path": "examples", "required": False, "description": "Usage examples"},
+                {"path": "dist", "required": False, "description": "Built distribution files"}
+            ]
+            blueprint["expected_files"] = [
+                {"path": "package.json", "required": True, "description": "Package configuration"},
+                {"path": "tsconfig.json", "required": True, "description": "TypeScript configuration"},
+                {"path": "README.md", "required": True, "description": "Library documentation"},
+                {"path": "index.ts", "required": True, "description": "Main library entry point"},
+                {"path": ".npmignore", "required": False, "description": "NPM ignore patterns"}
+            ]
+        
+        elif project_type == "infrastructure":
+            blueprint["expected_directories"] = [
+                {"path": "terraform", "required": False, "description": "Terraform infrastructure code"},
+                {"path": "kubernetes", "required": False, "description": "Kubernetes manifests"},
+                {"path": "helm", "required": False, "description": "Helm charts"},
+                {"path": "scripts", "required": True, "description": "Deployment scripts"},
+                {"path": "config", "required": True, "description": "Infrastructure configuration"},
+                {"path": "modules", "required": False, "description": "Reusable infrastructure modules"}
+            ]
+            blueprint["expected_files"] = [
+                {"path": "main.tf", "required": False, "description": "Terraform main configuration"},
+                {"path": "variables.tf", "required": False, "description": "Terraform variables"},
+                {"path": "outputs.tf", "required": False, "description": "Terraform outputs"},
+                {"path": "deploy.sh", "required": False, "description": "Deployment script"},
+                {"path": ".terraform.lock.hcl", "required": False, "description": "Terraform lock file"}
+            ]
+        
+        elif project_type == "blockchain_app":
+            blueprint["expected_directories"] = [
+                {"path": "contracts", "required": True, "description": "Smart contracts"},
+                {"path": "src/frontend", "required": False, "description": "Frontend application"},
+                {"path": "src/backend", "required": False, "description": "Backend services"},
+                {"path": "scripts", "required": True, "description": "Deployment and migration scripts"},
+                {"path": "tests", "required": True, "description": "Contract and application tests"},
+                {"path": "migrations", "required": False, "description": "Contract migrations"},
+                {"path": "artifacts", "required": False, "description": "Compiled contract artifacts"}
+            ]
+            blueprint["expected_files"] = [
+                {"path": "hardhat.config.js", "required": False, "description": "Hardhat configuration"},
+                {"path": "truffle-config.js", "required": False, "description": "Truffle configuration"},
+                {"path": "package.json", "required": True, "description": "Dependencies and scripts"},
+                {"path": ".env.example", "required": False, "description": "Environment variables template"}
+            ]
+        
+        elif project_type == "ml_service":
+            blueprint["expected_directories"] = [
+                {"path": "src/models", "required": True, "description": "ML model definitions"},
+                {"path": "src/training", "required": False, "description": "Model training scripts"},
+                {"path": "src/inference", "required": True, "description": "Inference/prediction code"},
+                {"path": "src/preprocessing", "required": True, "description": "Data preprocessing"},
+                {"path": "src/features", "required": False, "description": "Feature engineering"},
+                {"path": "data/raw", "required": False, "description": "Raw data files"},
+                {"path": "data/processed", "required": False, "description": "Processed data files"},
+                {"path": "notebooks", "required": False, "description": "Jupyter notebooks"},
+                {"path": "src/utils", "required": True, "description": "Utility functions"},
+                {"path": "models", "required": False, "description": "Saved model files"}
+            ]
+            blueprint["expected_files"] = [
+                {"path": "requirements.txt", "required": True, "description": "Python dependencies"},
+                {"path": "main.py", "required": True, "description": "Service entry point"},
+                {"path": "train.py", "required": False, "description": "Training script"},
+                {"path": "predict.py", "required": False, "description": "Prediction script"},
+                {"path": ".env.example", "required": False, "description": "Environment variables template"}
+            ]
+        
+        # Add common directories/files for all project types
+        blueprint["expected_directories"].extend([
+            {"path": "tests", "required": False, "description": "Test files"},
+            {"path": "docs", "required": False, "description": "Documentation"}
+        ])
+        
+        return blueprint
+    
+    def get_project_structure_blueprint(self) -> Optional[Dict[str, Any]]:
+        """
+        QA_Engineer: Get the project structure blueprint for QA agent.
+        
+        Returns:
+            Dictionary with expected project structure, or None if not available
+        """
+        # Return the most recent blueprint (or merge all if multiple objectives)
+        if self.project_structure_blueprint:
+            # If multiple objectives, merge their blueprints
+            if isinstance(self.project_structure_blueprint, dict) and len(self.project_structure_blueprint) > 0:
+                # Return the first blueprint (or merge logic could be added)
+                return list(self.project_structure_blueprint.values())[0]
+        return None
 

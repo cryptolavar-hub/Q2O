@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+import fnmatch
 from datetime import datetime, timezone
 from typing import Optional, List
 from pathlib import Path
@@ -976,17 +977,92 @@ async def download_project(
         zip_buffer = io.BytesIO()
         
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # Walk through the output folder and add all files
+            # QA_Engineer: Exclude sensitive files from downloads (secrets, logs, etc.)
+            # Files/folders to exclude from project downloads
+            excluded_patterns = [
+                # Execution logs (contain system information, errors, secrets)
+                'execution_stdout.log',
+                'execution_stderr.log',
+                '*.log',
+                # Environment files (contain secrets, API keys, database credentials)
+                '.env',
+                '.env.local',
+                '.env.*',
+                '*.env',
+                # Cache directories (contain temporary data)
+                '.cache',
+                '.llm_cache',
+                '.research_cache',
+                '.coverage_reports',
+                # Git directories (not needed in downloads)
+                '.git',
+                '.github',
+                # Database files (may contain sensitive data)
+                '*.db',
+                '*.sqlite',
+                '*.sqlite3',
+                # Temporary files
+                '*.tmp',
+                '*.bak',
+                '__pycache__',
+                '*.pyc',
+            ]
+            
+            def should_exclude_file(file_path: Path) -> bool:
+                """Check if file should be excluded from download."""
+                file_name = file_path.name
+                relative_path = file_path.relative_to(output_folder)
+                relative_str = str(relative_path).replace('\\', '/')
+                
+                # Check against exclusion patterns
+                for pattern in excluded_patterns:
+                    # Exact filename match
+                    if pattern == file_name:
+                        return True
+                    # Wildcard pattern match
+                    if '*' in pattern:
+                        if fnmatch.fnmatch(file_name, pattern) or fnmatch.fnmatch(relative_str, pattern):
+                            return True
+                    # Directory pattern (check if file is in excluded directory)
+                    if pattern.startswith('.') and pattern in relative_str:
+                        return True
+                
+                # Exclude files in directories starting with '.'
+                parts = relative_path.parts
+                if any(part.startswith('.') for part in parts):
+                    return True
+                
+                return False
+            
+            # Walk through the output folder and add all files (excluding sensitive ones)
+            files_added = 0
+            files_excluded = 0
+            
             for file_path in output_folder.rglob('*'):
                 if file_path.is_file():
+                    # QA_Engineer: Skip sensitive files
+                    if should_exclude_file(file_path):
+                        files_excluded += 1
+                        LOGGER.debug(
+                            "download_excluded_file",
+                            extra={
+                                "project_id": project_id,
+                                "file_path": str(file_path),
+                                "reason": "Sensitive file excluded from download",
+                            }
+                        )
+                        continue
+                    
                     # Get relative path from output folder root
                     arcname = file_path.relative_to(output_folder)
                     
                     # Read file content and add to zip
                     try:
                         zip_file.write(file_path, arcname)
+                        files_added += 1
                     except (PermissionError, OSError) as e:
                         # Skip files that can't be read (locked files, etc.)
+                        files_excluded += 1
                         LOGGER.warning(
                             "download_skip_file",
                             extra={
@@ -996,6 +1072,15 @@ async def download_project(
                             }
                         )
                         continue
+            
+            LOGGER.info(
+                "download_zip_created",
+                extra={
+                    "project_id": project_id,
+                    "files_added": files_added,
+                    "files_excluded": files_excluded,
+                }
+            )
         
         # Get zip file size and reset buffer position
         zip_size = zip_buffer.tell()

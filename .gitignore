@@ -167,3 +167,30 @@ logs/
 RUN_MIGRATION_*.bat
 *_MIGRATION_*.bat
 CHECK_DASHBOARD_STATUS.bat
+
+# QA_Engineer: Tenant Projects - DO NOT PUBLISH TO GITHUB
+# Contains tenant-specific project outputs and sensitive data
+Tenant_Projects/
+
+# QA_Engineer: Files/folders starting with period (.) - DO NOT PUBLISH TO GITHUB
+# These contain secrets, cache data, and local configuration
+.env
+.env.*
+.llm_cache/
+.research_cache/
+.git/
+.github/
+.cache/
+.coverage_reports/
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+.ipynb_checkpoints/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# QA_Engineer: zbin folder - DO NOT PUBLISH TO GITHUB
+# Contains binary/executable files and local tools
+zbin/

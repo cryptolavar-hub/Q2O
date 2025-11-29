@@ -583,20 +583,61 @@ async def _monitor_process_completion(
                         }
                     )
                 else:
-                    # Successful completion
-                    project.execution_status = 'completed'
-                    project.execution_completed_at = datetime.now(timezone.utc)
-                    LOGGER.info(
-                        "project_execution_completed",
-                        extra={
-                            "project_id": project_id,
-                            "tenant_id": tenant_id,
-                            "process_id": process_id,
-                            "return_code": return_code,
-                            "task_count": task_count,
-                            "has_completion_message": has_tasks_completed,
-                        }
+                    # Process exited successfully - check quality threshold before marking as completed
+                    # QA_Engineer: Verify project meets 98% quality threshold
+                    task_stats = await calculate_project_progress(
+                        db, 
+                        project_id, 
+                        execution_started_at=project.execution_started_at
                     )
+                    quality_percentage = task_stats.get('quality_percentage', 0.0)
+                    completed_tasks = task_stats.get('completed_tasks', 0)
+                    failed_tasks = task_stats.get('failed_tasks', 0)
+                    total_tasks = task_stats.get('total_tasks', 0)
+                    
+                    if quality_percentage >= 98.0:
+                        # Quality threshold met - mark as completed
+                        project.execution_status = 'completed'
+                        project.execution_completed_at = datetime.now(timezone.utc)
+                        LOGGER.info(
+                            "project_execution_completed",
+                            extra={
+                                "project_id": project_id,
+                                "tenant_id": tenant_id,
+                                "process_id": process_id,
+                                "return_code": return_code,
+                                "task_count": task_count,
+                                "has_completion_message": has_tasks_completed,
+                                "quality_percentage": quality_percentage,
+                                "completed_tasks": completed_tasks,
+                                "failed_tasks": failed_tasks,
+                            }
+                        )
+                    else:
+                        # Quality threshold not met - mark as failed
+                        project.execution_status = 'failed'
+                        project.execution_error = (
+                            f"Project quality below threshold: {quality_percentage:.2f}% (required: ≥98%). "
+                            f"Completed: {completed_tasks}/{total_tasks} tasks. "
+                            f"Failed: {failed_tasks} tasks. "
+                            f"Project cannot be downloaded. Please restart or edit project to fix issues."
+                        )
+                        project.execution_completed_at = datetime.now(timezone.utc)
+                        LOGGER.warning(
+                            "project_execution_failed_by_quality",
+                            extra={
+                                "project_id": project_id,
+                                "tenant_id": tenant_id,
+                                "process_id": process_id,
+                                "return_code": return_code,
+                                "task_count": task_count,
+                                "quality_percentage": quality_percentage,
+                                "completed_tasks": completed_tasks,
+                                "failed_tasks": failed_tasks,
+                                "total_tasks": total_tasks,
+                                "quality_threshold": 98.0,
+                            }
+                        )
                 
                 await db.commit()
         except Exception as e:
@@ -685,6 +726,96 @@ async def check_and_update_project_completion(project_id: str) -> Optional[bool]
         all_tasks_done = (pending_tasks == 0 and in_progress_tasks == 0 and cancelled_tasks == 0)
         
         if all_tasks_done:
+            # QA_Engineer: CRITICAL - Check for incomplete project structure before completion
+            # Prevent premature completion if QA has detected missing components
+            structure_incomplete = False
+            pending_qa_tasks = 0
+            
+            try:
+                from ..models.agent_tasks import AgentTask
+                from sqlalchemy import func
+                import json
+                
+                # Check for QA tasks that detected incomplete structure
+                qa_tasks_result = await db.execute(
+                    select(AgentTask).where(
+                        AgentTask.project_id == project_id,
+                        AgentTask.agent_type == 'qa',
+                        AgentTask.status == 'completed',
+                        AgentTask.created_at >= project.execution_started_at
+                    ).order_by(AgentTask.completed_at.desc()).limit(5)
+                )
+                qa_tasks = qa_tasks_result.scalars().all()
+                
+                for qa_task in qa_tasks:
+                    # Check execution_metadata for structure_analysis
+                    if qa_task.execution_metadata:
+                        metadata = qa_task.execution_metadata
+                        if isinstance(metadata, str):
+                            try:
+                                metadata = json.loads(metadata)
+                            except:
+                                metadata = {}
+                        
+                        structure_analysis = metadata.get('structure_analysis', {})
+                        if structure_analysis:
+                            is_complete = structure_analysis.get('is_complete', True)
+                            missing_components = structure_analysis.get('missing_components', [])
+                            
+                            if not is_complete or missing_components:
+                                structure_incomplete = True
+                                LOGGER.warning(
+                                    "project_structure_incomplete_detected",
+                                    extra={
+                                        "project_id": project_id,
+                                        "qa_task_id": qa_task.task_id,
+                                        "missing_components_count": len(missing_components),
+                                        "is_complete": is_complete
+                                    }
+                                )
+                                break
+                
+                # Check for pending tasks created from QA feedback (missing components)
+                pending_qa_feedback_result = await db.execute(
+                    select(func.count(AgentTask.id)).where(
+                        AgentTask.project_id == project_id,
+                        AgentTask.status.in_(['pending', 'started', 'running']),
+                        AgentTask.created_at >= project.execution_started_at,
+                        AgentTask.execution_metadata.like('%created_from_qa_feedback%')
+                    )
+                )
+                pending_qa_tasks = pending_qa_feedback_result.scalar() or 0
+                
+                if pending_qa_tasks > 0:
+                    structure_incomplete = True
+                    LOGGER.warning(
+                        "project_has_pending_qa_feedback_tasks",
+                        extra={
+                            "project_id": project_id,
+                            "pending_qa_tasks": pending_qa_tasks
+                        }
+                    )
+                
+            except Exception as e:
+                LOGGER.warning(f"Error checking project structure completeness: {e}", exc_info=True)
+                # Don't block completion on check errors - assume structure is complete
+            
+            # QA_Engineer: Prevent completion if structure is incomplete
+            if structure_incomplete:
+                LOGGER.info(
+                    "project_completion_blocked_incomplete_structure",
+                    extra={
+                        "project_id": project_id,
+                        "tenant_id": project.tenant_id,
+                        "pending_qa_tasks": pending_qa_tasks,
+                        "reason": "Project structure incomplete - QA detected missing components or pending QA feedback tasks"
+                    }
+                )
+                # Don't mark as completed - let it continue running
+                # Orchestrator will create tasks for missing components
+                await db.close()
+                return None  # Still running, not completed
+            
             # All tasks are completed or failed (no cancelled tasks)
             # QA_Engineer: Determine final status based on QUALITY threshold (98%)
             # Quality = (completed_tasks / total_tasks) * 100
@@ -1014,12 +1145,38 @@ async def restart_project(
             f"Only failed projects can be restarted. Current status: {project.execution_status}"
         )
     
+    # QA_Engineer: Clear old tasks from previous execution to prevent interference
+    from ..models.agent_tasks import AgentTask
+    from sqlalchemy import delete
+    
+    # Delete all tasks associated with this project from previous runs
+    # This ensures a clean slate for the restart
+    delete_stmt = delete(AgentTask).where(AgentTask.project_id == project.project_id)
+    await session.execute(delete_stmt)
+    
+    LOGGER.info(
+        "project_restart_cleared_old_tasks",
+        extra={
+            "project_id": project.project_id,
+            "tenant_id": tenant_id,
+        }
+    )
+    
     # Reset execution fields
     project.execution_status = 'pending'
     project.execution_error = None
     project.execution_started_at = None
     project.execution_completed_at = None
-    await session.flush()
+    
+    # QA_Engineer: Reset show_completion_modal to True on restart
+    # This ensures the modal will show again for the new execution (success or failure)
+    # User's previous preference is reset since this is a new execution
+    project.show_completion_modal = True
+    
+    # QA_Engineer: CRITICAL FIX - Commit deletion and reset BEFORE starting new execution
+    # This ensures old tasks are fully deleted before new execution starts
+    # Prevents race condition where new tasks are created before old tasks are deleted
+    await session.commit()
     
     # Now execute the project (reuse existing execute_project logic)
     return await execute_project(session, project, tenant_id)
