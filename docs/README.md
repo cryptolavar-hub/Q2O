@@ -196,6 +196,18 @@ This directory contains all current, relevant documentation for the Q2O Platform
   - 20+ roles, 50+ technologies, 20+ knowledge domains
   - Training paths and success checklist
 
+### **Market Research & Competitive Analysis**
+
+- **[Q2O Competitive Analysis & Market Positioning](Q2O_COMPETITIVE_ANALYSIS_AND_MARKET_POSITIONING.md)** ⭐⭐⭐
+  - **Date**: November 28, 2025
+  - Comprehensive deep-dive comparison with Replit AI, Lovable AI, v0.dev, Cursor AI, GitHub Copilot Workspace
+  - Feature-by-feature comparison matrix (20+ features)
+  - Technical architecture analysis
+  - Pricing & business model comparison
+  - Market positioning and strategic recommendations
+  - SWOT analysis and competitive advantages
+  - Market gap analysis and opportunities
+
 ### **Licensing & Add-ons**
 
 - **[Addon Review Index](addon_portal_review/README.md)** ⭐
@@ -223,6 +235,7 @@ This directory contains all current, relevant documentation for the Q2O Platform
 1. **New to Q2O?** Start with:
    - [Comprehensive Project Assessment](COMPREHENSIVE_PROJECT_ASSESSMENT.md)
    - [Complete System Workflow](COMPLETE_SYSTEM_WORKFLOW.md)
+   - [Q2O Competitive Analysis & Market Positioning](Q2O_COMPETITIVE_ANALYSIS_AND_MARKET_POSITIONING.md) - Understand Q2O's unique value proposition
    - [Quick Start Guide](QUICK_START_HERE.md)
 
 2. **Want to understand the platform?** Read:
