@@ -179,7 +179,6 @@ Tenant_Projects/
 .llm_cache/
 .research_cache/
 .git/
-.github/
 .cache/
 .coverage_reports/
 .pytest_cache/
